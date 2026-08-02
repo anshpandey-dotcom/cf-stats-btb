@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CF Analytics Pro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  background-color: #0f172a;
+  color: #f8fafc;
+  min-height: 100vh;
+  padding-bottom: 90px;
+  overflow-x: hidden;
+}
+
+input, textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+@keyframes greenGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), inset 0 0 8px rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+}
+
+.active-glow {
+  animation: greenGlow 2s infinite ease-in-out;
+}
+
+.stats-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.stats-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>
+</head>
+<body>
+
+<div id="pin-screen" class="fixed inset-0 bg-slate-950 z-[1000] flex flex-col items-center justify-center p-5">
+  <div class="flex items-center gap-2 mb-6 text-xl font-bold bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+    <i data-lucide="shield-check" class="w-6 h-6 text-sky-400"></i>
+    <span>Security Access</span>
+  </div>
+  <input type="password" inputmode="numeric" id="pin-input" placeholder="••••" maxlength="4" class="w-56 p-3.5 bg-slate-900 border border-slate-700 rounded-2xl text-white text-2xl text-center outline-none tracking-[8px] focus:border-sky-400 mb-3">
+  <div id="pin-error" class="text-red-500 text-xs h-5 font-semibold"></div>
+</div>
+
+<div id="home-view">
+  <div class="sticky top-0 bg-slate-950/85 backdrop-blur-md px-5 py-4 flex justify-between items-center border-b border-slate-800 z-50">
+    <div class="flex items-center gap-2 font-bold text-lg bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+      <i data-lucide="activity" class="w-5 h-5 text-sky-400"></i>
+      <span>CF Analytics</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="nav-dashboard-btn" class="p-2.5 bg-slate-800 text-sky-400 rounded-xl hover:bg-slate-700 transition border border-slate-700 flex items-center gap-1.5 text-xs font-semibold">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+      </button>
+
+      <div class="relative">
+        <button id="settingsBtn" class="p-2.5 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition border border-slate-700 flex items-center">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+
+        <div id="settingsDropdown" class="hidden absolute right-0 mt-3 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 z-50">
+          <div class="flex items-center justify-between bg-slate-800/60 p-2.5 rounded-xl text-xs mb-2 border border-slate-800">
+            <span class="text-slate-300 flex items-center gap-2">
+              <i data-lucide="folder-git-2" class="w-4 h-4 text-indigo-400"></i> Projects
+            </span>
+            <div class="flex items-center gap-2">
+              <span id="totalProjectsCount" class="font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">0</span>
+              <button id="menuImportBtn" class="p-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition" title="Import Projects">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="syncStatusRow" class="text-[10px] text-slate-500 px-1 mb-2">Sync: --</div>
+
+          <div class="space-y-1 text-xs">
+            <button id="manualRefreshBtn" class="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800 text-slate-300 rounded-xl transition font-medium">
+              <span class="flex items-center gap-2.5">
+                <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-400"></i> Refresh
+              </span>
+              <span id="autoRefreshTimer" class="text-[10px] text-slate-500 font-mono">10:00</span>
+            </button>
+            <button id="copy-btn" class="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-800 text-slate-300 rounded-xl transition font-medium">
+              <i data-lucide="copy" class="w-4 h-4 text-blue-400"></i> Copy IDs
+            </button>
+            <button id="openChangePinBtn" class="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-800 text-slate-300 rounded-xl transition font-medium">
+              <i data-lucide="key-round" class="w-4 h-4 text-amber-400"></i> Change PIN
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-4 max-w-xl mx-auto space-y-4">
+    <div class="stats-scroll">
+      <div class="flex gap-2.5 w-max">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center w-28 shrink-0 cursor-pointer" id="total-card">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider">Total</div>
+          <div class="text-sm font-bold text-sky-400 mt-1" id="total-dl">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center w-28 shrink-0">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider">Last 1h</div>
+          <div class="text-sm font-bold text-sky-400 mt-1" id="hourly-dl">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center w-28 shrink-0">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider">Today</div>
+          <div class="text-sm font-bold text-sky-400 mt-1" id="yesterday-dl">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center w-28 shrink-0">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider">This Week</div>
+          <div class="text-sm font-bold text-sky-400 mt-1" id="weekly-dl">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center w-28 shrink-0">
+          <div class="text-[10px] text-slate-400 uppercase tracking-wider">This Month</div>
+          <div class="text-sm font-bold text-sky-400 mt-1" id="monthly-dl">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="relative">
+      <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5"></i>
+      <input type="text" id="search-input" placeholder="Search projects..." class="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 text-sm outline-none focus:border-sky-400">
+    </div>
+
+    <div id="project-list" class="space-y-3">
+      <div class="text-center py-10 text-slate-500 text-sm">No projects added yet.</div>
+    </div>
+  </div>
+
+  <button id="open-modal" class="fixed bottom-6 right-6 bg-gradient-to-r from-sky-400 to-indigo-500 text-slate-950 font-bold p-3.5 rounded-full shadow-lg shadow-sky-500/20 flex items-center justify-center z-40">
+    <i data-lucide="plus" class="w-6 h-6"></i>
+  </button>
+</div>
+
+<div id="dashboard-view" class="hidden">
+  <div class="sticky top-0 bg-slate-950/85 backdrop-blur-md px-5 py-4 flex justify-between items-center border-b border-slate-800 z-50">
+    <div class="flex items-center gap-2 font-bold text-lg bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+      <i data-lucide="trophy" class="w-5 h-5 text-amber-400"></i>
+      <span>Rankings</span>
+    </div>
+    <button id="nav-home-btn" class="p-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition border border-slate-700 text-xs font-semibold flex items-center gap-1.5">
+      <i data-lucide="arrow-left" class="w-4 h-4"></i>
+    </button>
+  </div>
+
+  <div class="p-4 max-w-xl mx-auto space-y-4">
+    <div class="flex flex-wrap gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+      <button class="filter-tab flex-1 py-1.5 text-[10px] font-semibold rounded-lg text-slate-400 transition" data-sort="total">All Time</button>
+      <button class="filter-tab flex-1 py-1.5 text-[10px] font-semibold rounded-lg text-slate-400 transition" data-sort="today">Today</button>
+      <button class="filter-tab flex-1 py-1.5 text-[10px] font-semibold rounded-lg text-slate-400 transition" data-sort="1h">1H</button>
+      <button class="filter-tab flex-1 py-1.5 text-[10px] font-semibold rounded-lg text-slate-400 transition" data-sort="week">Week</button>
+      <button class="filter-tab flex-1 py-1.5 text-[10px] font-semibold rounded-lg text-slate-400 transition" data-sort="month">Month</button>
+    </div>
+    <div id="rank-list-container" class="space-y-2">
+      <div class="text-center py-10 text-slate-500 text-sm">No data available.</div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200 z-[200]">
+  <div class="bg-slate-900 rounded-2xl p-5 w-full max-w-sm border border-slate-800 space-y-4">
+    <div class="font-bold text-base text-slate-100 flex items-center gap-2">
+      <i data-lucide="folder-plus" class="w-5 h-5 text-sky-400"></i> Bulk Import Projects
+    </div>
+    <textarea id="project-id-input" placeholder="Paste single or multiple IDs (e.g. 1467882, 1477390, 1466474)" rows="4" class="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs outline-none focus:border-sky-400 resize-none font-mono"></textarea>
+    <div class="flex gap-2">
+      <button id="close-modal" class="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold">Cancel</button>
+      <button id="save-project" class="flex-1 py-2.5 bg-sky-400 text-slate-950 rounded-xl text-xs font-semibold">Import All</button>
+    </div>
+  </div>
+</div>
+
+<div id="pin-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200 z-[200]">
+  <div class="bg-slate-900 rounded-2xl p-5 w-full max-w-sm border border-slate-800 space-y-4">
+    <div class="font-bold text-base text-slate-100 flex items-center gap-2">
+      <i data-lucide="key-round" class="w-5 h-5 text-amber-400"></i> Change Security PIN
+    </div>
+    <input type="password" inputmode="numeric" id="new-pin-input" placeholder="New 4-digit PIN" maxlength="4" class="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm text-center outline-none focus:border-amber-400">
+    <div class="flex gap-2">
+      <button id="close-pin-modal" class="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold">Cancel</button>
+      <button id="save-pin-btn" class="flex-1 py-2.5 bg-amber-400 text-slate-950 rounded-xl text-xs font-semibold">Update</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+const RAW_DATA_URL = 'https://raw.githubusercontent.com/anshpandey-dotcom/cf-stats-btb/main/data.json';
+
+let projectIds = JSON.parse(localStorage.getItem('cf_tracked_projects') || '[]');
+let localHistory = JSON.parse(localStorage.getItem('cf_local_history') || '{}');
+let cachedProjectData = [];
+let isExactTotal = false;
+let activeRankMetric = 'total';
+let autoRefreshSeconds = 600;
+let lastSyncAt = 0;
+
+let deleteProgressInterval = null;
+
+const HISTORY_RETENTION_MS = 35 * 24 * 60 * 60 * 1000;
+
+const pinScreen = document.getElementById('pin-screen');
+const pinInput = document.getElementById('pin-input');
+const pinError = document.getElementById('pin-error');
+const homeView = document.getElementById('home-view');
+const dashboardView = document.getElementById('dashboard-view');
+const navDashboardBtn = document.getElementById('nav-dashboard-btn');
+const navHomeBtn = document.getElementById('nav-home-btn');
+const copyBtn = document.getElementById('copy-btn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsDropdown = document.getElementById('settingsDropdown');
+const manualRefreshBtn = document.getElementById('manualRefreshBtn');
+const autoRefreshTimer = document.getElementById('autoRefreshTimer');
+const menuImportBtn = document.getElementById('menuImportBtn');
+const openChangePinBtn = document.getElementById('openChangePinBtn');
+const pinModal = document.getElementById('pin-modal');
+const closePinModal = document.getElementById('close-pin-modal');
+const savePinBtn = document.getElementById('save-pin-btn');
+const newPinInput = document.getElementById('new-pin-input');
+const totalProjectsCount = document.getElementById('totalProjectsCount');
+const syncStatusRow = document.getElementById('syncStatusRow');
+
+const projectListEl = document.getElementById('project-list');
+const totalDlEl = document.getElementById('total-dl');
+const hourlyDlEl = document.getElementById('hourly-dl');
+const yesterdayDlEl = document.getElementById('yesterday-dl');
+const weeklyDlEl = document.getElementById('weekly-dl');
+const monthlyDlEl = document.getElementById('monthly-dl');
+const totalCard = document.getElementById('total-card');
+
+const modal = document.getElementById('modal');
+const openModalBtn = document.getElementById('open-modal');
+const closeModalBtn = document.getElementById('close-modal');
+const saveProjectBtn = document.getElementById('save-project');
+const projectIdInput = document.getElementById('project-id-input');
+const searchInput = document.getElementById('search-input');
+const rankListContainer = document.getElementById('rank-list-container');
+const filterTabs = document.querySelectorAll('.filter-tab');
+
+function getStoredPin() {
+  return localStorage.getItem('cf_security_pin') || '9151';
+}
+
+pinInput.addEventListener('input', () => {
+  if (pinInput.value === getStoredPin()) {
+    pinScreen.style.display = 'none';
+    loadData();
+  } else if (pinInput.value.length >= 4) {
+    pinError.innerText = 'Incorrect PIN';
+  } else {
+    pinError.innerText = '';
+  }
+});
+
+settingsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  settingsDropdown.classList.toggle('hidden');
+});
+
+document.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+});
+
+menuImportBtn.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+  openModal();
+});
+
+manualRefreshBtn.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+  autoRefreshSeconds = 600;
+  loadData();
+});
+
+openChangePinBtn.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+  newPinInput.value = '';
+  pinModal.classList.remove('opacity-0', 'pointer-events-none');
+});
+
+closePinModal.addEventListener('click', () => {
+  pinModal.classList.add('opacity-0', 'pointer-events-none');
+});
+
+savePinBtn.addEventListener('click', () => {
+  const val = newPinInput.value.trim();
+  if (val.length === 4 && !isNaN(val)) {
+    localStorage.setItem('cf_security_pin', val);
+    pinModal.classList.add('opacity-0', 'pointer-events-none');
+  } else {
+    alert('PIN must be 4 numeric digits.');
+  }
+});
+
+setInterval(() => {
+  autoRefreshSeconds--;
+  if (autoRefreshSeconds <= 0) {
+    autoRefreshSeconds = 600;
+    loadData();
+  }
+  const mins = Math.floor(autoRefreshSeconds / 60);
+  const secs = autoRefreshSeconds % 60;
+  autoRefreshTimer.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}, 1000);
+
+navDashboardBtn.addEventListener('click', () => {
+  homeView.style.display = 'none';
+  dashboardView.style.display = 'block';
+  renderDashboard(activeRankMetric);
+});
+
+navHomeBtn.addEventListener('click', () => {
+  dashboardView.style.display = 'none';
+  homeView.style.display = 'block';
+});
+
+copyBtn.addEventListener('click', () => {
+  if (projectIds.length === 0) return;
+  const formattedString = projectIds.join(', ');
+  navigator.clipboard.writeText(formattedString).then(() => {
+    copyBtn.innerText = 'Copied!';
+    setTimeout(() => {
+      copyBtn.innerHTML = `<i data-lucide="copy" class="w-4 h-4 text-blue-400"></i> Copy IDs`;
+      lucide.createIcons();
+    }, 2000);
+  });
+});
+
+totalCard.addEventListener('click', () => {
+  isExactTotal = !isExactTotal;
+  updateStatsDisplay();
+});
+
+filterTabs.forEach(tab => {
+  tab.addEventListener('click', (e) => {
+    filterTabs.forEach(t => {
+      t.classList.remove('bg-sky-400', 'text-slate-950');
+      t.classList.add('text-slate-400');
+    });
+    e.target.classList.add('bg-sky-400', 'text-slate-950');
+    e.target.classList.remove('text-slate-400');
+    activeRankMetric = e.target.getAttribute('data-sort');
+    renderDashboard(activeRankMetric);
+  });
+});
+
+function openModal() {
+  projectIdInput.value = '';
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+  projectIdInput.focus();
+}
+
+openModalBtn.addEventListener('click', openModal);
+
+closeModalBtn.addEventListener('click', () => {
+  modal.classList.add('opacity-0', 'pointer-events-none');
+});
+
+saveProjectBtn.addEventListener('click', async () => {
+  const rawText = projectIdInput.value.trim();
+  if (!rawText) return;
+
+  const extractedIds = rawText.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+  let addedCount = 0;
+
+  extractedIds.forEach(id => {
+    if (!projectIds.includes(id)) {
+      projectIds.push(id);
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    localStorage.setItem('cf_tracked_projects', JSON.stringify(projectIds));
+  }
+
+  modal.classList.add('opacity-0', 'pointer-events-none');
+  await loadData();
+});
+
+searchInput.addEventListener('input', () => {
+  renderProjects(searchInput.value.trim().toLowerCase());
+});
+
+function formatNum(num) {
+  if (!num && num !== 0) return '0';
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toLocaleString();
+}
+
+function formatExact(num) {
+  if (!num && num !== 0) return '0';
+  return num.toLocaleString();
+}
+
+async function fetchProjectData(id) {
+  try {
+    const res = await fetch(`https://api.cfwidget.com/${id}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function fetchRemoteStore() {
+  try {
+    const res = await fetch(RAW_DATA_URL + '?t=' + Date.now());
+    if (!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    localStorage.setItem('cf_remote_cache', JSON.stringify(json));
+    lastSyncAt = Date.now();
+    return json;
+  } catch (err) {
+    const cached = localStorage.getItem('cf_remote_cache');
+    return cached ? JSON.parse(cached) : null;
+  }
+}
+
+function recordLocalHistory(id, totalDownloads) {
+  if (!localHistory[id]) localHistory[id] = [];
+  const now = Date.now();
+  localHistory[id].push({ t: now, val: totalDownloads });
+
+  const cutoff = now - HISTORY_RETENTION_MS;
+  localHistory[id] = localHistory[id].filter(item => item.t > cutoff);
+  localStorage.setItem('cf_local_history', JSON.stringify(localHistory));
+}
+
+function getLocalHistory(id) {
+  return localHistory[id] || [];
+}
+
+function computeGain(history, hoursAgo) {
+  if (!history || history.length < 2) return null;
+  const targetTime = Date.now() - (hoursAgo * 60 * 60 * 1000);
+  if (history[0].t > targetTime) return null;
+
+  let closest = history.reduce((prev, curr) => {
+    return (Math.abs(curr.t - targetTime) < Math.abs(prev.t - targetTime) ? curr : prev);
+  });
+
+  const currentVal = history[history.length - 1].val;
+  return currentVal - closest.val;
+}
+
+function computeTodayGain(history, currentTotal) {
+  if (!history || history.length === 0) return null;
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+  const before = history.filter(h => h.t <= midnight);
+  if (before.length === 0) return null;
+  const baseline = before[before.length - 1].val;
+  return currentTotal - baseline;
+}
+
+function getLatestFileTimestamp(files) {
+  if (!files || files.length === 0) return 0;
+  let latest = 0;
+  files.forEach(f => {
+    const t = new Date(f.date || 0).getTime();
+    if (t > latest) latest = t;
+  });
+  return latest;
+}
+
+function getUpdateFrequency(files) {
+  if (!files || files.length === 0) return { count30d: 0, lastUpdateDays: null };
+  const now = Date.now();
+  const cutoff30 = now - (30 * 24 * 60 * 60 * 1000);
+  let count30d = 0;
+  let maxDate = 0;
+  files.forEach(f => {
+    const t = new Date(f.date || 0).getTime();
+    if (t > maxDate) maxDate = t;
+    if (t > cutoff30) count30d++;
+  });
+  const lastUpdateDays = maxDate ? Math.floor((now - maxDate) / (24 * 60 * 60 * 1000)) : null;
+  return { count30d, lastUpdateDays };
+}
+
+function normalizeRemote(id, entry) {
+  return {
+    id,
+    title: entry.title || id,
+    thumbnail: entry.thumbnail || '',
+    total: entry.total || 0,
+    files: entry.files || [],
+    history: entry.history || [],
+    rawDaily: entry.rawDaily || 0,
+    rawWeekly: entry.rawWeekly || 0,
+    error: false,
+    latestDate: getLatestFileTimestamp(entry.files)
+  };
+}
+
+function normalizeLive(id, apiData) {
+  return {
+    id,
+    title: apiData.title || id,
+    thumbnail: apiData.thumbnail || '',
+    total: apiData.downloads?.total || 0,
+    files: apiData.files || [],
+    history: getLocalHistory(id),
+    rawDaily: apiData.downloads?.daily || 0,
+    rawWeekly: apiData.downloads?.weekly || 0,
+    error: false,
+    latestDate: getLatestFileTimestamp(apiData.files)
+  };
+}
+
+async function loadData() {
+  totalProjectsCount.innerText = projectIds.length;
+  if (projectIds.length === 0) {
+    projectListEl.innerHTML = '<div class="text-center py-10 text-slate-500 text-sm">No projects added yet.</div>';
+    totalDlEl.innerText = '0';
+    hourlyDlEl.innerText = '0';
+    yesterdayDlEl.innerText = '0';
+    weeklyDlEl.innerText = '0';
+    monthlyDlEl.innerText = '0';
+    cachedProjectData = [];
+    return;
+  }
+
+  projectListEl.innerHTML = '<div class="text-center py-10 text-slate-500 text-sm">Fetching metrics & history...</div>';
+
+  const remoteStore = await fetchRemoteStore();
+  const remoteProjects = (remoteStore && remoteStore.projects) ? remoteStore.projects : {};
+
+  const items = await Promise.all(projectIds.map(async (id) => {
+    const remoteEntry = remoteProjects[id];
+    if (remoteEntry && !remoteEntry.error && remoteEntry.total !== null) {
+      return normalizeRemote(id, remoteEntry);
+    }
+    const apiData = await fetchProjectData(id);
+    if (apiData && !apiData.error) {
+      recordLocalHistory(id, apiData.downloads?.total || 0);
+      return normalizeLive(id, apiData);
+    }
+    return { id, error: true, latestDate: 0 };
+  }));
+
+  cachedProjectData = items;
+  cachedProjectData.sort((a, b) => (b.latestDate || 0) - (a.latestDate || 0));
+
+  if (syncStatusRow) {
+    const mins = lastSyncAt ? Math.floor((Date.now() - lastSyncAt) / 60000) : null;
+    syncStatusRow.innerText = mins !== null ? `Sync: ${mins}m ago` : 'Sync: offline (cached)';
+  }
+
+  renderProjects('');
+  updateStatsDisplay();
+}
+
+function updateStatsDisplay() {
+  let grandTotal = 0;
+  let grand1h = 0;
+  let grandToday = 0;
+  let grandWeekly = 0;
+  let grandMonthly = 0;
+
+  cachedProjectData.forEach(item => {
+    if (item.error) return;
+    grandTotal += item.total || 0;
+
+    const gain1h = computeGain(item.history, 1);
+    const gainToday = computeTodayGain(item.history, item.total);
+    const gain7d = computeGain(item.history, 24 * 7);
+    const gain30d = computeGain(item.history, 24 * 30);
+
+    const perItemToday = gainToday !== null ? gainToday : (item.rawDaily || 0);
+    const perItemWeekly = gain7d !== null ? gain7d : (item.rawWeekly || 0);
+    const perItemMonthly = gain30d !== null ? gain30d : (perItemWeekly * 4);
+
+    grand1h += gain1h !== null ? gain1h : 0;
+    grandToday += perItemToday;
+    grandWeekly += perItemWeekly;
+    grandMonthly += perItemMonthly;
+  });
+
+  totalDlEl.innerText = isExactTotal ? formatExact(grandTotal) : formatNum(grandTotal);
+  hourlyDlEl.innerText = formatNum(grand1h);
+  yesterdayDlEl.innerText = formatNum(grandToday);
+  weeklyDlEl.innerText = formatNum(grandWeekly);
+  monthlyDlEl.innerText = formatNum(grandMonthly);
+}
+
+function renderProjects(filter = '') {
+  if (cachedProjectData.length === 0) {
+    projectListEl.innerHTML = '<div class="text-center py-10 text-slate-500 text-sm">No projects added yet.</div>';
+    return;
+  }
+
+  let filtered = cachedProjectData.filter(item => {
+    if (!filter) return true;
+    const name = (item.title || '').toLowerCase();
+    const id = item.id.toLowerCase();
+    return name.includes(filter) || id.includes(filter);
+  });
+
+  if (filtered.length === 0) {
+    projectListEl.innerHTML = '<div class="text-center py-10 text-slate-500 text-sm">No matching projects found.</div>';
+    return;
+  }
+
+  let html = '';
+  filtered.forEach((item) => {
+    const id = item.id;
+    if (item.error) {
+      html += `
+        <div class="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-200">Invalid ID: ${id}</div>
+            <div class="text-xs text-slate-500">Failed to fetch data</div>
+          </div>
+          <button onmousedown="startDelete('${id}', this)" onmouseup="cancelDelete()" onmouseleave="cancelDelete()" ontouchstart="startDelete('${id}', this)" ontouchend="cancelDelete()" class="relative overflow-hidden p-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 border border-red-500/20">
+            <i data-lucide="trash-2" class="w-4 h-4 relative z-10"></i>
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    const total = item.total || 0;
+    const thumb = item.thumbnail || 'https://curseforge.com/favicon.ico';
+    const name = item.title || id;
+
+    const gain1h = computeGain(item.history, 1);
+    const gainToday = computeTodayGain(item.history, total);
+    const gain7d = computeGain(item.history, 24 * 7);
+
+    const effectiveGain1h = gain1h !== null ? gain1h : 0;
+    const effectiveGainToday = gainToday !== null ? gainToday : (item.rawDaily || 0);
+    const effectiveGain7d = gain7d !== null ? gain7d : (item.rawWeekly || 0);
+
+    let gain1hStr = effectiveGain1h >= 0 ? `+${effectiveGain1h}` : `${effectiveGain1h}`;
+    let gainTodayStr = effectiveGainToday >= 0 ? `+${effectiveGainToday}` : `${effectiveGainToday}`;
+
+    let is1hSurge = effectiveGain1h >= 150;
+    let is5kSpike = effectiveGainToday >= 5000;
+    let is1kSpike = effectiveGainToday >= 1000;
+    let isLow = effectiveGainToday < 100;
+
+    let cardBorderClass = 'border-slate-800 hover:border-slate-700';
+    let cardBgClass = 'bg-slate-900';
+    let statusIndicatorHtml = '';
+    let actionBtnClass = 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
+
+    if (is1hSurge) {
+      cardBorderClass = 'border-emerald-500 active-glow';
+      cardBgClass = 'bg-emerald-950/20';
+      statusIndicatorHtml = `<span class="p-1 bg-emerald-500/20 text-emerald-400 rounded-lg flex items-center gap-1 text-[10px] font-bold"><i data-lucide="trending-up" class="w-3 h-3"></i> 1H SPIKE</span>`;
+      actionBtnClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30';
+    } else if (is5kSpike) {
+      cardBorderClass = 'border-emerald-500/50';
+      cardBgClass = 'bg-emerald-950/10';
+      statusIndicatorHtml = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] flex shrink-0"></span>`;
+    } else if (is1kSpike) {
+      cardBorderClass = 'border-amber-500/50';
+      cardBgClass = 'bg-amber-950/10';
+      statusIndicatorHtml = `<span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b] flex shrink-0"></span>`;
+    } else if (isLow) {
+      statusIndicatorHtml = `<span class="p-1 bg-red-500/10 text-red-400 rounded-lg flex items-center"><i data-lucide="trending-down" class="w-3 h-3"></i></span>`;
+    }
+
+    html += `
+      <div class="p-3.5 rounded-2xl ${cardBgClass} border ${cardBorderClass} transition-all duration-300 relative flex items-center justify-between gap-3">
+        ${is1hSurge || is5kSpike ? `
+          <span class="absolute -top-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+        ` : ''}
+
+        <img class="w-11 h-11 rounded-xl bg-slate-950 object-cover shrink-0" src="${thumb}" alt="" onerror="this.src='https://curseforge.com/favicon.ico'">
+
+        <div class="flex-grow min-w-0">
+          <div class="flex items-center gap-2">
+            <h3 class="font-semibold text-sm text-slate-100 truncate">${name}</h3>
+            ${statusIndicatorHtml}
+          </div>
+          <div class="text-[11px] text-slate-500 font-mono">${id}</div>
+          <div class="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+            <span>Tot: <strong class="text-sky-400 font-semibold">${formatNum(total)}</strong></span>
+            <span>1h: <strong class="text-emerald-400 font-semibold">${gain1hStr}</strong></span>
+            <span>Tdy: <strong class="text-emerald-400 font-semibold">${gainTodayStr}</strong></span>
+            <span>Wk: <strong class="text-sky-400 font-semibold">${formatNum(effectiveGain7d)}</strong></span>
+          </div>
+        </div>
+
+        <button onmousedown="startDelete('${id}', this)" onmouseup="cancelDelete()" onmouseleave="cancelDelete()" ontouchstart="startDelete('${id}', this)" ontouchend="cancelDelete()" class="relative overflow-hidden p-2 rounded-xl border transition ${actionBtnClass}" title="Hold 5s to Remove">
+          <i data-lucide="trash-2" class="w-4 h-4 relative z-10"></i>
+        </button>
+      </div>
+    `;
+  });
+
+  projectListEl.innerHTML = html;
+  lucide.createIcons();
+}
+
+function startDelete(id, btn) {
+  cancelDelete();
+  let fill = btn.querySelector('.delete-fill');
+  if (!fill) {
+    fill = document.createElement('div');
+    fill.className = 'delete-fill absolute inset-0 bg-red-500/50 transition-all duration-75 pointer-events-none z-0';
+    fill.style.width = '0%';
+    btn.appendChild(fill);
+  }
+
+  let startTime = Date.now();
+  const duration = 5000;
+
+  deleteProgressInterval = setInterval(() => {
+    let elapsed = Date.now() - startTime;
+    let pct = Math.min(100, (elapsed / duration) * 100);
+    fill.style.width = pct + '%';
+
+    if (elapsed >= duration) {
+      cancelDelete();
+      deleteProject(id);
+    }
+  }, 50);
+}
+
+function cancelDelete() {
+  if (deleteProgressInterval) clearInterval(deleteProgressInterval);
+  document.querySelectorAll('.delete-fill').forEach(f => f.style.width = '0%');
+}
+
+function renderDashboard(metric) {
+  let list = cachedProjectData.filter(i => !i.error);
+
+  function valueFor(item) {
+    if (metric === 'total') return item.total || 0;
+    if (metric === 'today') {
+      const g = computeTodayGain(item.history, item.total);
+      return g !== null ? g : (item.rawDaily || 0);
+    }
+    if (metric === '1h') {
+      const g = computeGain(item.history, 1);
+      return g !== null ? g : 0;
+    }
+    if (metric === 'week') {
+      const g = computeGain(item.history, 24 * 7);
+      return g !== null ? g : (item.rawWeekly || 0);
+    }
+    if (metric === 'month') {
+      const g = computeGain(item.history, 24 * 30);
+      return g !== null ? g : ((item.rawWeekly || 0) * 4);
+    }
+    return 0;
+  }
+
+  list.sort((a, b) => valueFor(b) - valueFor(a));
+
+  if (list.length === 0) {
+    rankListContainer.innerHTML = '<div class="text-center py-10 text-slate-500 text-sm">No valid data available.</div>';
+    return;
+  }
+
+  let html = '';
+  list.forEach((item, idx) => {
+    const name = item.title || item.id;
+    const val = valueFor(item);
+    const freq = getUpdateFrequency(item.files);
+    const lastUpdateStr = freq.lastUpdateDays !== null ? `${freq.lastUpdateDays}d ago` : 'unknown';
+
+    html += `
+      <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-base font-extrabold text-sky-400 w-6">#${idx + 1}</span>
+          <div>
+            <div class="text-xs font-semibold text-slate-200 truncate max-w-[200px]">${name}</div>
+            <div class="text-[10px] text-slate-500 font-mono">${item.id}</div>
+            <div class="text-[9px] text-slate-500">${freq.count30d} updates/30d · last ${lastUpdateStr}</div>
+          </div>
+        </div>
+        <div class="text-xs font-bold text-slate-300">
+          ${formatExact(val)} <span class="text-[10px] text-slate-500 font-normal">downloads</span>
+        </div>
+      </div>
+    `;
+  });
+
+  rankListContainer.innerHTML = html;
+  lucide.createIcons();
+}
+
+function deleteProject(id) {
+  projectIds = projectIds.filter(item => item !== id);
+  localStorage.setItem('cf_tracked_projects', JSON.stringify(projectIds));
+  delete localHistory[id];
+  localStorage.setItem('cf_local_history', JSON.stringify(localHistory));
+  loadData();
+}
+
+filterTabs[0].classList.add('bg-sky-400', 'text-slate-950');
+lucide.createIcons();
+</script>
+</body>
+</html>
