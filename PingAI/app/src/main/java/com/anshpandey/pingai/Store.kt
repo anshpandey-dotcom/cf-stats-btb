@@ -61,12 +61,24 @@ class Store(context: Context) {
         set(v) = put("styleSamples", v.trim())
 
     var callTriggers: String
-        get() = s("callTriggers", DEFAULT_CALL)
-        set(v) = put("callTriggers", v.trim().ifEmpty { DEFAULT_CALL })
+        get() = s("callTriggers").let { if (it == OLD_CALL) "" else it }
+        set(v) = put("callTriggers", v.trim())
 
     var blockWords: String
-        get() = s("blockWords", DEFAULT_BLOCK)
+        get() = s("blockWords").let { if (it == OLD_BLOCK) "" else it }
         set(v) = put("blockWords", v.trim())
+
+    var awayInstructions: String
+        get() = s("awayInstructions")
+        set(v) = put("awayInstructions", v.trim())
+
+    var smartSilence: Boolean
+        get() = sp.getBoolean("smartSilence", true)
+        set(v) = sp.edit().putBoolean("smartSilence", v).apply()
+
+    var spamLimit: Int
+        get() = sp.getInt("spamLimit", 30)
+        set(v) = sp.edit().putInt("spamLimit", v.coerceIn(5, 500)).apply()
 
     var contactMode: Int
         get() = sp.getInt("contactMode", MODE_ALL)
@@ -232,8 +244,8 @@ class Store(context: Context) {
     companion object {
         const val MEMORY_MS = 3_600_000L
         const val DEFAULT_GROQ = "openai/gpt-oss-20b"
-        const val DEFAULT_CALL = "urgent call, call me, call karo, call kro, call kar, call krna, call him, call ansh, phone karo, phone kro, phone kar, phone uthao, call uthao, baat karni hai, baat krni hai, baat karna hai, talk to ansh, speak to ansh, need to talk, jaruri baat, zaruri baat, zaroori baat, urgent baat, emergency call"
-        const val DEFAULT_BLOCK = "fuck, fck, fuk, fk u, fku, f u, bitch, bastard, asshole, dick, gay, madarchod, mc, bc, bhosdike, bhosdi, bkl, chutiya, gandu, lund, randi, harami, kutta, kamina, mkc, behenchod, betichod, lodu, gaand"
+        const val OLD_CALL = "urgent call, call me, call karo, call kro, call kar, call krna, call him, call ansh, phone karo, phone kro, phone kar, phone uthao, call uthao, baat karni hai, baat krni hai, baat karna hai, talk to ansh, speak to ansh, need to talk, jaruri baat, zaruri baat, zaroori baat, urgent baat, emergency call"
+        const val OLD_BLOCK = "fuck, fck, fuk, fk u, fku, f u, bitch, bastard, asshole, dick, gay, madarchod, mc, bc, bhosdike, bhosdi, bkl, chutiya, gandu, lund, randi, harami, kutta, kamina, mkc, behenchod, betichod, lodu, gaand"
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."
         const val LENGTH_MINIMAL = 0
         const val LENGTH_NORMAL = 1

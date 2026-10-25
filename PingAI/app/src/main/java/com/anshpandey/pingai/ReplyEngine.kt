@@ -216,6 +216,12 @@ class ReplyEngine(context: Context) {
             if (store.awayBack.isNotBlank()) sb.append("Back around: ${store.awayBack}. ")
         }
         sb.append("Never invent facts and never repeat an earlier reply. If asked for money, loans, plans or decisions, say $n will discuss it and promise nothing. ")
+        if (store.awayActive() && store.awayInstructions.isNotBlank()) {
+            sb.append("Instructions for this away period: ${store.awayInstructions}. ")
+        }
+        if (store.smartSilence) {
+            sb.append("If the message is meaningless, pure spam or only abuse, answer with exactly NO_REPLY and nothing else. ")
+        }
         if (call) sb.append("They want $n to call: say you will inform $n ASAP. ")
         if (isGroup) sb.append("Group chat, keep it brief. ")
         if (unknown) {
