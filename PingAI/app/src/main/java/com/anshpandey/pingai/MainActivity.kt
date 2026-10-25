@@ -176,8 +176,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun aiCard(): View = card("AI Setup") { box ->
-        box.addView(label("Your name (replies say \"not of <name>\")"))
-        val name = edit(store.userName, "e.g. Ansh")
+        box.addView(label("Your name (used in the assistant tag)"))
+        val name = edit(store.userName, "Your name")
         box.addView(name)
 
         box.addView(label("Gemini API key (free)"))
@@ -192,9 +192,9 @@ class MainActivity : AppCompatActivity() {
         val model = edit(store.model, Store.DEFAULT_MODEL)
         box.addView(model)
 
-        box.addView(label("Extra instructions for the AI (optional)"))
-        val persona = edit(store.personality, "e.g. Talk in Hinglish, friendly tone")
-        persona.minLines = 2
+        box.addView(label("Custom instructions for the AI (optional)"))
+        val persona = edit(store.personality, "e.g. Be friendly and keep replies short. Never share my address.")
+        persona.minLines = 4
         box.addView(persona)
 
         box.addView(label("Assistant tag shown before every reply ({name} = your name)"))
@@ -330,7 +330,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
-        val words = edit("", "Words (hi, hello, kya haal)")
+        val words = edit("", "Words (hi, hello, how are you)")
         val reply = edit("", "Reply to send")
         box.addView(words)
         box.addView(reply)

@@ -94,7 +94,7 @@ class ReplyEngine(context: Context) {
         val sb = StringBuilder()
         sb.append("You are an AI assistant answering chat messages on behalf of $n, who is offline right now. ")
         sb.append("You are not $n. Never pretend to be $n and never claim to be human. ")
-        sb.append("Reply in the same language and script the sender writes in; Hinglish stays Hinglish. ")
+        sb.append("Reply in the same language and script the sender writes in; mixed-language text stays mixed. ")
         sb.append("Keep it short, warm and natural: one to three sentences, plain text, no markdown. ")
         sb.append("Never invent facts, plans, promises, payments or personal details about $n. ")
         sb.append("For anything urgent, personal or that needs a decision, say you will pass the message on and $n will reply once back online. ")
@@ -104,7 +104,7 @@ class ReplyEngine(context: Context) {
         } else {
             sb.append("The sender is $sender, a saved contact. ")
         }
-        if (store.personality.isNotBlank()) sb.append("Extra instructions from $n: ").append(store.personality)
+        if (store.personality.isNotBlank()) sb.append("Custom instructions from $n, follow them: ").append(store.personality)
         return sb.toString()
     }
 
