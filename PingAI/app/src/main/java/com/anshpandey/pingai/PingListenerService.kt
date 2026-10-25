@@ -27,6 +27,8 @@ class PingListenerService : NotificationListenerService() {
     private val sent = ConcurrentHashMap<String, MutableList<Pair<Long, String>>>()
     private val recentIn = ConcurrentHashMap<String, Long>()
     private val mediaNoticeAt = ConcurrentHashMap<String, Long>()
+    private val hits = ConcurrentHashMap<String, MutableList<Long>>()
+    private val mutedUntil = ConcurrentHashMap<String, Long>()
 
     override fun onDestroy() {
         scheduler.shutdownNow()
@@ -96,6 +98,7 @@ class PingListenerService : NotificationListenerService() {
         val fresh = incoming.filter { !isDuplicate(sbn.packageName, it) }
         if (fresh.isEmpty()) return
         fresh.forEach { store.addEvent("in", sender, it) }
+        if (isSpamming(store, key, sender, fresh.size)) return
         val useful = fresh.filter { !Classifier.isNoise(it) }
         if (useful.isEmpty()) return
 
@@ -217,6 +220,10 @@ class PingListenerService : NotificationListenerService() {
             if (call) deliver(engine.urgentFallback(hinglish), true)
             return
         }
+        if (answer.contains("NO_REPLY")) {
+            store.addEvent("skip", p.sender, "AI chose not to reply to a pointless message")
+            return
+        }
         if (isRepeat(mem, answer)) {
             answer = try {
                 engine.reply(p.sender, mem, "$message (write a different reply)", first, unknown, p.isGroup, call)
@@ -244,6 +251,24 @@ class PingListenerService : NotificationListenerService() {
             }
             store.saveMemory(key, next)
         }
+    }
+
+    private fun isSpamming(store: Store, key: String, sender: String, count: Int): Boolean {
+        val now = System.currentTimeMillis()
+        val until = mutedUntil[key] ?: 0L
+        if (until > now) return true
+        val list = hits.getOrPut(key) { Collections.synchronizedList(mutableListOf<Long>()) }
+        synchronized(list) {
+            repeat(count) { list.add(now) }
+            list.removeAll { now - it > 10 * 60_000L }
+            if (list.size < store.spamLimit) return false
+            list.clear()
+        }
+        mutedUntil[key] = now + 3_600_000L
+        synchronized(pending) { pending.remove(key)?.future?.cancel(false) }
+        Live.waiting.remove(key)
+        store.addEvent("skip", sender, "too many messages, replies paused for an hour")
+        return true
     }
 
     private fun send(store: Store, key: String, p: Pending, text: String) {

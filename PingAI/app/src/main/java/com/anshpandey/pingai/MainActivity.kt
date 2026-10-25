@@ -407,6 +407,9 @@ class MainActivity : AppCompatActivity() {
         box.addView(ui.label("Back around (optional)"))
         val back = ui.edit(store.awayBack, "e.g. 6 pm")
         box.addView(back)
+        box.addView(ui.label("Instructions for this away period (optional)"))
+        val extra = ui.edit(store.awayInstructions, "e.g. Say I will reply tonight. Do not share my location.", 3)
+        box.addView(extra)
         box.addView(ui.label("Away for (hours)"))
         val hours = ui.edit("2", "2")
         hours.inputType = InputType.TYPE_CLASS_NUMBER
@@ -414,6 +417,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(ui.button("Start away") {
             store.awayNote = note.text.toString()
             store.awayBack = back.text.toString()
+            store.awayInstructions = extra.text.toString()
             val h = hours.text.toString().toIntOrNull() ?: 2
             store.awayUntil = System.currentTimeMillis() + h.coerceIn(1, 72) * 3_600_000L
             store.clearMemories()
@@ -496,7 +500,7 @@ class MainActivity : AppCompatActivity() {
 
             box.addView(ui.label("Your own message samples (optional)"))
             box.addView(ui.hint("Paste 5 to 10 messages you really wrote, one per line. The AI copies your style."))
-            val samples = ui.edit(store.styleSamples, "bhai kal milte hain\nthik hai done", 5)
+            val samples = ui.edit(store.styleSamples, "e.g. sure, see you tomorrow\nok done, will call later", 5)
             box.addView(samples)
 
             fun save() {
@@ -597,16 +601,24 @@ class MainActivity : AppCompatActivity() {
         val limit = ui.edit(store.maxPerDay.toString(), "20")
         limit.inputType = InputType.TYPE_CLASS_NUMBER
         box.addView(limit)
-        box.addView(ui.label("Call request phrases (rings your phone like a call)"))
-        val calls = ui.edit(store.callTriggers, Store.DEFAULT_CALL, 3)
+        box.addView(ui.label("Stop replying after this many messages from one person in 10 minutes"))
+        val spam = ui.edit(store.spamLimit.toString(), "30")
+        spam.inputType = InputType.TYPE_CLASS_NUMBER
+        box.addView(spam)
+        box.addView(ui.switchRow("Let the AI stay silent on pointless messages", store.smartSilence) {
+            store.smartSilence = it
+        })
+        box.addView(ui.label("Call request phrases (rings your phone like a call). Leave empty to turn off."))
+        val calls = ui.edit(store.callTriggers, "e.g. call me, urgent call", 3)
         box.addView(calls)
-        box.addView(ui.label("Never reply if the message contains"))
-        val block = ui.edit(store.blockWords, Store.DEFAULT_BLOCK, 3)
+        box.addView(ui.label("Never reply if the message contains these words. Leave empty to turn off."))
+        val block = ui.edit(store.blockWords, "Add your own words, separated by commas", 3)
         box.addView(block)
 
         fun save() {
             store.waitSeconds = wait.text.toString().toIntOrNull() ?: 10
             store.maxPerDay = limit.text.toString().toIntOrNull() ?: 20
+            store.spamLimit = spam.text.toString().toIntOrNull() ?: 30
             store.callTriggers = calls.text.toString()
             store.blockWords = block.text.toString()
         }
