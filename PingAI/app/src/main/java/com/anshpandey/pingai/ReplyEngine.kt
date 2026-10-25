@@ -144,7 +144,10 @@ class ReplyEngine(context: Context) {
         val meta = { m: AiMeta ->
             store.saveQuota(m.limit, m.remaining)
             store.addTokens(m.tokens)
-            if (m.tokens > 0 && m.model !in big && m.model != store.groqModel) store.groqModel = m.model
+            if (m.tokens > 0 && m.model !in big && m.model != store.groqModel) {
+                store.groqModel = m.model
+            }
+            Unit
         }
         return try {
             OpenAiClient.ask(GROQ_URL, key, big + base, system, history, maxTokens, meta)
