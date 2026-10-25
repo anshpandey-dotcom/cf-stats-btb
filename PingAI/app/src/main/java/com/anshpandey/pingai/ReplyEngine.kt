@@ -101,13 +101,16 @@ class ReplyEngine(context: Context) {
     }
 
     private fun groq(system: String, history: List<Pair<String, String>>): String {
+        val track = { limit: String?, left: String?, tokens: String? ->
+            store.saveQuota(Store.PROVIDER_GROQ, limit, left, tokens)
+        }
         if (store.use70b) {
             try {
-                return OpenAiClient.ask(GROQ_URL, store.groqKey, GROQ_70B, emptyList(), system, history)
+                return OpenAiClient.ask(GROQ_URL, store.groqKey, GROQ_70B, emptyList(), system, history, track)
             } catch (e: GeminiException) {
             }
         }
-        return OpenAiClient.ask(GROQ_URL, store.groqKey, store.groqModel, GROQ_FALLBACKS, system, history)
+        return OpenAiClient.ask(GROQ_URL, store.groqKey, store.groqModel, GROQ_FALLBACKS, system, history, track)
     }
 
     private fun clean(text: String): String = text.trim().removeSurrounding("\"").trim()
@@ -150,7 +153,8 @@ class ReplyEngine(context: Context) {
         val n = name()
         val sb = StringBuilder()
         sb.append("You are answering chat messages on behalf of $n, who is not online right now. ")
-        sb.append("You are $n's assistant, not $n. Never pretend to be $n. ")
+        sb.append("You are $n's assistant, not $n. Never pretend to be $n and never speak as $n: always talk about $n in the third person, for example '$n is in Jaunpur, will be back by 6' and never 'I am in Jaunpur'. ")
+        sb.append("Never repeat any earlier reply in this chat. Every reply must be different and must answer what the person just said. If you do not know something, say you do not know and that you will tell $n. ")
         sb.append("Write exactly like a real person texting: casual and natural. ")
         sb.append("Use the same language and script as the other person's latest message. If they write Hinglish (Hindi in Roman letters), reply in Hinglish. If they write English, reply in simple English. Never answer a Hinglish message in formal English. ")
         sb.append("Never say 'AI assistant', 'As an AI', or 'Let me know if you need anything'. No greetings like 'Hello there', no lists, no markdown, at most one emoji. ")
@@ -174,7 +178,7 @@ class ReplyEngine(context: Context) {
             sb.append("The person's name is $sender. ")
             toneFor(sender)?.let { sb.append("About this person and the tone to use: $it. ") }
         }
-        sb.append("Examples: they: 'bhai kaha hai' -> you: 'abhi online nahi hai bhai, aate hi bata dunga'. they: 'hello' -> you: 'hello'. ")
+        sb.append("If they only say hello, say hello back. Keep each reply fresh and specific to their message. ")
         sb.append(styleRules(n))
         return sb.toString()
     }

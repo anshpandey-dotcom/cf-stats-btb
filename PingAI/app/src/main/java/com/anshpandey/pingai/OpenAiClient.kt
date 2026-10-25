@@ -13,12 +13,13 @@ object OpenAiClient {
         model: String,
         fallbacks: List<String>,
         system: String,
-        history: List<Pair<String, String>>
+        history: List<Pair<String, String>>,
+        quota: ((String?, String?, String?) -> Unit)? = null
     ): String {
         var failure: GeminiException? = null
         for (candidate in (listOf(model) + fallbacks).distinct()) {
             try {
-                return call(url, key, candidate, system, history)
+                return call(url, key, candidate, system, history, quota)
             } catch (e: GeminiException) {
                 failure = e
                 val msg = e.message.orEmpty()
@@ -29,7 +30,14 @@ object OpenAiClient {
         throw failure ?: GeminiException("No model available")
     }
 
-    private fun call(url: String, key: String, model: String, system: String, history: List<Pair<String, String>>): String {
+    private fun call(
+        url: String,
+        key: String,
+        model: String,
+        system: String,
+        history: List<Pair<String, String>>,
+        quota: ((String?, String?, String?) -> Unit)?
+    ): String {
         val messages = JSONArray()
         messages.put(JSONObject().put("role", "system").put("content", system))
         history.forEach { (role, text) ->
@@ -50,6 +58,11 @@ object OpenAiClient {
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
             val code = conn.responseCode
+            quota?.invoke(
+                conn.getHeaderField("x-ratelimit-limit-requests"),
+                conn.getHeaderField("x-ratelimit-remaining-requests"),
+                conn.getHeaderField("x-ratelimit-remaining-tokens")
+            )
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
             if (code !in 200..299) {

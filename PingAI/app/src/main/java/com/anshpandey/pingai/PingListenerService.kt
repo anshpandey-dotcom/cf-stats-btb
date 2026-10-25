@@ -27,7 +27,7 @@ class PingListenerService : NotificationListenerService() {
     private val pending = HashMap<String, Pending>()
     private val handled = ConcurrentHashMap<String, Long>()
     private val sent = ConcurrentHashMap<String, MutableList<Pair<Long, String>>>()
-    private val replyTimes = ConcurrentHashMap<String, MutableList<Long>>()
+    private val recentIn = ConcurrentHashMap<String, Long>()
 
     override fun onDestroy() {
         scheduler.shutdownNow()
@@ -58,8 +58,10 @@ class PingListenerService : NotificationListenerService() {
             sender = if (isGroup) {
                 style.conversationTitle?.toString() ?: title
             } else {
-                messages.lastOrNull { it.person?.key == null || it.person?.key != style.user.key }
-                    ?.person?.name?.toString() ?: title
+                title.ifBlank {
+                    messages.lastOrNull { it.person?.key == null || it.person?.key != style.user.key }
+                        ?.person?.name?.toString().orEmpty()
+                }
             }
             sender = sender.trim()
             key = sbn.packageName + "|" + sender
@@ -86,8 +88,10 @@ class PingListenerService : NotificationListenerService() {
         if (sender.isEmpty() || incoming.isEmpty()) return
         if (isGroup && store.skipGroups) return
 
-        incoming.forEach { store.addEvent("in", sender, it) }
-        val useful = incoming.filter { !Classifier.isNoise(it) }
+        val fresh = incoming.filter { !isDuplicate(sbn.packageName, sender, it) }
+        if (fresh.isEmpty()) return
+        fresh.forEach { store.addEvent("in", sender, it) }
+        val useful = fresh.filter { !Classifier.isNoise(it) }
         if (useful.isEmpty()) return
 
         queue(store, key, sender, isGroup, action, input, useful)
@@ -137,10 +141,8 @@ class PingListenerService : NotificationListenerService() {
         }
 
         val now = System.currentTimeMillis()
-        val times = replyTimes[key]
-        val recent = if (times == null) 0 else synchronized(times) { times.count { now - it < 3_600_000L } }
-        if (recent >= store.maxPerHour) {
-            store.addEvent("skip", p.sender, "reply limit reached for this hour")
+        if (store.repliesToday(key) >= store.maxPerDay) {
+            store.addEvent("skip", p.sender, "daily reply limit reached for this person")
             return
         }
 
@@ -179,11 +181,23 @@ class PingListenerService : NotificationListenerService() {
 
         val first = now - store.lastReply(key) > 6 * 3_600_000L
         val turns = history + ("user" to message)
-        val answer = try {
+        var answer = try {
             engine.reply(p.sender, turns, first, unknown, p.isGroup, urgent)
         } catch (e: Exception) {
             store.addEvent("skip", p.sender, "AI failed: ${e.message?.take(80)}")
             return
+        }
+        if (isRepeat(history, answer)) {
+            answer = try {
+                engine.reply(p.sender, turns + ("user" to "(Your last reply was repeated. Write a different one that answers my message.)"), first, unknown, p.isGroup, urgent)
+            } catch (e: Exception) {
+                store.addEvent("skip", p.sender, "AI failed: ${e.message?.take(80)}")
+                return
+            }
+            if (isRepeat(history, answer)) {
+                store.addEvent("skip", p.sender, "avoided sending the same reply twice")
+                return
+            }
         }
         finish(answer)
     }
@@ -199,9 +213,23 @@ class PingListenerService : NotificationListenerService() {
 
         val now = System.currentTimeMillis()
         sent.getOrPut(key) { Collections.synchronizedList(mutableListOf<Pair<Long, String>>()) }.add(now to text)
-        replyTimes.getOrPut(key) { Collections.synchronizedList(mutableListOf<Long>()) }.add(now)
+        store.bumpReplies(key)
         store.setLastReply(key, now)
         store.addEvent("out", p.sender, text)
+    }
+
+    private fun isRepeat(history: List<Pair<String, String>>, answer: String): Boolean {
+        val norm = Classifier.normalize(answer)
+        return history.takeLast(6).any { it.first == "model" && Classifier.normalize(it.second) == norm }
+    }
+
+    private fun isDuplicate(pkg: String, sender: String, text: String): Boolean {
+        val now = System.currentTimeMillis()
+        val id = pkg + "|" + Classifier.normalize(sender) + "|" + Classifier.normalize(text)
+        recentIn.entries.removeAll { now - it.value > 120_000L }
+        val seen = recentIn[id]
+        recentIn[id] = now
+        return seen != null
     }
 
     private fun isEcho(key: String, text: String): Boolean {

@@ -58,7 +58,9 @@ class MainActivity : AppCompatActivity() {
         "com.whatsapp" to "WhatsApp",
         "com.whatsapp.w4b" to "WhatsApp Business",
         "org.telegram.messenger" to "Telegram",
-        "com.facebook.orca" to "Messenger"
+        "com.facebook.orca" to "Messenger",
+        "com.instagram.android" to "Instagram",
+        "com.discord" to "Discord"
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -232,6 +234,7 @@ class MainActivity : AppCompatActivity() {
                     showTab(tab)
                 })
             }
+            page.addView(usageCard())
             page.addView(awayCard())
         } else {
             page.addView(helperCard())
@@ -271,6 +274,18 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, ui.dp(6), 0, 0)
             setTextColor(if (ok) ui.color(R.color.green_mid) else 0xFFC62828.toInt())
         })
+    }
+
+    private fun usageCard(): View = ui.card("AI usage today") { box ->
+        val exact = store.quotaText(store.provider)
+        box.addView(ui.body(if (exact.isEmpty()) "Exact numbers appear after the first reply or Test AI." else exact))
+        box.addView(ui.hint(limitNote(store.provider)))
+    }
+
+    private fun limitNote(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> "Groq free plan: the small 8B model allows roughly 14,000 requests a day, the 70B model about 1,000. Each reply and each summary uses one request. Check console.groq.com/docs/rate-limits for current numbers."
+        Store.PROVIDER_OPENROUTER -> "OpenRouter free models: about 50 requests a day, or about 1,000 after adding 10 dollars of credit. Check openrouter.ai/docs for current numbers."
+        else -> "Google AI Studio free tier limits depend on the model. See the Rate limits page in AI Studio for your exact numbers."
     }
 
     private fun setupCard(): View = ui.card("Setup") { box ->
@@ -521,11 +536,11 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(ui.switchRow("Skip group chats", store.skipGroups) { store.skipGroups = it })
         box.addView(ui.label("Wait after the last message before replying (seconds)"))
-        val wait = ui.edit(store.waitSeconds.toString(), "4")
+        val wait = ui.edit(store.waitSeconds.toString(), "10")
         wait.inputType = InputType.TYPE_CLASS_NUMBER
         box.addView(wait)
-        box.addView(ui.label("Maximum replies per person per hour"))
-        val limit = ui.edit(store.maxPerHour.toString(), "4")
+        box.addView(ui.label("Maximum replies per person per day"))
+        val limit = ui.edit(store.maxPerDay.toString(), "20")
         limit.inputType = InputType.TYPE_CLASS_NUMBER
         box.addView(limit)
         box.addView(ui.label("Urgent words (plays a tone and alerts you)"))
@@ -533,8 +548,8 @@ class MainActivity : AppCompatActivity() {
         box.addView(urgent)
 
         fun save() {
-            store.waitSeconds = wait.text.toString().toIntOrNull() ?: 4
-            store.maxPerHour = limit.text.toString().toIntOrNull() ?: 4
+            store.waitSeconds = wait.text.toString().toIntOrNull() ?: 10
+            store.maxPerDay = limit.text.toString().toIntOrNull() ?: 20
             store.urgentWords = urgent.text.toString()
         }
         leave = { save() }

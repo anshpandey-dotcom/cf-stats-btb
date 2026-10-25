@@ -92,12 +92,41 @@ class Store(context: Context) {
         set(v) = sp.edit().putInt("replyLength", v).apply()
 
     var waitSeconds: Int
-        get() = sp.getInt("waitSeconds", 4)
-        set(v) = sp.edit().putInt("waitSeconds", v.coerceIn(1, 30)).apply()
+        get() = sp.getInt("wait10", 10)
+        set(v) = sp.edit().putInt("wait10", v.coerceIn(1, 30)).apply()
 
-    var maxPerHour: Int
-        get() = sp.getInt("maxPerHour", 4)
-        set(v) = sp.edit().putInt("maxPerHour", v.coerceIn(1, 30)).apply()
+    var maxPerDay: Int
+        get() = sp.getInt("maxPerDay", 20)
+        set(v) = sp.edit().putInt("maxPerDay", v.coerceIn(1, 200)).apply()
+
+    fun repliesToday(key: String): Int = sp.getInt("cnt_" + keyId(key) + "_" + dayStamp(), 0)
+
+    fun bumpReplies(key: String) {
+        val k = "cnt_" + keyId(key) + "_" + dayStamp()
+        sp.edit().putInt(k, sp.getInt(k, 0) + 1).apply()
+    }
+
+    private fun dayStamp(): String =
+        java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
+
+    fun saveQuota(provider: Int, limit: String?, remaining: String?, tokens: String?) {
+        if (remaining == null) return
+        val o = JSONObject().put("l", limit ?: "").put("r", remaining).put("t", tokens ?: "")
+            .put("at", System.currentTimeMillis())
+        put("quota_$provider", o.toString())
+    }
+
+    fun quotaText(provider: Int): String {
+        val raw = s("quota_$provider")
+        if (raw.isEmpty()) return ""
+        val o = JSONObject(raw)
+        val time = java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(o.getLong("at")))
+        val limit = o.optString("l")
+        val of = if (limit.isNotEmpty()) " of $limit" else ""
+        val tokens = o.optString("t")
+        val tok = if (tokens.isNotEmpty()) ", $tokens tokens left this minute" else ""
+        return "${o.getString("r")}$of requests left today$tok (checked at $time)"
+    }
 
     var awayUntil: Long
         get() = sp.getLong("awayUntil", 0L)
