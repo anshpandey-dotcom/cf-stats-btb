@@ -1,7 +1,7 @@
 package com.anshpandey.stopit;
 
+import android.Manifest;
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -11,10 +11,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.Editable;
-import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
@@ -44,8 +42,9 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
     private TextView status;
     private TextView count;
     private View setupCard;
-    private Button enableService;
-    private View restrictedBox;
+    private View setupBody;
+    private Button usageAccess;
+    private Button overlayAccess;
     private Button battery;
     private ProgressBar loading;
 
@@ -60,8 +59,9 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         status = findViewById(R.id.status);
         count = findViewById(R.id.count);
         setupCard = findViewById(R.id.setup_card);
-        enableService = findViewById(R.id.enable_service);
-        restrictedBox = findViewById(R.id.restricted_box);
+        setupBody = findViewById(R.id.setup_body);
+        usageAccess = findViewById(R.id.usage_access);
+        overlayAccess = findViewById(R.id.overlay_access);
         battery = findViewById(R.id.battery);
         loading = findViewById(R.id.loading);
         ListView list = findViewById(R.id.apps);
@@ -74,13 +74,18 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         master.setOnCheckedChangeListener((button, checked) -> {
             store.setActive(checked);
             refresh();
+            GuardService.sync(this);
         });
         findViewById(R.id.master_row).setOnClickListener(v -> master.toggle());
 
-        enableService.setOnClickListener(v -> openAccessibility());
-        findViewById(R.id.app_info).setOnClickListener(v -> openAppInfo());
+        usageAccess.setOnClickListener(v -> openUsageAccess());
+        overlayAccess.setOnClickListener(v -> openOverlayAccess());
         battery.setOnClickListener(v -> requestBattery());
-        restrictedBox.setVisibility(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? View.VISIBLE : View.GONE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+        }
 
         search.addTextChangedListener(new TextWatcher() {
             @Override
@@ -104,6 +109,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
     protected void onResume() {
         super.onResume();
         refresh();
+        GuardService.sync(this);
     }
 
     @Override
@@ -119,11 +125,13 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
     }
 
     private void refresh() {
-        boolean serviceOn = isServiceEnabled();
-        boolean batteryOk = isBatteryUnrestricted();
-        enableService.setVisibility(serviceOn ? View.GONE : View.VISIBLE);
-        restrictedBox.setVisibility(!serviceOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? View.VISIBLE : View.GONE);
-        findViewById(R.id.setup_body).setVisibility(serviceOn ? View.GONE : View.VISIBLE);
+        boolean usageOk = Access.usage(this);
+        boolean overlayOk = Access.overlay(this);
+        boolean serviceOn = usageOk && overlayOk;
+        boolean batteryOk = Access.battery(this);
+        usageAccess.setVisibility(usageOk ? View.GONE : View.VISIBLE);
+        overlayAccess.setVisibility(overlayOk ? View.GONE : View.VISIBLE);
+        setupBody.setVisibility(serviceOn ? View.GONE : View.VISIBLE);
         battery.setVisibility(batteryOk ? View.GONE : View.VISIBLE);
         setupCard.setVisibility(serviceOn && batteryOk ? View.GONE : View.VISIBLE);
 
@@ -194,52 +202,32 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         return apps;
     }
 
-    private boolean isServiceEnabled() {
-        String enabled = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        if (TextUtils.isEmpty(enabled)) {
-            return false;
+    private void openUsageAccess() {
+        if (open(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:" + getPackageName())))
+                || open(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))) {
+            Toast.makeText(this, R.string.find_usage, Toast.LENGTH_LONG).show();
         }
-        ComponentName mine = new ComponentName(this, GuardService.class);
-        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
-        splitter.setString(enabled);
-        for (String item : splitter) {
-            ComponentName name = ComponentName.unflattenFromString(item);
-            if (mine.equals(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 
-    private boolean isBatteryUnrestricted() {
-        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-        return pm == null || pm.isIgnoringBatteryOptimizations(getPackageName());
+    private void openOverlayAccess() {
+        if (open(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())))
+                || open(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))) {
+            Toast.makeText(this, R.string.find_overlay, Toast.LENGTH_LONG).show();
+        }
     }
 
-    private void openAccessibility() {
+    private boolean open(Intent intent) {
         try {
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            Toast.makeText(this, R.string.find_service, Toast.LENGTH_LONG).show();
+            startActivity(intent);
+            return true;
         } catch (RuntimeException e) {
-            openAppInfo();
-        }
-    }
-
-    private void openAppInfo() {
-        try {
-            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
-        } catch (RuntimeException ignored) {
+            return false;
         }
     }
 
     private void requestBattery() {
-        try {
-            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
-        } catch (RuntimeException e) {
-            try {
-                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-            } catch (RuntimeException ignored) {
-            }
+        if (!open(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())))) {
+            open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
         }
     }
 }

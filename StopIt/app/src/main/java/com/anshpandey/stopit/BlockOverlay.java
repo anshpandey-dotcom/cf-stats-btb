@@ -72,9 +72,11 @@ final class BlockOverlay implements SurfaceHolder.Callback {
         return root != null;
     }
 
-    void show(String appName) {
+    boolean show(String appName) {
         if (root == null) {
-            attach();
+            if (!attach()) {
+                return false;
+            }
         } else {
             releasePlayer();
         }
@@ -86,6 +88,7 @@ final class BlockOverlay implements SurfaceHolder.Callback {
         createPlayer();
         handler.removeCallbacks(ticker);
         handler.post(ticker);
+        return true;
     }
 
     void hide() {
@@ -122,7 +125,7 @@ final class BlockOverlay implements SurfaceHolder.Callback {
         }
     }
 
-    private void attach() {
+    private boolean attach() {
         Context themed = new ContextThemeWrapper(context, R.style.AppTheme);
         root = LayoutInflater.from(themed).inflate(R.layout.overlay, null);
         video = root.findViewById(R.id.video);
@@ -135,7 +138,9 @@ final class BlockOverlay implements SurfaceHolder.Callback {
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        : WindowManager.LayoutParams.TYPE_PHONE,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_FULLSCREEN
                         | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
@@ -144,8 +149,15 @@ final class BlockOverlay implements SurfaceHolder.Callback {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
-        windowManager.addView(root, params);
+        try {
+            windowManager.addView(root, params);
+        } catch (RuntimeException e) {
+            root = null;
+            video = null;
+            return false;
+        }
         root.requestFocus();
+        return true;
     }
 
     private void createPlayer() {

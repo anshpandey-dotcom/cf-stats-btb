@@ -104,40 +104,14 @@
             android:textSize="13sp" />
 
         <Button
-            android:id="@+id/enable_service"
+            android:id="@+id/usage_access"
             style="@style/PillButton"
-            android:text="@string/enable_service" />
+            android:text="@string/usage_access" />
 
-        <LinearLayout
-            android:id="@+id/restricted_box"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingTop="10dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/restricted_hint"
-                android:textColor="@color/muted"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/app_info"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:layout_marginStart="10dp"
-                android:background="@drawable/button_alt_bg"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:stateListAnimator="@null"
-                android:text="@string/app_info"
-                android:textAllCaps="false"
-                android:textColor="@color/text"
-                android:textSize="13sp" />
-        </LinearLayout>
+        <Button
+            android:id="@+id/overlay_access"
+            style="@style/PillButton"
+            android:text="@string/overlay_access" />
 
         <Button
             android:id="@+id/battery"

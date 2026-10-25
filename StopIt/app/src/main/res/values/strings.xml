@@ -1,24 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">StopIt</string>
-    <string name="service_name">StopIt Guard</string>
-    <string name="service_description">StopIt watches which app comes to the front. When you open an app you picked, it plays the motivation clip over it first. Nothing is collected or sent anywhere.</string>
     <string name="tagline">Watch first. Scroll later.</string>
     <string name="protection">Protection</string>
     <string name="finish_setup">Finish setup</string>
-    <string name="setup_body">StopIt needs its accessibility service to spot the apps you open and play the clip on top of them.</string>
-    <string name="enable_service">Turn on StopIt Guard</string>
-    <string name="restricted_hint">Switch greyed out? Open App info, tap ⋮ and choose Allow restricted settings, then try again.</string>
-    <string name="app_info">App info</string>
+    <string name="setup_body">StopIt needs two permissions to see which app you open and play the clip on top of it. Nothing leaves your phone.</string>
     <string name="battery">Allow running in background</string>
     <string name="search_hint">Search apps</string>
     <string name="apps">Apps</string>
-    <string name="find_service">Tap StopIt Guard and turn it on</string>
     <string name="stay_hard">Stay hard.</string>
     <string name="overlay_caption">Watch the full clip to open %1$s</string>
     <string name="status_paused">Paused. Your apps open freely.</string>
-    <string name="status_setup">Service is off. Finish setup below.</string>
+    <string name="status_setup">Not ready yet. Finish setup below.</string>
     <string name="status_none">On. Pick at least one app below.</string>
     <string name="status_on">Guarding %1$d apps</string>
     <string name="status_one">Guarding 1 app</string>
+    <string name="usage_access">Allow usage access</string>
+    <string name="overlay_access">Allow display over other apps</string>
+    <string name="find_usage">Find StopIt and allow usage access</string>
+    <string name="find_overlay">Find StopIt and allow display over other apps</string>
+    <string name="channel_name">Protection status</string>
 </resources>
