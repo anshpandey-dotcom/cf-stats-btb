@@ -23,15 +23,18 @@ import android.os.PowerManager;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 public class GuardService extends Service
-        implements SharedPreferences.OnSharedPreferenceChangeListener, BlockOverlay.Listener {
+        implements SharedPreferences.OnSharedPreferenceChangeListener, GateOverlay.Listener {
 
-    private static final String CHANNEL = "guard";
-    private static final int NOTIFICATION_ID = 41;
-    private static final long INTERVAL = 300;
-    private static final long WINDOW = 6000;
+    static final String CHANNEL_STATUS = "status";
+    static final String CHANNEL_REMINDERS = "reminders";
+    private static final int STATUS_ID = 41;
+    private static final long INTERVAL = 500;
+    private static final long MINUTE = 60_000L;
 
     private static final Set<String> NEUTRAL = new HashSet<>(Arrays.asList(
             "android",
@@ -44,14 +47,19 @@ public class GuardService extends Service
             "com.google.android.gms"));
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final LinkedHashMap<String, String> resumed = new LinkedHashMap<>();
     private Store store;
-    private BlockOverlay overlay;
+    private GateOverlay overlay;
     private UsageStatsManager usage;
     private PowerManager power;
+    private NotificationManager notifications;
     private String foreground;
+    private String foregroundClass;
     private String guarded;
-    private String cleared;
+    private String pinPass;
+    private String reminderPkg;
     private long lastSeen;
+    private long lastQuery;
     private boolean polling;
 
     private final Runnable poll = new Runnable() {
@@ -61,6 +69,24 @@ public class GuardService extends Service
             handler.postDelayed(this, INTERVAL);
         }
     };
+
+    private final Runnable reminder = new Runnable() {
+        @Override
+        public void run() {
+            String pkg = reminderPkg;
+            Store.Session session = pkg == null ? null : store.session(pkg);
+            if (session == null) {
+                return;
+            }
+            long left = session.until - System.currentTimeMillis();
+            if (left > 0 && pkg.equals(foreground)) {
+                notifyLeft(pkg, session, left);
+            }
+            planNext(session);
+        }
+    };
+
+    private final Runnable evaluateLater = this::evaluate;
 
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
@@ -98,19 +124,42 @@ public class GuardService extends Service
         }
     }
 
+    static void createChannels(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        NotificationManager nm = context.getSystemService(NotificationManager.class);
+        if (nm == null) {
+            return;
+        }
+        NotificationChannel status = new NotificationChannel(CHANNEL_STATUS,
+                context.getString(R.string.channel_status), NotificationManager.IMPORTANCE_MIN);
+        status.setShowBadge(false);
+        status.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
+        nm.createNotificationChannel(status);
+        NotificationChannel reminders = new NotificationChannel(CHANNEL_REMINDERS,
+                context.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_HIGH);
+        reminders.setSound(null, null);
+        reminders.enableVibration(false);
+        reminders.setShowBadge(false);
+        nm.createNotificationChannel(reminders);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
         store = new Store(this);
         store.seed(getPackageManager());
-        overlay = new BlockOverlay(this, this);
+        GateOverlay.restoreAudio(this, store);
+        overlay = new GateOverlay(this, store, this);
         usage = (UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
         power = (PowerManager) getSystemService(POWER_SERVICE);
-        createChannel();
+        notifications = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        createChannels(this);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            startForeground(STATUS_ID, statusNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
-            startForeground(NOTIFICATION_ID, buildNotification());
+            startForeground(STATUS_ID, statusNotification());
         }
         store.listen(this);
         IntentFilter filter = new IntentFilter();
@@ -122,8 +171,7 @@ public class GuardService extends Service
         } else {
             registerReceiver(screenReceiver, filter);
         }
-        lastSeen = 0;
-        scan(System.currentTimeMillis() - 10 * 60 * 1000L);
+        scan(System.currentTimeMillis() - 30 * MINUTE);
     }
 
     @Override
@@ -132,8 +180,9 @@ public class GuardService extends Service
             stopSelf();
             return START_NOT_STICKY;
         }
-        refreshNotification();
-        startPolling();
+        if (power == null || power.isInteractive()) {
+            startPolling();
+        }
         return START_STICKY;
     }
 
@@ -151,10 +200,9 @@ public class GuardService extends Service
     }
 
     private void check() {
-        if (power != null && !power.isInteractive()) {
-            return;
-        }
-        scan(System.currentTimeMillis() - WINDOW);
+        long now = System.currentTimeMillis();
+        scan(Math.max(lastQuery - 2000, now - 10_000));
+        lastQuery = now;
         evaluate();
     }
 
@@ -174,15 +222,28 @@ public class GuardService extends Service
         UsageEvents.Event event = new UsageEvents.Event();
         while (events.hasNextEvent()) {
             events.getNextEvent(event);
-            if (event.getEventType() != UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                continue;
-            }
+            int type = event.getEventType();
+            boolean up = type == UsageEvents.Event.MOVE_TO_FOREGROUND;
+            boolean down = type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == 23;
             String pkg = event.getPackageName();
-            if (pkg == null || NEUTRAL.contains(pkg) || event.getTimeStamp() < lastSeen) {
+            if ((!up && !down) || pkg == null || NEUTRAL.contains(pkg) || event.getTimeStamp() < lastSeen) {
                 continue;
             }
             lastSeen = event.getTimeStamp();
-            foreground = pkg;
+            resumed.remove(pkg);
+            if (up) {
+                resumed.put(pkg, event.getClassName());
+            }
+        }
+        String top = null;
+        String topClass = null;
+        for (Map.Entry<String, String> item : resumed.entrySet()) {
+            top = item.getKey();
+            topClass = item.getValue();
+        }
+        if (top != null) {
+            foreground = top;
+            foregroundClass = topClass;
         }
     }
 
@@ -191,38 +252,215 @@ public class GuardService extends Service
         if (pkg == null) {
             return;
         }
-        if (cleared != null && !cleared.equals(pkg)) {
-            cleared = null;
+        long now = System.currentTimeMillis();
+        expireBackground(pkg, now);
+        if (pinPass != null && !pinPass.equals(pkg)) {
+            pinPass = null;
         }
-        boolean block = store.isActive() && store.isBlocked(pkg) && !pkg.equals(cleared) && !pkg.equals(getPackageName());
-        if (block) {
-            if (!overlay.isShowing() || !pkg.equals(guarded)) {
+        if (store.isLocked() && isAdminScreen()) {
+            if (pkg.equals(pinPass)) {
+                hideOverlay();
+            } else if (overlay.mode() != GateOverlay.PIN) {
                 guarded = pkg;
-                if (!overlay.show(labelOf(pkg))) {
+                if (!overlay.showPin()) {
                     guarded = null;
                 }
             }
-        } else if (overlay.isShowing()) {
-            overlay.hide();
+            return;
+        }
+        if (overlay.mode() == GateOverlay.PIN) {
+            hideOverlay();
+        }
+        if (!pkg.equals(reminderPkg)) {
+            stopReminder();
+        }
+        if (!store.isActive() || store.isCreatorPaused() || !store.isBlocked(pkg) || pkg.equals(getPackageName())) {
+            hideOverlay();
+            return;
+        }
+        Store.Session session = store.session(pkg);
+        if (session != null && now < session.until) {
+            if (pkg.equals(guarded)) {
+                hideOverlay();
+            }
+            startReminder(pkg, session);
+            return;
+        }
+        if (session != null) {
+            store.endSession(pkg);
+            cancelReminder(pkg);
+            guarded = pkg;
+            if (!overlay.showTimeUp(labelOf(pkg), session)) {
+                guarded = null;
+            }
+            return;
+        }
+        if (overlay.isShowing() && pkg.equals(guarded)) {
+            return;
+        }
+        guarded = pkg;
+        if (!overlay.showGate(labelOf(pkg), store.takeLock(pkg))) {
             guarded = null;
         }
     }
 
-    @Override
-    public void onClipFinished() {
-        cleared = guarded;
+    private void expireBackground(String current, long now) {
+        for (String pkg : store.blocked()) {
+            if (pkg.equals(current)) {
+                continue;
+            }
+            Store.Session session = store.session(pkg);
+            if (session != null && now >= session.until) {
+                store.endSession(pkg);
+                cancelReminder(pkg);
+            }
+        }
+    }
+
+    private boolean isAdminScreen() {
+        return foregroundClass != null && foregroundClass.contains("DeviceAdminAdd");
+    }
+
+    private void hideOverlay() {
+        if (overlay.isShowing()) {
+            overlay.hide();
+        }
         guarded = null;
-        overlay.hide();
+    }
+
+    @Override
+    public void onGrant(int minutes, String purpose, boolean emergency) {
+        String pkg = guarded;
+        if (pkg == null) {
+            hideOverlay();
+            return;
+        }
+        if (emergency) {
+            store.useEmergency();
+        }
+        store.startSession(pkg, minutes, purpose);
+        hideOverlay();
+        Store.Session session = store.session(pkg);
+        if (session != null) {
+            reminderPkg = null;
+            startReminder(pkg, session);
+        }
+    }
+
+    @Override
+    public void onLeave() {
+        hideOverlay();
+        Intent home = new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(home);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    @Override
+    public void onPinAccepted() {
+        pinPass = foreground;
+        hideOverlay();
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-        if (!store.isActive()) {
-            stopSelf();
+        if (Store.KEY_ACTIVE.equals(key)) {
+            if (!store.isActive()) {
+                stopSelf();
+            }
+        } else if (Store.KEY_BLOCKED.equals(key) || Store.KEY_CREATOR_PAUSE.equals(key)) {
+            notifyStatus();
+            handler.removeCallbacks(evaluateLater);
+            handler.post(evaluateLater);
+        }
+    }
+
+    private void startReminder(String pkg, Store.Session session) {
+        if (pkg.equals(reminderPkg)) {
             return;
         }
-        refreshNotification();
-        evaluate();
+        reminderPkg = pkg;
+        handler.removeCallbacks(reminder);
+        planNext(session);
+    }
+
+    private void stopReminder() {
+        reminderPkg = null;
+        handler.removeCallbacks(reminder);
+    }
+
+    private void planNext(Store.Session session) {
+        long left = session.until - System.currentTimeMillis();
+        long mark;
+        if (left > 5 * MINUTE) {
+            mark = ((left - 1) / (5 * MINUTE)) * 5 * MINUTE;
+        } else if (left > MINUTE) {
+            mark = MINUTE;
+        } else {
+            return;
+        }
+        handler.postDelayed(reminder, left - mark);
+    }
+
+    private void notifyLeft(String pkg, Store.Session session, long left) {
+        int minutes = (int) Math.max(1, Math.round(left / (double) MINUTE));
+        String label = labelOf(pkg);
+        String title = minutes == 1
+                ? getString(R.string.reminder_one, label)
+                : getString(R.string.reminder_many, minutes, label);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, CHANNEL_REMINDERS)
+                : new Notification.Builder(this);
+        builder.setSmallIcon(R.drawable.ic_stat_guard)
+                .setContentTitle(title)
+                .setAutoCancel(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setTimeoutAfter(left);
+        }
+        if (!session.purpose.isEmpty()) {
+            builder.setContentText(getString(R.string.you_came_for, session.purpose));
+        }
+        try {
+            notifications.notify(pkg.hashCode(), builder.build());
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void cancelReminder(String pkg) {
+        notifications.cancel(pkg.hashCode());
+        if (pkg.equals(reminderPkg)) {
+            stopReminder();
+        }
+    }
+
+    private Notification statusNotification() {
+        int count = store.blocked().size();
+        String text = count == 1 ? getString(R.string.status_one) : getString(R.string.status_on, count);
+        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, CHANNEL_STATUS)
+                : new Notification.Builder(this);
+        return builder
+                .setSmallIcon(R.drawable.ic_stat_guard)
+                .setContentTitle(getString(R.string.app_name))
+                .setContentText(text)
+                .setContentIntent(open)
+                .setOngoing(true)
+                .setShowWhen(false)
+                .setVisibility(Notification.VISIBILITY_SECRET)
+                .setPriority(Notification.PRIORITY_MIN)
+                .build();
+    }
+
+    private void notifyStatus() {
+        try {
+            notifications.notify(STATUS_ID, statusNotification());
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private String labelOf(String pkg) {
@@ -234,46 +472,11 @@ public class GuardService extends Service
         }
     }
 
-    private void createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return;
-        }
-        NotificationChannel channel = new NotificationChannel(CHANNEL, getString(R.string.channel_name), NotificationManager.IMPORTANCE_MIN);
-        channel.setShowBadge(false);
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) {
-            nm.createNotificationChannel(channel);
-        }
-    }
-
-    private Notification buildNotification() {
-        int count = store.blocked().size();
-        String text = count == 1 ? getString(R.string.status_one) : getString(R.string.status_on, count);
-        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL)
-                : new Notification.Builder(this);
-        return builder
-                .setSmallIcon(R.drawable.ic_stat_guard)
-                .setContentTitle(getString(R.string.app_name))
-                .setContentText(text)
-                .setContentIntent(open)
-                .setOngoing(true)
-                .setShowWhen(false)
-                .build();
-    }
-
-    private void refreshNotification() {
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify(NOTIFICATION_ID, buildNotification());
-        }
-    }
-
     @Override
     public void onDestroy() {
         stopPolling();
+        stopReminder();
+        handler.removeCallbacks(evaluateLater);
         store.unlisten(this);
         try {
             unregisterReceiver(screenReceiver);

@@ -2,28 +2,114 @@
 <resources>
     <string name="app_name">StopIt</string>
     <string name="tagline">Watch first. Scroll later.</string>
+    <string name="trust">Works fully offline. StopIt has no internet permission, so nothing ever leaves your phone.</string>
+
     <string name="protection">Protection</string>
-    <string name="finish_setup">Finish setup</string>
-    <string name="setup_body">StopIt needs two permissions to see which app you open and play the clip on top of it. Nothing leaves your phone.</string>
-    <string name="battery">Allow running in background</string>
-    <string name="search_hint">Search apps</string>
-    <string name="apps">Apps</string>
-    <string name="stay_hard">Stay hard.</string>
-    <string name="overlay_caption">Watch the full clip to open %1$s</string>
     <string name="status_paused">Paused. Your apps open freely.</string>
     <string name="status_setup">Not ready yet. Finish setup below.</string>
     <string name="status_none">On. Pick at least one app below.</string>
     <string name="status_on">Guarding %1$d apps</string>
     <string name="status_one">Guarding 1 app</string>
-    <string name="usage_access">Allow usage access</string>
-    <string name="overlay_access">Allow display over other apps</string>
-    <string name="find_usage">Find StopIt and allow usage access</string>
-    <string name="find_overlay">Find StopIt and allow display over other apps</string>
-    <string name="channel_name">Protection status</string>
+    <string name="status_creator">Creator pause until %1$s</string>
+
+    <string name="finish_setup">Set up in 3 steps</string>
+    <string name="setup_progress">%1$d of 3 done</string>
+    <string name="allow">Allow</string>
+    <string name="usage_access">Usage access</string>
+    <string name="usage_access_sub">Lets StopIt see which app you open</string>
+    <string name="overlay_access">Display over other apps</string>
+    <string name="overlay_access_sub">Lets StopIt play the clip on top</string>
+    <string name="battery">Run in background</string>
+    <string name="battery_sub">Keeps StopIt from being closed by the phone</string>
+    <string name="find_usage">Find StopIt and turn it on</string>
+    <string name="find_overlay">Find StopIt and turn it on</string>
     <string name="restricted_title">Switch greyed out?</string>
-    <string name="restricted_steps">Android locks this for apps installed from a file. Unlock it once:\n1. Tap Allow usage access above and try the switch once.\n2. Tap Open App info below.\n3. Tap ⋮ at the top right and choose Allow restricted settings.\n4. Come back and tap Allow usage access again.</string>
+    <string name="restricted_steps">Android does this for every app installed from a file. Unlock it once:\n1. Tap Allow above and try the switch once.\n2. Tap Open App info below.\n3. Tap ⋮ at the top right, then Allow restricted settings.\n4. Come back and tap Allow again.</string>
     <string name="app_info">Open App info</string>
+
+    <string name="creator_title">Creator mode</string>
+    <string name="creator_off">Not a creator. Tap to change.</string>
+    <string name="creator_ready">Tap to pause StopIt while you stream or shoot</string>
+    <string name="creator_paused">Paused until %1$s. Tap to resume now.</string>
+    <string name="creator_question">Are you a content creator?</string>
+    <string name="creator_question_body">Answer honestly. It\'s you vs you.</string>
+    <string name="creator_why">Why we ask?</string>
+    <string name="creator_why_body">Creators sometimes need these apps for work, like going live, posting or editing. Creator mode lets you pause StopIt for a set time while you work, then it turns back on by itself.\n\nIf you just want an easy way out, say no. Only you lose if you lie. It\'s you vs you.</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="pause_for">Pause StopIt for</string>
+    <string name="resume_now">Resume now</string>
+    <string name="creator_off_action">I\'m not a creator</string>
+    <plurals name="hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+
+    <string name="lock_title">Uninstall lock</string>
+    <string name="lock_off">Off. Anyone can remove StopIt.</string>
+    <string name="lock_on">On. Your password is needed to remove StopIt or turn things off.</string>
+    <string name="lock_pending">Almost done. Tap and allow StopIt as device admin.</string>
+    <string name="admin_label">StopIt uninstall lock</string>
+    <string name="admin_description">Stops StopIt from being uninstalled without your password. StopIt does not use any other device admin power.</string>
+    <string name="admin_explain">This only blocks uninstalling StopIt. It cannot see, change or erase anything on your phone.</string>
+    <string name="admin_disable_warning">This removes the StopIt uninstall lock.</string>
+
+    <string name="quiet_title">Hide the always-on notification</string>
+    <string name="quiet_status">StopIt keeps working even after you hide it</string>
+
+    <string name="create_password">Create a password</string>
+    <string name="create_password_body">You will need it to remove StopIt, turn off protection or unguard an app.</string>
+    <string name="password_hint">Password (4+ digits)</string>
+    <string name="password_again">Type it again</string>
+    <string name="password_short">Use at least 4 digits</string>
+    <string name="password_mismatch">Passwords don\'t match</string>
+    <string name="enter_password">Enter your StopIt password</string>
+    <string name="wrong_password">Wrong password</string>
+    <string name="save">Save</string>
+    <string name="unlock">Unlock</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="search_hint">Search apps</string>
     <string name="section_fun">Entertainment</string>
     <string name="section_used">Most used</string>
     <string name="section_other">Other apps</string>
+    <string name="made_by">App made by Ansh Pandey ❤️</string>
+    <string name="version">Version %1$s</string>
+
+    <string name="channel_status">Protection status</string>
+    <string name="channel_reminders">Time left reminders</string>
+    <string name="reminder_many">%1$d min left on %2$s</string>
+    <string name="reminder_one">1 min left on %1$s</string>
+
+    <string name="stay_hard">Stay hard.</string>
+    <string name="overlay_caption">Watch the full clip to open %1$s</string>
+    <string name="seconds_short">%1$ds</string>
+    <string name="emergency_button">Emergency open · %1$d min (%2$d left today)</string>
+    <string name="emergency_purpose">Emergency</string>
+    <string name="locked_notice">StopIt locked %1$s at %2$s after your %3$d min.</string>
+    <string name="you_came_for">You opened it for: %1$s</string>
+    <string name="breathe_in">Breathe in</string>
+    <string name="breathe_out">Breathe out</string>
+    <string name="breath_count">Breath %1$d of %2$d</string>
+    <string name="think_title">Think for a moment</string>
+    <string name="think_body">Do you really need %1$s right now?</string>
+    <string name="ask_title">Still want to open %1$s?</string>
+    <string name="ask_body">You took a breath and thought about it. Your call.</string>
+    <string name="ask_no">No, take me back</string>
+    <string name="ask_yes">Yes, open it</string>
+    <string name="plan_title">Set your intention</string>
+    <string name="plan_body">What are you opening %1$s for, and for how long? It closes the moment your time is up.</string>
+    <string name="purpose_hint">e.g. reply to messages</string>
+    <string name="how_long">For how long?</string>
+    <string name="custom_minutes">Or type minutes</string>
+    <string name="minutes_short">%1$d min</string>
+    <string name="open_app">Open %1$s</string>
+    <string name="never_mind">Never mind</string>
+    <string name="need_purpose">Write why you are opening it</string>
+    <string name="need_minutes">Pick a time between 1 and 180 minutes</string>
+    <string name="time_up">Time\'s up</string>
+    <string name="time_up_body">Your %1$d min on %2$s are over.</string>
+    <string name="close_app">Close %1$s</string>
+    <string name="pin_title">StopIt is locked</string>
+    <string name="pin_body">Enter your StopIt password to change this setting.</string>
 </resources>
