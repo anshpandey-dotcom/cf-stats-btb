@@ -2,9 +2,13 @@ package com.anshpandey.pingai
 
 import android.app.Notification
 import android.app.RemoteInput
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.service.notification.NotificationListenerService
 import java.util.concurrent.ConcurrentHashMap
 
 object Live {
@@ -15,6 +19,22 @@ object Live {
 
     @Volatile
     var lastSeen = ""
+}
+
+object Listener {
+
+    fun restart(context: Context) {
+        val ctx = context.applicationContext
+        val cn = ComponentName(ctx, PingListenerService::class.java)
+        runCatching {
+            val pm = ctx.packageManager
+            pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+            pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+        }
+        if (Build.VERSION.SDK_INT >= 24) {
+            runCatching { NotificationListenerService.requestRebind(cn) }
+        }
+    }
 }
 
 object ReplyBridge {

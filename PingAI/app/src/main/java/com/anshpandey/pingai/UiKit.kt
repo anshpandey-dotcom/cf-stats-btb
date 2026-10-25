@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -23,7 +24,13 @@ class UiKit(private val ctx: Context) {
 
     fun color(id: Int): Int = ContextCompat.getColor(ctx, id)
 
-    fun card(title: String?, build: (LinearLayout) -> Unit): View {
+    fun icon(res: Int, sizeDp: Int, tint: Int): ImageView = ImageView(ctx).apply {
+        setImageResource(res)
+        setColorFilter(tint)
+        layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+    }
+
+    fun card(title: String?, iconRes: Int? = null, build: (LinearLayout) -> Unit): View {
         val card = MaterialCardView(ctx).apply {
             radius = dp(18).toFloat()
             cardElevation = dp(2).toFloat()
@@ -35,12 +42,22 @@ class UiKit(private val ctx: Context) {
             setPadding(dp(16), dp(14), dp(16), dp(14))
         }
         if (title != null) {
-            box.addView(TextView(ctx).apply {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            if (iconRes != null) {
+                row.addView(icon(iconRes, 22, color(R.color.green_mid)).apply {
+                    (layoutParams as LinearLayout.LayoutParams).rightMargin = dp(10)
+                })
+            }
+            row.addView(TextView(ctx).apply {
                 text = title
                 textSize = 17f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(color(R.color.green_mid))
             })
+            box.addView(row)
         }
         build(box)
         card.addView(box)
@@ -85,17 +102,27 @@ class UiKit(private val ctx: Context) {
         layoutParams = LinearLayout.LayoutParams(-1, -2)
     }
 
-    fun button(text: String, onClick: () -> Unit) = MaterialButton(ctx).apply {
+    fun button(text: String, icon: Int? = null, onClick: () -> Unit) = MaterialButton(ctx).apply {
         this.text = text
         isAllCaps = false
+        if (icon != null) {
+            setIconResource(icon)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = dp(8)
+        }
         setOnClickListener { onClick() }
         layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) }
     }
 
-    fun outlined(text: String, onClick: () -> Unit) =
+    fun outlined(text: String, icon: Int? = null, onClick: () -> Unit) =
         MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             this.text = text
             isAllCaps = false
+            if (icon != null) {
+                setIconResource(icon)
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                iconPadding = dp(8)
+            }
             setTextColor(color(R.color.green_mid))
             setOnClickListener { onClick() }
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }

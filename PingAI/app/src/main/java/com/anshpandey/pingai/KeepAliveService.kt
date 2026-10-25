@@ -4,15 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
 class KeepAliveService : Service() {
@@ -26,12 +25,10 @@ class KeepAliveService : Service() {
                 stopSelf()
                 return
             }
-            if (!Live.connected && Build.VERSION.SDK_INT >= 24) {
-                runCatching {
-                    NotificationListenerService.requestRebind(
-                        ComponentName(applicationContext, PingListenerService::class.java)
-                    )
-                }
+            if (!Live.connected && NotificationManagerCompat.getEnabledListenerPackages(applicationContext)
+                    .contains(packageName)
+            ) {
+                Listener.restart(applicationContext)
             }
             handler.postDelayed(this, 180_000L)
         }

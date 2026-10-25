@@ -22,6 +22,7 @@ import android.text.style.ClickableSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -52,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     private var tab = 0
     private var askedAccess = false
     private var inSettings = false
-    private var showSetup = false
+    private val tabViews = mutableListOf<Triple<LinearLayout, ImageView, TextView>>()
     private var summaryText = ""
     private var leave: (() -> Unit)? = null
     private var connText: TextView? = null
@@ -61,7 +62,12 @@ class MainActivity : AppCompatActivity() {
     private var usageBar: ProgressBar? = null
 
     private val tabs = if (BuildConfig.AUTO) listOf("Home", "AI", "Rules", "Summary") else listOf("Home", "AI")
-    private val tabIcons = mapOf("Home" to "🏠", "AI" to "✨", "Rules" to "👥", "Summary" to "📝")
+    private val tabIcons = mapOf(
+        "Home" to R.drawable.ic_home,
+        "AI" to R.drawable.ic_ai,
+        "Rules" to R.drawable.ic_people,
+        "Summary" to R.drawable.ic_notes
+    )
 
     private val apps = listOf(
         "com.whatsapp" to "WhatsApp",
@@ -126,11 +132,9 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(ticker)
         handler.post(ticker)
         if (!BuildConfig.AUTO) return
-        if (hasAccess() && Build.VERSION.SDK_INT >= 24) {
-            runCatching {
-                NotificationListenerService.requestRebind(ComponentName(this, PingListenerService::class.java))
-            }
-        } else if (!hasAccess() && !askedAccess) {
+        if (hasAccess()) {
+            if (!Live.connected) Listener.restart(this)
+        } else if (!askedAccess) {
             askedAccess = true
             AlertDialog.Builder(this)
                 .setTitle("Allow notification access")
@@ -179,16 +183,14 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#CFEFE9"))
         })
         row.addView(box, LinearLayout.LayoutParams(0, -2, 1f))
-        if (BuildConfig.AUTO) {
-            row.addView(TextView(this).apply {
-                text = "⚙"
-                textSize = 28f
-                setTextColor(Color.WHITE)
-                setPadding(ui.dp(14), ui.dp(4), ui.dp(2), ui.dp(4))
-                contentDescription = "Settings"
-                setOnClickListener { openSettings() }
-            })
-        }
+        row.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ic_settings)
+            setColorFilter(Color.WHITE)
+            setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10))
+            contentDescription = "Settings"
+            setOnClickListener { openSettings() }
+            layoutParams = LinearLayout.LayoutParams(ui.dp(46), ui.dp(46))
+        })
         return row
     }
 
@@ -220,66 +222,63 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildTabBar() {
         tabBar.removeAllViews()
+        tabViews.clear()
         tabs.forEachIndexed { i, name ->
-            tabBar.addView(TextView(this).apply {
-                text = (tabIcons[name] ?: "") + "\n" + name
-                textSize = 12f
+            val icon = ImageView(this).apply {
+                setImageResource(tabIcons[name] ?: R.drawable.ic_home)
+                layoutParams = LinearLayout.LayoutParams(ui.dp(24), ui.dp(24))
+            }
+            val label = TextView(this).apply {
+                text = name
+                textSize = 11f
                 gravity = Gravity.CENTER
-                setPadding(0, ui.dp(6), 0, ui.dp(6))
+            }
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, ui.dp(8), 0, ui.dp(6))
+                addView(icon)
+                addView(label)
                 setOnClickListener { showTab(i) }
-            }, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            }
+            tabBar.addView(box, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 setMargins(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
             })
+            tabViews.add(Triple(box, icon, label))
         }
     }
 
-    private fun openSettings() {
+    private fun styleTabs(selected: Int) {
+        tabViews.forEachIndexed { i, (box, icon, label) ->
+            val on = i == selected
+            val color = ui.color(if (on) R.color.green_mid else R.color.text_soft)
+            icon.setColorFilter(color)
+            label.setTextColor(color)
+            label.setTypeface(null, if (on) Typeface.BOLD else Typeface.NORMAL)
+            if (on) box.setBackgroundResource(R.drawable.bg_tab_on) else box.background = null
+        }
+    }
+
+    private fun clearViews() {
         leave?.invoke()
         leave = null
         connText = null
         reconnectBtn = null
         usageText = null
         usageBar = null
+    }
+
+    private fun openSettings() {
+        clearViews()
         inSettings = true
         pageHost.removeAllViews()
         pageHost.addView(settingsPage())
-        for (i in 0 until tabBar.childCount) {
-            val v = tabBar.getChildAt(i) as TextView
-            v.setTextColor(ui.color(R.color.text_soft))
-            v.setTypeface(null, Typeface.NORMAL)
-            v.background = null
-        }
-    }
-
-    private fun settingsPage(): View = scroll { page ->
-        page.addView(keepAliveCard())
-        page.addView(behaviourCard())
-        page.addView(ui.outlined("Back") { showTab(tab) })
-    }
-
-    private fun keepAliveCard(): View = ui.card("Stay connected") { box ->
-        box.addView(ui.hint("Phones often close background apps and switch notification access off. A small silent notification keeps PING AI alive and reconnects it automatically."))
-        box.addView(ui.switchRow("Keep PING AI running in the background", store.keepAlive) {
-            store.keepAlive = it
-            syncKeepAlive()
-        })
-        box.addView(ui.outlined("Allow background running (battery)") {
-            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-        })
-        box.addView(ui.outlined("Open app settings") {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-        })
-        box.addView(ui.hint("Also allow auto-start for PING AI in your phone's settings and lock the app in the recent apps list."))
+        styleTabs(-1)
     }
 
     private fun showTab(index: Int) {
         inSettings = false
-        leave?.invoke()
-        leave = null
-        connText = null
-        reconnectBtn = null
-        usageText = null
-        usageBar = null
+        clearViews()
         tab = index
         pageHost.removeAllViews()
         val page = when (tabs[index]) {
@@ -289,15 +288,66 @@ class MainActivity : AppCompatActivity() {
             else -> homePage()
         }
         pageHost.addView(page)
-        for (i in 0 until tabBar.childCount) {
-            val v = tabBar.getChildAt(i) as TextView
-            val on = i == index
-            v.setTextColor(ui.color(if (on) R.color.green_mid else R.color.text_soft))
-            v.setTypeface(null, if (on) Typeface.BOLD else Typeface.NORMAL)
-            if (on) v.setBackgroundResource(R.drawable.bg_tab_on) else v.background = null
-        }
+        styleTabs(index)
         refreshLive()
         refreshUsage()
+    }
+
+    private fun settingsPage(): View = scroll { page ->
+        if (BuildConfig.AUTO) {
+            page.addView(connectionCard())
+            page.addView(keepAliveCard())
+        }
+        page.addView(usageCard())
+        if (BuildConfig.AUTO) page.addView(behaviourCard())
+        page.addView(setupCard())
+        page.addView(ui.outlined("Back") { showTab(tab) })
+    }
+
+    private fun connectionCard(): View = ui.card("Notification access", R.drawable.ic_bell) { box ->
+        val ok = hasAccess()
+        box.addView(TextView(this).apply {
+            text = if (ok) "Access: granted" else "Access: not granted. Turn it on below."
+            textSize = 14f
+            setPadding(0, ui.dp(6), 0, 0)
+            setTextColor(if (ok) ui.color(R.color.green_mid) else 0xFFC62828.toInt())
+        })
+        val status = ui.hint("")
+        connText = status
+        box.addView(status)
+        box.addView(ui.button("Open notification access", R.drawable.ic_bell) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        })
+        val retry = ui.outlined("Reconnect listener", R.drawable.ic_refresh) {
+            Listener.restart(this)
+            toast("Reconnecting…")
+        }
+        reconnectBtn = retry
+        box.addView(retry)
+        box.addView(ui.outlined("Open App info (Allow restricted settings)", R.drawable.ic_open) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        })
+        if (Build.VERSION.SDK_INT >= 34) {
+            box.addView(ui.outlined("Allow full-screen call alerts", R.drawable.ic_call) {
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
+                    )
+                }
+            })
+        }
+    }
+
+    private fun keepAliveCard(): View = ui.card("Stay connected", R.drawable.ic_battery) { box ->
+        box.addView(ui.hint("Phones often close background apps and switch notification access off. A small silent notification keeps PING AI alive and reconnects it automatically."))
+        box.addView(ui.switchRow("Keep PING AI running in the background", store.keepAlive) {
+            store.keepAlive = it
+            syncKeepAlive()
+        })
+        box.addView(ui.outlined("Allow background running (battery)", R.drawable.ic_battery) {
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        })
+        box.addView(ui.hint("Also allow auto-start for PING AI in your phone's settings and lock the app in the recent apps list."))
     }
 
     private fun scroll(build: (LinearLayout) -> Unit): View {
@@ -316,24 +366,15 @@ class MainActivity : AppCompatActivity() {
     private fun homePage(): View = scroll { page ->
         if (BuildConfig.AUTO) {
             page.addView(autoCard())
-            page.addView(usageCard())
-            if (!setupComplete() || showSetup) {
-                page.addView(setupCard())
-            } else {
-                page.addView(ui.outlined("Show setup steps") {
-                    showSetup = true
-                    showTab(tab)
-                })
-            }
+            if (!setupComplete()) page.addView(setupCard())
             page.addView(awayCard())
         } else {
             page.addView(helperCard())
-            page.addView(usageCard())
-            if (store.userName.isBlank() || store.groqKey.isBlank()) page.addView(setupCard())
+            if (!setupComplete()) page.addView(setupCard())
         }
     }
 
-    private fun autoCard(): View = ui.card("Auto reply") { box ->
+    private fun autoCard(): View = ui.card("Auto reply", R.drawable.ic_power) { box ->
         fun label(on: Boolean) = if (on) "ON - replying for you" else "OFF"
         val sw = SwitchCompat(this).apply {
             textSize = 18f
@@ -360,18 +401,14 @@ class MainActivity : AppCompatActivity() {
         connText = status
         box.addView(status)
         val retry = ui.outlined("Reconnect listener") {
-            if (Build.VERSION.SDK_INT >= 24) {
-                runCatching {
-                    NotificationListenerService.requestRebind(ComponentName(this, PingListenerService::class.java))
-                }
-            }
+            Listener.restart(this)
             toast("Reconnecting…")
         }
         reconnectBtn = retry
         box.addView(retry)
     }
 
-    private fun usageCard(): View = ui.card("Groq usage today") { box ->
+    private fun usageCard(): View = ui.card("Groq usage today", R.drawable.ic_usage) { box ->
         val t = ui.body("")
         val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             progressTintList = ColorStateList.valueOf(ui.color(R.color.green_mid))
@@ -381,13 +418,13 @@ class MainActivity : AppCompatActivity() {
         usageBar = bar
         box.addView(t)
         box.addView(bar)
-        box.addView(ui.outlined("Open Groq usage page") { open("https://console.groq.com/dashboard/usage") })
-        box.addView(ui.outlined("Open Groq limits") { open("https://console.groq.com/settings/limits") })
+        box.addView(ui.outlined("Open Groq usage page", R.drawable.ic_open) { open("https://console.groq.com/dashboard/usage") })
+        box.addView(ui.outlined("Open Groq limits", R.drawable.ic_open) { open("https://console.groq.com/settings/limits") })
     }
 
     private fun refreshLive() {
         val view = connText ?: return
-        view.text = if (Live.connected) "Listener: connected" else "Listener: not connected. Tap Reconnect, or turn notification access off and on."
+        view.text = if (Live.connected) "Listener: connected" else "Listener: not connected. Open Settings (top right) to reconnect."
         reconnectBtn?.visibility = if (Live.connected) View.GONE else View.VISIBLE
     }
 
@@ -423,46 +460,26 @@ class MainActivity : AppCompatActivity() {
         return "${fmt.format(Date(e.time))}  $mark ${e.who}: ${e.text}"
     }
 
-    private fun setupCard(): View = ui.card("Setup") { box ->
+    private fun setupCard(): View = ui.card("Setup checklist", R.drawable.ic_list) { box ->
         fun line(done: Boolean, text: String) = box.addView(ui.body((if (done) "✓  " else "○  ") + text))
-        line(store.userName.isNotBlank(), "Add your name in the AI tab")
+        line(store.userName.isNotBlank(), "Add your name in the AI tab (optional)")
         line(store.groqKey.isNotBlank(), "Add your free Groq key in the AI tab")
         if (BuildConfig.AUTO) {
             line(hasAccess(), "Allow notification access")
             line(store.enabled, "Turn on auto reply")
-            if (!hasAccess()) {
-                box.addView(ui.outlined("Open App info (Allow restricted settings)") {
-                    startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
-                    )
-                })
-                box.addView(ui.button("Grant notification access") {
-                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                })
-            }
-            box.addView(ui.outlined("Allow background running (battery)") {
-                runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-            })
-            if (Build.VERSION.SDK_INT >= 34) {
-                box.addView(ui.outlined("Allow full-screen call alerts") {
-                    runCatching {
-                        startActivity(
-                            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
-                        )
-                    }
-                })
-            }
         }
-        if (store.userName.isBlank() || store.groqKey.isBlank()) box.addView(ui.button("Open AI tab") { showTab(1) })
-        if (showSetup && setupComplete()) {
-            box.addView(ui.outlined("Hide setup") {
-                showSetup = false
-                showTab(tab)
+        if (store.groqKey.isBlank()) box.addView(ui.button("Open AI tab", R.drawable.ic_ai) { showTab(1) })
+        if (BuildConfig.AUTO && !hasAccess()) {
+            box.addView(ui.button("Grant notification access", R.drawable.ic_bell) {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            })
+            box.addView(ui.outlined("Open App info (Allow restricted settings)", R.drawable.ic_open) {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
             })
         }
     }
 
-    private fun awayCard(): View = ui.card("Away status") { box ->
+    private fun awayCard(): View = ui.card("Away status", R.drawable.ic_clock) { box ->
         val fmt = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
         if (store.awayActive()) {
             box.addView(ui.body("Away until " + fmt.format(Date(store.awayUntil))))
@@ -514,7 +531,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun aiPage(): View = scroll { page ->
-        page.addView(ui.card("AI Setup") { box ->
+        page.addView(ui.card("AI Setup", R.drawable.ic_ai) { box ->
             box.addView(ui.label("Your name (optional)"))
             val name = ui.edit(store.userName, "Your name")
             box.addView(name)
@@ -524,7 +541,7 @@ class MainActivity : AppCompatActivity() {
             key.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             box.addView(key)
             box.addView(ui.hint("Tap the button, sign up with your email, tap Create API Key, copy the key (it is shown only once) and paste it above."))
-            box.addView(ui.button("Get free key") { open("https://console.groq.com/keys") })
+            box.addView(ui.button("Get free key", R.drawable.ic_key) { open("https://console.groq.com/keys") })
 
             box.addView(ui.label("Model"))
             val model = ui.edit(store.groqModel, Store.DEFAULT_GROQ)
@@ -607,10 +624,10 @@ class MainActivity : AppCompatActivity() {
         page.addView(peopleCard())
         page.addView(unknownCard())
         page.addView(repliesCard())
-        page.addView(ui.outlined("Limits and filters (Settings)") { openSettings() })
+        page.addView(ui.outlined("Limits and filters (Settings)", R.drawable.ic_settings) { openSettings() })
     }
 
-    private fun peopleCard(): View = ui.card("People") { box ->
+    private fun peopleCard(): View = ui.card("People", R.drawable.ic_people) { box ->
         box.addView(ui.hint("Add just a name (part of it is enough) or a phone number. Add a tone note to tell the AI how to talk to them."))
         box.addView(ui.radios(
             listOf("Everyone gets a reply", "Only people in the list", "Everyone except the list"),
@@ -627,7 +644,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(ui.button("Add person") { addPersonDialog() })
     }
 
-    private fun unknownCard(): View = ui.card("Unknown numbers") { box ->
+    private fun unknownCard(): View = ui.card("Unknown numbers", R.drawable.ic_call) { box ->
         box.addView(ui.hint("People not saved in your contacts (shown as a phone number)."))
         box.addView(ui.radios(
             listOf("AI asks who they are and what they need", "Send a fixed message", "Don't reply"),
@@ -642,7 +659,7 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun repliesCard(): View = ui.card("Custom replies") { box ->
+    private fun repliesCard(): View = ui.card("Custom replies", R.drawable.ic_notes) { box ->
         box.addView(ui.hint("If a message contains any of the words, this exact reply is sent instead of AI. Separate words with commas."))
         val replies = store.customReplies()
         replies.forEachIndexed { i, item ->
@@ -655,7 +672,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(ui.button("Add custom reply") { addReplyDialog() })
     }
 
-    private fun behaviourCard(): View = ui.card("Behaviour") { box ->
+    private fun behaviourCard(): View = ui.card("Limits and filters", R.drawable.ic_trend) { box ->
         box.addView(ui.label("Apps to reply in"))
         apps.forEach { (pkg, name) ->
             box.addView(ui.switchRow(name, store.appEnabled(pkg)) { store.setAppEnabled(pkg, it) })
@@ -698,7 +715,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun summaryPage(): View = scroll { page ->
-        page.addView(ui.card("Summary") { box ->
+        page.addView(ui.card("Summary", R.drawable.ic_notes) { box ->
             box.addView(ui.hint("Who messaged, what looked important, questions waiting, photos or voice messages, and who did not get a reply."))
             val out = ui.body(summaryText.ifEmpty { "No summary yet." })
             out.setTextIsSelectable(true)
@@ -720,7 +737,7 @@ class MainActivity : AppCompatActivity() {
             box.addView(ui.outlined("Hinglish version") { run(true) })
             box.addView(out)
         })
-        page.addView(ui.card("Recent activity") { box ->
+        page.addView(ui.card("Recent activity", R.drawable.ic_list) { box ->
             val events = store.events().takeLast(40).reversed()
             if (events.isEmpty()) {
                 box.addView(ui.hint("No activity yet."))
