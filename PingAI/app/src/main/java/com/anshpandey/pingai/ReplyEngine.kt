@@ -61,9 +61,19 @@ class ReplyEngine(context: Context) {
         return ask(systemPrompt("Test", false, false), listOf("user" to "Hi, are you there?"))
     }
 
-    private fun ask(system: String, history: List<Pair<String, String>>): String =
-        if (store.apiKey.isBlank()) FreeAiClient.ask(system, history)
-        else GeminiClient.ask(store.apiKey, store.model, system, history)
+    private fun ask(system: String, history: List<Pair<String, String>>): String = when (store.provider) {
+        Store.PROVIDER_GROQ ->
+            if (store.groqKey.isBlank()) FreeAiClient.ask(system, history)
+            else OpenAiClient.ask(GROQ_URL, store.groqKey, store.groqModel, GROQ_FALLBACKS, system, history)
+        Store.PROVIDER_OPENROUTER ->
+            if (store.openRouterKey.isBlank()) FreeAiClient.ask(system, history)
+            else OpenAiClient.ask(
+                OPENROUTER_URL, store.openRouterKey, store.openRouterModel, OPENROUTER_FALLBACKS, system, history
+            )
+        else ->
+            if (store.apiKey.isBlank()) FreeAiClient.ask(system, history)
+            else GeminiClient.ask(store.apiKey, store.model, system, history)
+    }
 
     private fun passesContactFilter(sender: String): Boolean {
         val list = store.contacts()
@@ -132,6 +142,14 @@ class ReplyEngine(context: Context) {
 
     companion object {
         private val PHONE = Regex("^\\+?[\\d\\s\\-()]{7,}$")
+        private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+        private const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+        private val GROQ_FALLBACKS = listOf("llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b")
+        private val OPENROUTER_FALLBACKS = listOf(
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "google/gemma-3-27b-it:free",
+            "mistralai/mistral-small-3.2-24b-instruct:free"
+        )
         private const val TAG_WINDOW_MS = 6 * 60 * 60 * 1000L
         private val memory = ConcurrentHashMap<String, MutableList<Pair<String, String>>>()
         private val taggedAt = ConcurrentHashMap<String, Long>()

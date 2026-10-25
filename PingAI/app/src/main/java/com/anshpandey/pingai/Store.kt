@@ -21,6 +21,26 @@ class Store(context: Context) {
         get() = sp.getString("apiKey", "") ?: ""
         set(v) = sp.edit().putString("apiKey", v.trim()).apply()
 
+    var provider: Int
+        get() = sp.getInt("provider", if (apiKey.isNotBlank()) PROVIDER_GEMINI else PROVIDER_GROQ)
+        set(v) = sp.edit().putInt("provider", v).apply()
+
+    var groqKey: String
+        get() = sp.getString("groqKey", "") ?: ""
+        set(v) = sp.edit().putString("groqKey", v.trim()).apply()
+
+    var groqModel: String
+        get() = sp.getString("groqModel", DEFAULT_GROQ) ?: DEFAULT_GROQ
+        set(v) = sp.edit().putString("groqModel", v.trim().ifEmpty { DEFAULT_GROQ }).apply()
+
+    var openRouterKey: String
+        get() = sp.getString("openRouterKey", "") ?: ""
+        set(v) = sp.edit().putString("openRouterKey", v.trim()).apply()
+
+    var openRouterModel: String
+        get() = sp.getString("openRouterModel", DEFAULT_OPENROUTER) ?: DEFAULT_OPENROUTER
+        set(v) = sp.edit().putString("openRouterModel", v.trim().ifEmpty { DEFAULT_OPENROUTER }).apply()
+
     var model: String
         get() = sp.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
         set(v) = sp.edit().putString("model", v.trim().ifEmpty { DEFAULT_MODEL }).apply()
@@ -130,6 +150,11 @@ class Store(context: Context) {
         const val DEFAULT_TAG = "🤖 Assistant Reply – not of {name}\n{name} is offline right now."
         const val DEFAULT_FALLBACK = "{name} is not online right now. I'll let them know you messaged."
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."
+        const val DEFAULT_GROQ = "llama-3.1-8b-instant"
+        const val DEFAULT_OPENROUTER = "meta-llama/llama-3.3-70b-instruct:free"
+        const val PROVIDER_GROQ = 0
+        const val PROVIDER_OPENROUTER = 1
+        const val PROVIDER_GEMINI = 2
         const val LENGTH_MINIMAL = 0
         const val LENGTH_NORMAL = 1
         const val LENGTH_DETAILED = 2

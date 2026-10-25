@@ -13,4 +13,4 @@ AI reply assistant powered by the free Gemini API. Made By Ansh.
 3. Settings, Apps, PING AI Auto, three dots, "Allow restricted settings".
 4. Open the app, tap "Grant notification access", add your Gemini API key and enable auto reply.
 
-Free Gemini API key: https://aistudio.google.com/apikey
+Free API keys: Groq https://console.groq.com/keys, OpenRouter https://openrouter.ai/keys, Gemini https://aistudio.google.com/apikey

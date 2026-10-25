@@ -182,11 +182,11 @@ class MainActivity : AppCompatActivity() {
     private fun guideCard(): View = card("How to use") { box ->
         val steps = if (BuildConfig.AUTO) {
             "1) Allow notification access when asked, and turn on auto reply.\n" +
-                "2) Enter your name under AI Setup. Add a free Gemini API key from AI Studio for the best replies.\n" +
+                "2) Enter your name under AI Setup. Add a free Groq API key for fast, better replies.\n" +
                 "3) Optional: add custom replies, choose who gets a reply, and handle unknown numbers.\n" +
                 "4) Keep the app allowed to run in the background. Replies go out by themselves when someone messages you."
         } else {
-            "1) Enter your name under AI Setup. Add a free Gemini API key from AI Studio for the best replies.\n" +
+            "1) Enter your name under AI Setup. Add a free Groq API key for fast, better replies.\n" +
                 "2) In any chat app, select a message and choose PING AI Reply, or paste it below.\n" +
                 "3) Copy the reply or send it from the same screen."
         }
@@ -249,23 +249,44 @@ class MainActivity : AppCompatActivity() {
         val name = edit(store.userName, "Your name")
         box.addView(name)
 
-        box.addView(label("Gemini API key (optional). Leave empty to use the built-in free AI."))
-        val key = edit(store.apiKey, "Paste key from AI Studio")
-        key.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        box.addView(key)
-        box.addView(hint("Get a free key on your phone: tap the button below, sign in with Google, tap Create API key, copy it and paste it above."))
-        box.addView(button("Get free key (AI Studio)") {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")))
-        })
+        box.addView(label("AI provider"))
+        var provider = store.provider
+        var keyField: EditText? = null
+        var modelField: EditText? = null
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        box.addView(label("AI model"))
-        val model = edit(store.model, Store.DEFAULT_MODEL)
+        fun render() {
+            holder.removeAllViews()
+            holder.addView(label("API key (free). Leave empty to use the built-in free AI."))
+            val key = edit(keyOf(provider), "Paste your key")
+            key.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            holder.addView(key)
+            holder.addView(hint(stepsOf(provider)))
+            holder.addView(button("Get free key") {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlOf(provider))))
+            })
+            holder.addView(label("Model"))
+            val model = edit(modelOf(provider), defaultModelOf(provider))
+            if (provider == Store.PROVIDER_GEMINI) {
+                holder.addView(radios(
+                    listOf("Gemini Flash (fast)", "Gemma (Google open-source)"),
+                    if (model.text.toString().startsWith("gemma")) 1 else 0
+                ) { model.setText(if (it == 1) "gemma-3-27b-it" else Store.DEFAULT_MODEL) })
+            }
+            holder.addView(model)
+            keyField = key
+            modelField = model
+        }
+
         box.addView(radios(
-            listOf("Gemini Flash (fast, recommended)", "Gemma (Google open-source)"),
-            if (store.model.startsWith("gemma")) 1 else 0
-        ) { model.setText(if (it == 1) "gemma-3-27b-it" else Store.DEFAULT_MODEL) })
-        box.addView(model)
-        box.addView(hint("Both run free on Google with your API key. Without a key the built-in free AI is used."))
+            listOf("Groq (fastest, recommended)", "OpenRouter (many free models)", "Google Gemini / Gemma"),
+            provider
+        ) {
+            provider = it
+            render()
+        })
+        render()
+        box.addView(holder)
 
         box.addView(label("Reply length"))
         box.addView(radios(
@@ -278,7 +299,7 @@ class MainActivity : AppCompatActivity() {
         persona.minLines = 4
         box.addView(persona)
 
-        box.addView(label("Assistant tag shown before every reply ({name} = your name)"))
+        box.addView(label("Assistant tag shown before the first reply ({name} = your name)"))
         val tag = edit(store.tagTemplate, Store.DEFAULT_TAG)
         tag.minLines = 2
         box.addView(tag)
@@ -290,8 +311,14 @@ class MainActivity : AppCompatActivity() {
 
         fun save() {
             store.userName = name.text.toString()
-            store.apiKey = key.text.toString()
-            store.model = model.text.toString()
+            store.provider = provider
+            val key = keyField?.text.toString()
+            val model = modelField?.text.toString()
+            when (provider) {
+                Store.PROVIDER_GROQ -> { store.groqKey = key; store.groqModel = model }
+                Store.PROVIDER_OPENROUTER -> { store.openRouterKey = key; store.openRouterModel = model }
+                else -> { store.apiKey = key; store.model = model }
+            }
             store.personality = persona.text.toString()
             store.tagTemplate = tag.text.toString()
             store.fallbackText = fallback.text.toString()
@@ -315,6 +342,36 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun keyOf(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> store.groqKey
+        Store.PROVIDER_OPENROUTER -> store.openRouterKey
+        else -> store.apiKey
+    }
+
+    private fun modelOf(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> store.groqModel
+        Store.PROVIDER_OPENROUTER -> store.openRouterModel
+        else -> store.model
+    }
+
+    private fun defaultModelOf(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> Store.DEFAULT_GROQ
+        Store.PROVIDER_OPENROUTER -> Store.DEFAULT_OPENROUTER
+        else -> Store.DEFAULT_MODEL
+    }
+
+    private fun urlOf(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> "https://console.groq.com/keys"
+        Store.PROVIDER_OPENROUTER -> "https://openrouter.ai/keys"
+        else -> "https://aistudio.google.com/apikey"
+    }
+
+    private fun stepsOf(p: Int) = when (p) {
+        Store.PROVIDER_GROQ -> "Tap the button, sign up with your email, tap Create API Key, copy the key (it is shown only once) and paste it above."
+        Store.PROVIDER_OPENROUTER -> "Tap the button, sign up, create a key, copy it and paste it above. Pick a model whose name ends with :free."
+        else -> "Tap the button, sign in with Google, tap Create API key, copy it and paste it above."
     }
 
     private fun repliesCard(): View = card("Custom Replies") { box ->
