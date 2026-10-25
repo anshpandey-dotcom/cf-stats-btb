@@ -48,11 +48,10 @@ object OpenAiClient {
                 return call(url, key, candidate, system, history, maxTokens, meta)
             } catch (e: AiException) {
                 failure = e
-                val msg = e.message.orEmpty()
-                val modelProblem = msg.startsWith("404") ||
-                    (msg.startsWith("400") && msg.contains("model", true)) ||
-                    msg == "empty response"
-                if (!modelProblem) throw e
+                val code = e.message.orEmpty().take(3)
+                if (code == "401" || code == "403") throw e
+            } catch (e: java.io.IOException) {
+                failure = AiException("network error: ${e.message}")
             }
         }
         throw failure ?: AiException("No model available")

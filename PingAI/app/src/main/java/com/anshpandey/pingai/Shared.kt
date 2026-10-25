@@ -9,6 +9,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 object Live {
     val waiting = ConcurrentHashMap<String, Pair<String, Long>>()
+
+    @Volatile
+    var connected = false
+
+    @Volatile
+    var lastSeen = ""
 }
 
 object ReplyBridge {

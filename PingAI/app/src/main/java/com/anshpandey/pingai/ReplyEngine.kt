@@ -93,11 +93,13 @@ class ReplyEngine(context: Context) {
         return clean(ask(helperPrompt(), listOf("user" to message), 160))
     }
 
-    fun test(): String =
-        clean(ask(systemPrompt("Test", false, false, true, false, ""), listOf("user" to "Hi, are you there?"), 60))
+    fun test(): String {
+        val reply = clean(ask(systemPrompt("Test", false, false, true, false, ""), listOf("user" to "Hi, are you there?"), 60))
+        return reply + "\n\n(model: " + lastModel + ")"
+    }
 
     fun summarize(hinglish: Boolean): String {
-        val events = store.events().takeLast(60)
+        val events = store.events().filter { it.kind != "sys" }.takeLast(60)
         if (events.isEmpty()) return "No messages yet."
         val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
         val lines = StringBuilder()
@@ -144,17 +146,20 @@ class ReplyEngine(context: Context) {
         val meta = { m: AiMeta ->
             store.saveQuota(m.limit, m.remaining)
             store.addTokens(m.tokens)
+            if (m.tokens > 0) lastModel = m.model
             if (m.tokens > 0 && m.model !in big && m.model != store.groqModel) {
                 store.groqModel = m.model
             }
             Unit
         }
+        val tried = (big + base).distinct()
         return try {
-            OpenAiClient.ask(GROQ_URL, key, big + base, system, history, maxTokens, meta)
+            OpenAiClient.ask(GROQ_URL, key, tried, system, history, maxTokens, meta)
         } catch (e: AiException) {
-            if (e.message?.startsWith("404") != true) throw e
-            val found = availableModels().take(4)
-            if (found.isEmpty()) throw AiException("Your Groq key has no usable chat model")
+            val code = e.message.orEmpty().take(3)
+            if (code == "401" || code == "403") throw e
+            val found = runCatching { availableModels() }.getOrDefault(emptyList()).filter { it !in tried }.take(4)
+            if (found.isEmpty()) throw e
             OpenAiClient.ask(GROQ_URL, key, found, system, history, maxTokens, meta)
         }
     }
@@ -248,6 +253,8 @@ class ReplyEngine(context: Context) {
         private const val GROQ_70B = "llama-3.3-70b-versatile"
         private const val DEFAULT_MODEL = "openai/gpt-oss-20b"
         private const val DEFAULT_8B = "llama-3.1-8b-instant"
+        @Volatile
+        private var lastModel = ""
         private val PHONE = Regex("^\\+?[\\d\\s\\-()]{7,}$")
     }
 }

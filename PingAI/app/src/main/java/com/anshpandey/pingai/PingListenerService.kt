@@ -2,10 +2,15 @@ package com.anshpandey.pingai
 
 import android.app.Notification
 import android.app.RemoteInput
+import android.content.ComponentName
+import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
+import java.text.SimpleDateFormat
 import java.util.Collections
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -30,6 +35,21 @@ class PingListenerService : NotificationListenerService() {
     private val hits = ConcurrentHashMap<String, MutableList<Long>>()
     private val mutedUntil = ConcurrentHashMap<String, Long>()
 
+    override fun onListenerConnected() {
+        Live.connected = true
+        Store(applicationContext).addEvent("sys", "PING AI", "listener connected")
+        super.onListenerConnected()
+    }
+
+    override fun onListenerDisconnected() {
+        Live.connected = false
+        Store(applicationContext).addEvent("sys", "PING AI", "listener disconnected, reconnecting")
+        if (Build.VERSION.SDK_INT >= 24) {
+            runCatching { requestRebind(ComponentName(this, PingListenerService::class.java)) }
+        }
+        super.onListenerDisconnected()
+    }
+
     override fun onDestroy() {
         scheduler.shutdownNow()
         super.onDestroy()
@@ -42,7 +62,11 @@ class PingListenerService : NotificationListenerService() {
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
-        val action = findReplyAction(n) ?: return
+        val action = findReplyAction(n)
+        val stamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        Live.lastSeen = stamp + " " + sbn.packageName.substringAfterLast('.') +
+            if (action == null) " (no reply button)" else " (reply button found)"
+        if (action == null) return
         val input = action.remoteInputs?.firstOrNull { it.allowFreeFormInput } ?: return
 
         val extras = n.extras

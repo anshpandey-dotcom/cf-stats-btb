@@ -297,6 +297,18 @@ class MainActivity : AppCompatActivity() {
         val t = ui.body("")
         liveText = t
         box.addView(t)
+        box.addView(ui.outlined("Reconnect listener") {
+            if (Build.VERSION.SDK_INT >= 24) {
+                runCatching {
+                    NotificationListenerService.requestRebind(ComponentName(this, PingListenerService::class.java))
+                }
+            }
+            toast("Reconnecting…")
+        })
+        box.addView(ui.hint("If it stays disconnected, open notification access, turn PING AI off and on again."))
+        box.addView(ui.outlined("Open notification access") {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        })
     }
 
     private fun usageCard(): View = ui.card("Groq usage today") { box ->
@@ -317,6 +329,8 @@ class MainActivity : AppCompatActivity() {
         val view = liveText ?: return
         val now = System.currentTimeMillis()
         val lines = mutableListOf<String>()
+        lines.add(if (Live.connected) "✅ Listener connected" else "⚠️ Listener not connected")
+        if (Live.lastSeen.isNotEmpty()) lines.add("Last notification: " + Live.lastSeen)
         Live.waiting.values.forEach { (name, at) ->
             lines.add("⏳ $name: replying in ${maxOf(0L, (at - now) / 1000)}s")
         }
@@ -350,6 +364,7 @@ class MainActivity : AppCompatActivity() {
         val mark = when (e.kind) {
             "in" -> "⬅"
             "out" -> "➡"
+            "sys" -> "ℹ"
             else -> "⏸"
         }
         return "${fmt.format(Date(e.time))}  $mark ${e.who}: ${e.text}"
