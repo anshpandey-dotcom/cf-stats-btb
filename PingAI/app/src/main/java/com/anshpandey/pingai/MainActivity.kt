@@ -457,6 +457,30 @@ class MainActivity : AppCompatActivity() {
             box.addView(ui.label("Model"))
             val model = ui.edit(store.groqModel, Store.DEFAULT_GROQ)
             box.addView(model)
+            box.addView(ui.outlined("Choose from models on your Groq account") {
+                store.groqKey = key.text.toString()
+                toast("Loading models…")
+                worker.execute {
+                    val result = try {
+                        ReplyEngine(applicationContext).availableModels()
+                    } catch (e: Exception) {
+                        null to (e.message ?: "failed")
+                    }
+                    runOnUiThread {
+                        if (result is List<*>) {
+                            val names = result.map { it.toString() }
+                            AlertDialog.Builder(this)
+                                .setTitle("Pick a model")
+                                .setItems(names.toTypedArray()) { _, i -> model.setText(names[i]) }
+                                .show()
+                        } else {
+                            val msg = (result as Pair<*, *>).second.toString()
+                            AlertDialog.Builder(this).setMessage("Could not load models: $msg")
+                                .setPositiveButton("OK", null).show()
+                        }
+                    }
+                }
+            })
             var use70b = store.use70b
             box.addView(ui.switchRow("Use the smarter 70B model when possible (lower free limit)", use70b) { use70b = it })
 

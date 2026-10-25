@@ -118,16 +118,41 @@ class ReplyEngine(context: Context) {
         return clean(ask(system, listOf("user" to lines.toString().takeLast(5000)), 450))
     }
 
-    private fun ask(system: String, history: List<Pair<String, String>>, maxTokens: Int): String {
+    fun availableModels(): List<String> {
         if (store.groqKey.isBlank()) throw AiException("Add your Groq API key in the AI tab")
-        val models = mutableListOf<String>()
-        if (store.use70b) models.add(GROQ_70B)
-        models.add(store.groqModel)
-        models.add(DEFAULT_8B)
-        models.add(GROQ_70B)
-        return OpenAiClient.ask(GROQ_URL, store.groqKey, models, system, history, maxTokens) { meta ->
-            store.saveQuota(meta.limit, meta.remaining)
-            store.addTokens(meta.tokens)
+        return rank(OpenAiClient.listModels(GROQ_MODELS_URL, store.groqKey))
+    }
+
+    private fun rank(ids: List<String>): List<String> {
+        val skip = listOf("whisper", "tts", "guard", "embed", "orpheus", "playai", "moderation", "safeguard")
+        fun score(id: String): Int = when {
+            id.contains("gpt-oss-20b") -> 0
+            id.contains("8b") || id.contains("instant") -> 1
+            id.contains("scout") -> 2
+            id.contains("gpt-oss-120b") -> 3
+            id.contains("70b") -> 4
+            else -> 5
+        }
+        return ids.filter { id -> skip.none { id.contains(it) } }.sortedBy { score(it) }
+    }
+
+    private fun ask(system: String, history: List<Pair<String, String>>, maxTokens: Int): String {
+        val key = store.groqKey
+        if (key.isBlank()) throw AiException("Add your Groq API key in the AI tab")
+        val big = if (store.use70b) listOf("openai/gpt-oss-120b", GROQ_70B) else emptyList()
+        val base = listOf(store.groqModel, DEFAULT_MODEL, DEFAULT_8B, GROQ_70B).distinct()
+        val meta = { m: AiMeta ->
+            store.saveQuota(m.limit, m.remaining)
+            store.addTokens(m.tokens)
+            if (m.tokens > 0 && m.model !in big && m.model != store.groqModel) store.groqModel = m.model
+        }
+        return try {
+            OpenAiClient.ask(GROQ_URL, key, big + base, system, history, maxTokens, meta)
+        } catch (e: AiException) {
+            if (e.message?.startsWith("404") != true) throw e
+            val found = availableModels().take(4)
+            if (found.isEmpty()) throw AiException("Your Groq key has no usable chat model")
+            OpenAiClient.ask(GROQ_URL, key, found, system, history, maxTokens, meta)
         }
     }
 
@@ -210,7 +235,9 @@ class ReplyEngine(context: Context) {
 
     companion object {
         private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+        private const val GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
         private const val GROQ_70B = "llama-3.3-70b-versatile"
+        private const val DEFAULT_MODEL = "openai/gpt-oss-20b"
         private const val DEFAULT_8B = "llama-3.1-8b-instant"
         private val PHONE = Regex("^\\+?[\\d\\s\\-()]{7,}$")
     }

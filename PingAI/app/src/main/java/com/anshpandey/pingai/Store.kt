@@ -231,7 +231,7 @@ class Store(context: Context) {
 
     companion object {
         const val MEMORY_MS = 3_600_000L
-        const val DEFAULT_GROQ = "llama-3.1-8b-instant"
+        const val DEFAULT_GROQ = "openai/gpt-oss-20b"
         const val DEFAULT_CALL = "urgent call, call me, call karo, call kro, call kar, call krna, call him, call ansh, phone karo, phone kro, phone kar, phone uthao, call uthao, baat karni hai, baat krni hai, baat karna hai, talk to ansh, speak to ansh, need to talk, jaruri baat, zaruri baat, zaroori baat, urgent baat, emergency call"
         const val DEFAULT_BLOCK = "fuck, fck, fuk, fk u, fku, f u, bitch, bastard, asshole, dick, gay, madarchod, mc, bc, bhosdike, bhosdi, bkl, chutiya, gandu, lund, randi, harami, kutta, kamina, mkc, behenchod, betichod, lodu, gaand"
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."
