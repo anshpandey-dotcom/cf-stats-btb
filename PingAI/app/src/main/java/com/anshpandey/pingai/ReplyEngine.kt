@@ -29,16 +29,12 @@ class ReplyEngine(context: Context) {
             while (history.size > 8) history.removeAt(0)
         }
 
-        val answer = if (store.apiKey.isBlank()) {
+        val answer = try {
+            val snapshot = synchronized(history) { history.toList() }
+            ask(systemPrompt(sender, unknown, isGroup), snapshot)
+        } catch (e: Exception) {
+            store.addLog("AI error: ${e.message?.take(100)}")
             fill(store.fallbackText)
-        } else {
-            try {
-                val snapshot = synchronized(history) { history.toList() }
-                GeminiClient.ask(store.apiKey, store.model, systemPrompt(sender, unknown, isGroup), snapshot)
-            } catch (e: Exception) {
-                store.addLog("AI error: ${e.message?.take(100)}")
-                fill(store.fallbackText)
-            }
         }
 
         synchronized(history) { history.add("model" to answer) }
@@ -47,20 +43,17 @@ class ReplyEngine(context: Context) {
 
     fun helper(message: String): String {
         matchCustom(message)?.let { return wrapCustom(it) }
-        if (store.apiKey.isBlank()) throw GeminiException("Add your Gemini API key in PING AI first.")
-        val answer = GeminiClient.ask(
-            store.apiKey,
-            store.model,
-            systemPrompt("the sender", false, false),
-            listOf("user" to message)
-        )
+        val answer = ask(systemPrompt("the sender", false, false), listOf("user" to message))
         return tag() + "\n" + answer
     }
 
     fun test(): String {
-        val sys = systemPrompt("Test", false, false)
-        return GeminiClient.ask(store.apiKey, store.model, sys, listOf("user" to "Hi, are you there?"))
+        return ask(systemPrompt("Test", false, false), listOf("user" to "Hi, are you there?"))
     }
+
+    private fun ask(system: String, history: List<Pair<String, String>>): String =
+        if (store.apiKey.isBlank()) FreeAiClient.ask(system, history)
+        else GeminiClient.ask(store.apiKey, store.model, system, history)
 
     private fun passesContactFilter(sender: String): Boolean {
         val list = store.contacts()

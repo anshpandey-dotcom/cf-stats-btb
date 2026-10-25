@@ -9,7 +9,22 @@ class GeminiException(message: String) : Exception(message)
 
 object GeminiClient {
 
+    private val fallbackModels = listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash")
+
     fun ask(apiKey: String, model: String, system: String, history: List<Pair<String, String>>): String {
+        var failure: GeminiException? = null
+        for (candidate in (listOf(model) + fallbackModels).distinct()) {
+            try {
+                return askModel(apiKey, candidate, system, history)
+            } catch (e: GeminiException) {
+                failure = e
+                if (e.message?.startsWith("404") != true) throw e
+            }
+        }
+        throw failure ?: GeminiException("No model available")
+    }
+
+    private fun askModel(apiKey: String, model: String, system: String, history: List<Pair<String, String>>): String {
         return try {
             call(apiKey, model, system, history, true)
         } catch (e: GeminiException) {

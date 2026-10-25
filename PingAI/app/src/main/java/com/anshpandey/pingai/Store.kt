@@ -118,7 +118,7 @@ class Store(context: Context) {
     fun clearLog() = sp.edit().putString("log", "[]").apply()
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-2.5-flash"
+        const val DEFAULT_MODEL = "gemini-flash-latest"
         const val DEFAULT_TAG = "🤖 Assistant Reply – not of {name}\n{name} is offline right now."
         const val DEFAULT_FALLBACK = "{name} is not online right now. I'll let them know you messaged."
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."

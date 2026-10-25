@@ -222,10 +222,11 @@ class MainActivity : AppCompatActivity() {
         val name = edit(store.userName, "Your name")
         box.addView(name)
 
-        box.addView(label("Gemini API key (free)"))
+        box.addView(label("Gemini API key (optional). Leave empty to use the built-in free AI."))
         val key = edit(store.apiKey, "Paste key from AI Studio")
         key.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         box.addView(key)
+        box.addView(hint("Get a free key on your phone: tap the button below, sign in with Google, tap Create API key, copy it and paste it above."))
         box.addView(button("Get free key (AI Studio)") {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")))
         })
@@ -264,10 +265,6 @@ class MainActivity : AppCompatActivity() {
         })
         box.addView(button("Test AI") {
             save()
-            if (store.apiKey.isBlank()) {
-                Toast.makeText(this, "Paste your API key first", Toast.LENGTH_SHORT).show()
-                return@button
-            }
             Toast.makeText(this, "Testing…", Toast.LENGTH_SHORT).show()
             worker.execute {
                 val result = try {
