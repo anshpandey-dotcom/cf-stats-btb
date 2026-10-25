@@ -57,7 +57,7 @@ class KeepAliveService : Service() {
         if (Build.VERSION.SDK_INT >= 26) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (manager.getNotificationChannel(CHANNEL) == null) {
-                val channel = NotificationChannel(CHANNEL, "Background", NotificationManager.IMPORTANCE_LOW)
+                val channel = NotificationChannel(CHANNEL, "Background", NotificationManager.IMPORTANCE_MIN)
                 channel.setShowBadge(false)
                 manager.createNotificationChannel(channel)
             }
@@ -70,14 +70,14 @@ class KeepAliveService : Service() {
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("PING AI is running")
             .setContentText("Auto replies are active")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setContentIntent(open)
             .build()
     }
 
     companion object {
-        private const val CHANNEL = "alive_v1"
+        private const val CHANNEL = "alive_v2"
         private const val NOTIF_ID = 4343
 
         fun start(context: Context) {

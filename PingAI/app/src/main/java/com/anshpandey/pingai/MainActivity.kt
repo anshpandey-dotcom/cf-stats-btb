@@ -155,6 +155,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun syncKeepAlive() {
         if (!BuildConfig.AUTO) return
+        if (store.enabled) RebindJob.schedule(this) else RebindJob.cancel(this)
         if (store.enabled && store.keepAlive) KeepAliveService.start(this) else KeepAliveService.stop(this)
     }
 
@@ -339,8 +340,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun keepAliveCard(): View = ui.card("Stay connected", R.drawable.ic_battery) { box ->
-        box.addView(ui.hint("Phones often close background apps and switch notification access off. A small silent notification keeps PING AI alive and reconnects it automatically."))
-        box.addView(ui.switchRow("Keep PING AI running in the background", store.keepAlive) {
+        box.addView(ui.hint("PING AI reconnects itself in the background without any notification. If your phone still disconnects it, turn on the stronger option below. It adds one tiny silent notification in the notification shade, with no status bar icon."))
+        box.addView(ui.switchRow("Stronger keep-alive (tiny silent notification)", store.keepAlive) {
             store.keepAlive = it
             syncKeepAlive()
         })

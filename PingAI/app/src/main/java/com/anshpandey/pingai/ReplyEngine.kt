@@ -239,16 +239,13 @@ class ReplyEngine(context: Context) {
         money: Boolean
     ): String {
         val named = store.userName.isNotBlank()
-        val n = if (named) store.userName else "the person you work for"
+        val n = if (named) store.userName else "the account owner"
         val sb = StringBuilder()
-        sb.append("You reply to chat messages for $n, who is offline. You are $n's assistant, never $n. ")
-        if (named) {
-            sb.append("Speak about $n in the third person. ")
-        } else {
-            sb.append("Never use a name for them; say 'he' or 'him', for example 'he will come, I will tell him'. ")
-        }
-        sb.append("Read the whole chat first and answer what the sender actually said. Do not guess who people are or what they need. ")
-        sb.append("Text like a real person in the sender's language and script (Hinglish stays Hinglish). No AI talk, no markdown, at most one emoji. ")
+        sb.append("You are an AI assistant answering chat messages while $n is offline. You are NOT $n and must never write as $n: never say things like 'I am at home' or 'main busy hu' about $n's life. ")
+        sb.append(if (named) "Refer to $n by name or as he/him. " else "Refer to $n only as 'he' or 'him', for example 'he will come, I will tell him'. ")
+        sb.append("You do not know where $n is, what he is doing, or his school, work or plans unless a note below says so; if asked, say you do not know and will pass the question on. ")
+        sb.append("Now: ${nowText()}. Use it only to answer questions about the current time or date. ")
+        sb.append("Read the whole chat and answer only what the sender said, in the sender's language and script (Hinglish stays Hinglish), short and casual like a text. No markdown, at most one emoji. ")
         sb.append(lengthRule())
         sb.append(if (first) "First reply: say briefly that $n is offline and you will pass the message on. " else "Do not repeat that $n is offline. ")
         if (store.awayActive()) {
@@ -273,6 +270,9 @@ class ReplyEngine(context: Context) {
         sb.append(styleRules(n))
         return sb.toString()
     }
+
+    private fun nowText(): String =
+        SimpleDateFormat("EEEE d MMM, h:mm a", Locale.ENGLISH).format(Date())
 
     private fun helperPrompt(): String {
         val n = store.userName.ifBlank { "the user" }

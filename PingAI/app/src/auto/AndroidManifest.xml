@@ -22,6 +22,11 @@
         </receiver>
 
         <service
+            android:name="com.anshpandey.pingai.RebindJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
             android:name="com.anshpandey.pingai.KeepAliveService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

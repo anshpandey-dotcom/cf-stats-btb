@@ -69,8 +69,8 @@ class Store(context: Context) {
         set(v) = put("blockWords", v.trim())
 
     var keepAlive: Boolean
-        get() = sp.getBoolean("keepAlive", true)
-        set(v) = sp.edit().putBoolean("keepAlive", v).apply()
+        get() = sp.getBoolean("strongKeepAlive", false)
+        set(v) = sp.edit().putBoolean("strongKeepAlive", v).apply()
 
     var awayInstructions: String
         get() = s("awayInstructions")
