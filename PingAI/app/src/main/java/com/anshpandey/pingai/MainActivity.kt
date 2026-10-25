@@ -149,6 +149,12 @@ class MainActivity : AppCompatActivity() {
     private fun statusCard(): View = card("Auto Reply") { box ->
         statusText = TextView(this).apply { textSize = 13f }
         box.addView(statusText)
+        box.addView(hint("Setup: 1) Open App info, tap the three dots at the top right and choose Allow restricted settings. 2) Grant notification access. 3) Turn on auto reply."))
+        box.addView(button("Open App info") {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            )
+        })
         box.addView(button("Grant notification access") {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         })
