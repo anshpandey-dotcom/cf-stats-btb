@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var tab = 0
     private var askedAccess = false
+    private var inSettings = false
     private var showSetup = false
     private var summaryText = ""
     private var leave: (() -> Unit)? = null
@@ -120,7 +121,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        showTab(tab)
+        if (inSettings) openSettings() else showTab(tab)
+        syncKeepAlive()
         handler.removeCallbacks(ticker)
         handler.post(ticker)
         if (!BuildConfig.AUTO) return
@@ -147,6 +149,11 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    private fun syncKeepAlive() {
+        if (!BuildConfig.AUTO) return
+        if (store.enabled && store.keepAlive) KeepAliveService.start(this) else KeepAliveService.stop(this)
+    }
+
     private fun hasAccess(): Boolean =
         NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
 
@@ -154,10 +161,12 @@ class MainActivity : AppCompatActivity() {
         store.userName.isNotBlank() && store.groqKey.isNotBlank() && (!BuildConfig.AUTO || (hasAccess() && store.enabled))
 
     private fun header(): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundResource(R.drawable.bg_header)
         }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(TextView(this).apply {
             text = "PING AI"
             textSize = 24f
@@ -169,7 +178,18 @@ class MainActivity : AppCompatActivity() {
             textSize = 13f
             setTextColor(Color.parseColor("#CFEFE9"))
         })
-        return box
+        row.addView(box, LinearLayout.LayoutParams(0, -2, 1f))
+        if (BuildConfig.AUTO) {
+            row.addView(TextView(this).apply {
+                text = "⚙"
+                textSize = 28f
+                setTextColor(Color.WHITE)
+                setPadding(ui.dp(14), ui.dp(4), ui.dp(2), ui.dp(4))
+                contentDescription = "Settings"
+                setOnClickListener { openSettings() }
+            })
+        }
+        return row
     }
 
     private fun footer(): View {
@@ -213,7 +233,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openSettings() {
+        leave?.invoke()
+        leave = null
+        connText = null
+        reconnectBtn = null
+        usageText = null
+        usageBar = null
+        inSettings = true
+        pageHost.removeAllViews()
+        pageHost.addView(settingsPage())
+        for (i in 0 until tabBar.childCount) {
+            val v = tabBar.getChildAt(i) as TextView
+            v.setTextColor(ui.color(R.color.text_soft))
+            v.setTypeface(null, Typeface.NORMAL)
+            v.background = null
+        }
+    }
+
+    private fun settingsPage(): View = scroll { page ->
+        page.addView(keepAliveCard())
+        page.addView(behaviourCard())
+        page.addView(ui.outlined("Back") { showTab(tab) })
+    }
+
+    private fun keepAliveCard(): View = ui.card("Stay connected") { box ->
+        box.addView(ui.hint("Phones often close background apps and switch notification access off. A small silent notification keeps PING AI alive and reconnects it automatically."))
+        box.addView(ui.switchRow("Keep PING AI running in the background", store.keepAlive) {
+            store.keepAlive = it
+            syncKeepAlive()
+        })
+        box.addView(ui.outlined("Allow background running (battery)") {
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        })
+        box.addView(ui.outlined("Open app settings") {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        })
+        box.addView(ui.hint("Also allow auto-start for PING AI in your phone's settings and lock the app in the recent apps list."))
+    }
+
     private fun showTab(index: Int) {
+        inSettings = false
         leave?.invoke()
         leave = null
         connText = null
@@ -283,6 +343,7 @@ class MainActivity : AppCompatActivity() {
             text = label(store.enabled)
             setOnCheckedChangeListener { button, on ->
                 store.enabled = on
+                syncKeepAlive()
                 (button as SwitchCompat).text = label(on)
                 if (on && !hasAccess()) toast("Grant notification access first")
             }
@@ -546,7 +607,7 @@ class MainActivity : AppCompatActivity() {
         page.addView(peopleCard())
         page.addView(unknownCard())
         page.addView(repliesCard())
-        page.addView(behaviourCard())
+        page.addView(ui.outlined("Limits and filters (Settings)") { openSettings() })
     }
 
     private fun peopleCard(): View = ui.card("People") { box ->

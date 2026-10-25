@@ -68,6 +68,10 @@ class Store(context: Context) {
         get() = s("blockWords").let { if (it == OLD_BLOCK) "" else it }
         set(v) = put("blockWords", v.trim())
 
+    var keepAlive: Boolean
+        get() = sp.getBoolean("keepAlive", true)
+        set(v) = sp.edit().putBoolean("keepAlive", v).apply()
+
     var awayInstructions: String
         get() = s("awayInstructions")
         set(v) = put("awayInstructions", v.trim())

@@ -11,8 +11,8 @@ android {
         applicationId = "com.anshpandey.pingai"
         minSdk = 21
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.3"
+        versionCode = 8
+        versionName = "1.3.1"
     }
 
     signingConfigs {
