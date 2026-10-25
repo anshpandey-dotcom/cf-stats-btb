@@ -1,16 +1,13 @@
 # PING AI
 
-AI reply assistant powered by the free Gemini API. Made By Ansh.
+Smart reply assistant powered by free AI APIs (Groq, OpenRouter, Google Gemini). Made By Ansh.
 
 ## Two builds
 
-**PING-AI-V1.apk (recommended)** - Android 5.0 and above, including Android 14 and 15. It has no notification access, so Google Play Protect lets it install normally. Select a message in any chat app, open the menu and choose "PING AI Reply", or share or paste text into the app, and copy or send the AI reply yourself.
+**PING-AI-V1.apk** - Android 5.0 and above, including Android 14 and 15. No notification access, so it installs without Play Protect warnings. Select a message in any chat app, choose "PING AI Reply", and copy or send the reply.
 
-**PING-AI-V1-Auto.apk** - Adds full automatic replies to WhatsApp, WhatsApp Business, Telegram and Messenger through notification access. Google Play Protect blocks sideloaded apps that use notification access, so install it like this:
+**PING-AI-V1-Auto.apk** - Full automatic replies to WhatsApp, WhatsApp Business, Telegram and Messenger through notification access. It waits until the person stops typing, replies once in their language, stays quiet for thanks, ok, stickers and bye, flags urgent messages with a tone, and keeps a summary of the chat activity.
 
-1. Play Store, profile picture, Play Protect, settings gear, turn off "Scan apps with Play Protect" temporarily.
-2. Install the APK, then turn Play Protect back on.
-3. Settings, Apps, PING AI Auto, three dots, "Allow restricted settings".
-4. Open the app, tap "Grant notification access", add your Gemini API key and enable auto reply.
+Google Play Protect may block sideloaded apps that use notification access. Turn off "Scan apps with Play Protect" while installing, then allow restricted settings for the app in Settings, Apps.
 
 Free API keys: Groq https://console.groq.com/keys, OpenRouter https://openrouter.ai/keys, Gemini https://aistudio.google.com/apikey

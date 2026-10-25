@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page_bg">#0B141A</color>
+    <color name="card_bg">#1F2C34</color>
+    <color name="text_main">#E9EDEF</color>
+    <color name="text_soft">#8696A0</color>
+    <color name="input_stroke">#2A3942</color>
+    <color name="link_blue">#64B5F6</color>
+</resources>

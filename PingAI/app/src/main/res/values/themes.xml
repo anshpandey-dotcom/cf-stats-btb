@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PingAI" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="Theme.PingAI" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/green_dark</item>
         <item name="colorPrimaryVariant">@color/green_dark</item>
         <item name="colorSecondary">@color/green_light</item>
@@ -16,7 +16,7 @@
         <item name="cornerRadius">24dp</item>
     </style>
 
-    <style name="Theme.PingAI.Reply" parent="Theme.MaterialComponents.Light.Dialog">
+    <style name="Theme.PingAI.Reply" parent="Theme.MaterialComponents.DayNight.Dialog">
         <item name="colorPrimary">@color/green_dark</item>
         <item name="colorPrimaryVariant">@color/green_dark</item>
         <item name="colorSecondary">@color/green_light</item>
