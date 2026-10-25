@@ -9,11 +9,14 @@ class GeminiException(message: String) : Exception(message)
 
 object GeminiClient {
 
-    private val fallbackModels = listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash")
+    private val geminiFallbacks = listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash")
+    private val gemmaFallbacks = listOf("gemma-3-27b-it", "gemma-3-12b-it", "gemma-3-4b-it")
+
+    private fun isGemma(model: String) = model.startsWith("gemma")
 
     fun ask(apiKey: String, model: String, system: String, history: List<Pair<String, String>>): String {
         var failure: GeminiException? = null
-        for (candidate in (listOf(model) + fallbackModels).distinct()) {
+        for (candidate in (listOf(model) + if (isGemma(model)) gemmaFallbacks else geminiFallbacks).distinct()) {
             try {
                 return askModel(apiKey, candidate, system, history)
             } catch (e: GeminiException) {
@@ -39,9 +42,17 @@ object GeminiClient {
         history: List<Pair<String, String>>,
         withThinkingOff: Boolean
     ): String {
+        val gemma = isGemma(model)
+        val turns = if (gemma) {
+            val first = history.firstOrNull()
+            val merged = "Instructions:\n" + system + "\n\nMessage:\n" + (first?.second ?: "")
+            listOf((first?.first ?: "user") to merged) + history.drop(1)
+        } else {
+            history
+        }
         val contents = JSONArray()
         var lastRole = ""
-        history.forEach { (role, text) ->
+        turns.forEach { (role, text) ->
             if (role == lastRole && contents.length() > 0) {
                 val parts = contents.getJSONObject(contents.length() - 1).getJSONArray("parts")
                 val old = parts.getJSONObject(0)
@@ -56,14 +67,16 @@ object GeminiClient {
         }
 
         val config = JSONObject().put("temperature", 0.8).put("maxOutputTokens", 700)
-        if (withThinkingOff && model.contains("flash")) {
+        if (withThinkingOff && !gemma && model.contains("flash")) {
             config.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
         }
 
         val body = JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", contents)
             .put("generationConfig", config)
+        if (!gemma) {
+            body.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+        }
 
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
         val conn = url.openConnection() as HttpURLConnection

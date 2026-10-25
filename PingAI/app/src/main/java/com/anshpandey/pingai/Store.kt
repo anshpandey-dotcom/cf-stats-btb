@@ -61,6 +61,14 @@ class Store(context: Context) {
         get() = sp.getBoolean("tagCustom", true)
         set(v) = sp.edit().putBoolean("tagCustom", v).apply()
 
+    var replyLength: Int
+        get() = sp.getInt("replyLength", LENGTH_MINIMAL)
+        set(v) = sp.edit().putInt("replyLength", v).apply()
+
+    var tagFirstOnly: Boolean
+        get() = sp.getBoolean("tagFirstOnly", true)
+        set(v) = sp.edit().putBoolean("tagFirstOnly", v).apply()
+
     var delaySeconds: Int
         get() = sp.getInt("delaySeconds", 3)
         set(v) = sp.edit().putInt("delaySeconds", v.coerceIn(0, 60)).apply()
@@ -122,6 +130,9 @@ class Store(context: Context) {
         const val DEFAULT_TAG = "🤖 Assistant Reply – not of {name}\n{name} is offline right now."
         const val DEFAULT_FALLBACK = "{name} is not online right now. I'll let them know you messaged."
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."
+        const val LENGTH_MINIMAL = 0
+        const val LENGTH_NORMAL = 1
+        const val LENGTH_DETAILED = 2
         const val MODE_ALL = 0
         const val MODE_ONLY = 1
         const val MODE_EXCEPT = 2

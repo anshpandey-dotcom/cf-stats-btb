@@ -12,17 +12,18 @@ class ReplyEngine(context: Context) {
     fun compose(sender: String, message: String, isGroup: Boolean): String? {
         if (!passesContactFilter(sender)) return null
 
-        matchCustom(message)?.let { return wrapCustom(it) }
+        val key = sender.lowercase()
+
+        matchCustom(message)?.let { return if (store.tagCustom) withTag(key, it) else it }
 
         val unknown = isUnknown(sender)
         if (unknown) {
             when (store.unknownMode) {
                 Store.UNKNOWN_OFF -> return null
-                Store.UNKNOWN_FIXED -> return tag() + "\n" + fill(store.unknownText)
+                Store.UNKNOWN_FIXED -> return withTag(key, fill(store.unknownText))
             }
         }
 
-        val key = sender.lowercase()
         val history = memory.getOrPut(key) { mutableListOf() }
         synchronized(history) {
             history.add("user" to message)
@@ -38,7 +39,16 @@ class ReplyEngine(context: Context) {
         }
 
         synchronized(history) { history.add("model" to answer) }
-        return tag() + "\n" + answer
+        return withTag(key, answer)
+    }
+
+    private fun withTag(key: String, body: String): String {
+        if (!store.tagFirstOnly) return tag() + "\n" + body
+        val now = System.currentTimeMillis()
+        val last = taggedAt[key]
+        if (last != null && now - last < TAG_WINDOW_MS) return body
+        taggedAt[key] = now
+        return tag() + "\n" + body
     }
 
     fun helper(message: String): String {
@@ -97,10 +107,17 @@ class ReplyEngine(context: Context) {
     private fun systemPrompt(sender: String, unknown: Boolean, isGroup: Boolean): String {
         val n = name()
         val sb = StringBuilder()
-        sb.append("You are an AI assistant answering chat messages on behalf of $n, who is offline right now. ")
-        sb.append("You are not $n. Never pretend to be $n and never claim to be human. ")
-        sb.append("Reply in the same language and script the sender writes in; mixed-language text stays mixed. ")
-        sb.append("Keep it short, warm and natural: one to three sentences, plain text, no markdown. ")
+        sb.append("You are answering chat messages on behalf of $n, who is offline right now. ")
+        sb.append("You are $n's assistant, not $n. Never pretend to be $n, and if someone sincerely asks, say you are $n's assistant. ")
+        sb.append("Write exactly like a real person texting: casual, relaxed, natural, in the same language and script the sender uses; mixed-language text stays mixed. ")
+        sb.append("Never sound like an AI: no greetings like 'Hello there', no 'As an AI', no lists, no markdown, no long explanations, at most one emoji. ")
+        sb.append(
+            when (store.replyLength) {
+                Store.LENGTH_MINIMAL -> "Keep the reply to one very short line, under 12 words. "
+                Store.LENGTH_DETAILED -> "Reply in two to four sentences. "
+                else -> "Reply in one or two short sentences. "
+            }
+        )
         sb.append("Never invent facts, plans, promises, payments or personal details about $n. ")
         sb.append("For anything urgent, personal or that needs a decision, say you will pass the message on and $n will reply once back online. ")
         if (isGroup) sb.append("This message came from a group chat; keep the reply brief. ")
@@ -115,6 +132,8 @@ class ReplyEngine(context: Context) {
 
     companion object {
         private val PHONE = Regex("^\\+?[\\d\\s\\-()]{7,}$")
+        private const val TAG_WINDOW_MS = 6 * 60 * 60 * 1000L
         private val memory = ConcurrentHashMap<String, MutableList<Pair<String, String>>>()
+        private val taggedAt = ConcurrentHashMap<String, Long>()
     }
 }

@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var contactsBox: LinearLayout
     private lateinit var logText: TextView
     private val worker = Executors.newSingleThreadExecutor()
+    private var askedAccess = false
 
     private val apps = listOf(
         "com.whatsapp" to "WhatsApp",
@@ -70,6 +71,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
+        content.addView(guideCard())
         content.addView(if (BuildConfig.AUTO) statusCard() else helperCard())
         content.addView(aiCard())
         content.addView(repliesCard())
@@ -99,6 +101,17 @@ class MainActivity : AppCompatActivity() {
         refreshLists()
         if (!BuildConfig.AUTO) return
         refreshStatus()
+        if (!hasAccess() && !askedAccess) {
+            askedAccess = true
+            AlertDialog.Builder(this)
+                .setTitle("Allow notification access")
+                .setMessage("PING AI Auto reads incoming message notifications only to write and send replies for you. Nothing is read until you allow it.\n\nIf the switch is greyed out, open App info, tap the three dots and choose Allow restricted settings.")
+                .setPositiveButton("Allow") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
+                .setNegativeButton("Not now", null)
+                .show()
+        }
         logText.text = store.logLines().joinToString("\n").ifEmpty { "No activity yet." }
         if (hasAccess() && Build.VERSION.SDK_INT >= 24) {
             runCatching {
@@ -166,6 +179,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun guideCard(): View = card("How to use") { box ->
+        val steps = if (BuildConfig.AUTO) {
+            "1) Allow notification access when asked, and turn on auto reply.\n" +
+                "2) Enter your name under AI Setup. Add a free Gemini API key from AI Studio for the best replies.\n" +
+                "3) Optional: add custom replies, choose who gets a reply, and handle unknown numbers.\n" +
+                "4) Keep the app allowed to run in the background. Replies go out by themselves when someone messages you."
+        } else {
+            "1) Enter your name under AI Setup. Add a free Gemini API key from AI Studio for the best replies.\n" +
+                "2) In any chat app, select a message and choose PING AI Reply, or paste it below.\n" +
+                "3) Copy the reply or send it from the same screen."
+        }
+        box.addView(hint(steps))
+    }
+
     private fun helperCard(): View = card("Reply Helper") { box ->
         box.addView(hint("Get an AI reply for any message in three ways:"))
         box.addView(hint("1) In any chat app, select the message text, open the menu and choose PING AI Reply.\n2) Share text to PING AI Reply.\n3) Paste a message below."))
@@ -231,9 +258,20 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")))
         })
 
-        box.addView(label("Gemini model"))
+        box.addView(label("AI model"))
         val model = edit(store.model, Store.DEFAULT_MODEL)
+        box.addView(radios(
+            listOf("Gemini Flash (fast, recommended)", "Gemma (Google open-source)"),
+            if (store.model.startsWith("gemma")) 1 else 0
+        ) { model.setText(if (it == 1) "gemma-3-27b-it" else Store.DEFAULT_MODEL) })
         box.addView(model)
+        box.addView(hint("Both run free on Google with your API key. Without a key the built-in free AI is used."))
+
+        box.addView(label("Reply length"))
+        box.addView(radios(
+            listOf("Minimal (one short line)", "Normal (one or two sentences)", "Detailed (two to four sentences)"),
+            store.replyLength
+        ) { store.replyLength = it })
 
         box.addView(label("Custom instructions for the AI (optional)"))
         val persona = edit(store.personality, "e.g. Be friendly and keep replies short. Never share my address.")
@@ -323,6 +361,11 @@ class MainActivity : AppCompatActivity() {
             text = "Skip group chats"
             isChecked = store.skipGroups
             setOnCheckedChangeListener { _, on -> store.skipGroups = on }
+        })
+        box.addView(SwitchCompat(this).apply {
+            text = "Show the assistant tag only on the first reply to each person"
+            isChecked = store.tagFirstOnly
+            setOnCheckedChangeListener { _, on -> store.tagFirstOnly = on }
         })
         box.addView(label("Reply delay (seconds)"))
         val delay = edit(store.delaySeconds.toString(), "3")
