@@ -2,8 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application>
+        <receiver
+            android:name="com.anshpandey.pingai.AlertReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name="com.anshpandey.pingai.EmergencyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.PingAI" />
+
         <service
             android:name="com.anshpandey.pingai.PingListenerService"
             android:exported="true"

@@ -3,6 +3,8 @@ package com.anshpandey.pingai
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 data class CustomReply(val keywords: String, val reply: String)
@@ -10,6 +12,17 @@ data class CustomReply(val keywords: String, val reply: String)
 data class Person(val name: String, val note: String)
 
 data class Event(val time: Long, val kind: String, val who: String, val text: String)
+
+data class Memory(
+    val summary: String,
+    val turns: List<Pair<String, String>>,
+    val at: Long,
+    val introduced: Boolean
+) {
+    fun chars(): Int = summary.length + turns.sumOf { it.second.length }
+}
+
+data class Quota(val limit: Int, val remaining: Int, val at: Long)
 
 class Store(context: Context) {
 
@@ -23,10 +36,6 @@ class Store(context: Context) {
         get() = sp.getBoolean("enabled", false)
         set(v) = sp.edit().putBoolean("enabled", v).apply()
 
-    var provider: Int
-        get() = sp.getInt("provider", if (apiKey.isNotBlank()) PROVIDER_GEMINI else PROVIDER_GROQ)
-        set(v) = sp.edit().putInt("provider", v).apply()
-
     var groqKey: String
         get() = s("groqKey")
         set(v) = put("groqKey", v.trim())
@@ -38,22 +47,6 @@ class Store(context: Context) {
     var use70b: Boolean
         get() = sp.getBoolean("use70b", false)
         set(v) = sp.edit().putBoolean("use70b", v).apply()
-
-    var openRouterKey: String
-        get() = s("openRouterKey")
-        set(v) = put("openRouterKey", v.trim())
-
-    var openRouterModel: String
-        get() = s("openRouterModel", DEFAULT_OPENROUTER)
-        set(v) = put("openRouterModel", v.trim().ifEmpty { DEFAULT_OPENROUTER })
-
-    var apiKey: String
-        get() = s("apiKey")
-        set(v) = put("apiKey", v.trim())
-
-    var model: String
-        get() = s("model", DEFAULT_MODEL)
-        set(v) = put("model", v.trim().ifEmpty { DEFAULT_MODEL })
 
     var userName: String
         get() = s("userName")
@@ -67,9 +60,13 @@ class Store(context: Context) {
         get() = s("styleSamples")
         set(v) = put("styleSamples", v.trim())
 
-    var urgentWords: String
-        get() = s("urgentWords", DEFAULT_URGENT)
-        set(v) = put("urgentWords", v.trim().ifEmpty { DEFAULT_URGENT })
+    var callTriggers: String
+        get() = s("callTriggers", DEFAULT_CALL)
+        set(v) = put("callTriggers", v.trim().ifEmpty { DEFAULT_CALL })
+
+    var blockWords: String
+        get() = s("blockWords", DEFAULT_BLOCK)
+        set(v) = put("blockWords", v.trim())
 
     var contactMode: Int
         get() = sp.getInt("contactMode", MODE_ALL)
@@ -98,35 +95,6 @@ class Store(context: Context) {
     var maxPerDay: Int
         get() = sp.getInt("maxPerDay", 20)
         set(v) = sp.edit().putInt("maxPerDay", v.coerceIn(1, 200)).apply()
-
-    fun repliesToday(key: String): Int = sp.getInt("cnt_" + keyId(key) + "_" + dayStamp(), 0)
-
-    fun bumpReplies(key: String) {
-        val k = "cnt_" + keyId(key) + "_" + dayStamp()
-        sp.edit().putInt(k, sp.getInt(k, 0) + 1).apply()
-    }
-
-    private fun dayStamp(): String =
-        java.text.SimpleDateFormat("yyyyMMdd", Locale.US).format(java.util.Date())
-
-    fun saveQuota(provider: Int, limit: String?, remaining: String?, tokens: String?) {
-        if (remaining == null) return
-        val o = JSONObject().put("l", limit ?: "").put("r", remaining).put("t", tokens ?: "")
-            .put("at", System.currentTimeMillis())
-        put("quota_$provider", o.toString())
-    }
-
-    fun quotaText(provider: Int): String {
-        val raw = s("quota_$provider")
-        if (raw.isEmpty()) return ""
-        val o = JSONObject(raw)
-        val time = java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(o.getLong("at")))
-        val limit = o.optString("l")
-        val of = if (limit.isNotEmpty()) " of $limit" else ""
-        val tokens = o.optString("t")
-        val tok = if (tokens.isNotEmpty()) ", $tokens tokens left this minute" else ""
-        return "${o.getString("r")}$of requests left today$tok (checked at $time)"
-    }
 
     var awayUntil: Long
         get() = sp.getLong("awayUntil", 0L)
@@ -179,25 +147,60 @@ class Store(context: Context) {
         put("people", arr.toString())
     }
 
-    fun history(key: String): MutableList<Pair<String, String>> {
-        val out = mutableListOf<Pair<String, String>>()
-        val arr = JSONArray(s(historyKey(key), "[]"))
+    fun memory(key: String): Memory {
+        val raw = s("mem_" + keyId(key))
+        if (raw.isEmpty()) return Memory("", emptyList(), 0L, false)
+        val o = JSONObject(raw)
+        if (System.currentTimeMillis() - o.getLong("at") > MEMORY_MS) return Memory("", emptyList(), 0L, false)
+        val turns = mutableListOf<Pair<String, String>>()
+        val arr = o.getJSONArray("t")
         for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            out.add(o.getString("r") to o.getString("x"))
+            val t = arr.getJSONObject(i)
+            turns.add(t.getString("r") to t.getString("x"))
         }
-        return out
+        return Memory(o.optString("s"), turns, o.getLong("at"), o.optBoolean("i"))
     }
 
-    fun saveHistory(key: String, list: List<Pair<String, String>>) {
+    fun saveMemory(key: String, m: Memory) {
         val arr = JSONArray()
-        list.takeLast(12).forEach { arr.put(JSONObject().put("r", it.first).put("x", it.second)) }
-        put(historyKey(key), arr.toString())
+        m.turns.forEach { arr.put(JSONObject().put("r", it.first).put("x", it.second)) }
+        val o = JSONObject().put("s", m.summary).put("t", arr).put("at", m.at).put("i", m.introduced)
+        put("mem_" + keyId(key), o.toString())
     }
 
-    fun lastReply(key: String): Long = sp.getLong("lr_" + keyId(key), 0L)
+    fun clearMemories() {
+        val editor = sp.edit()
+        sp.all.keys.filter { it.startsWith("mem_") }.forEach { editor.remove(it) }
+        editor.apply()
+    }
 
-    fun setLastReply(key: String, time: Long) = sp.edit().putLong("lr_" + keyId(key), time).apply()
+    fun repliesToday(key: String): Int = sp.getInt("cnt_" + keyId(key) + "_" + dayStamp(), 0)
+
+    fun bumpReplies(key: String) {
+        val k = "cnt_" + keyId(key) + "_" + dayStamp()
+        sp.edit().putInt(k, sp.getInt(k, 0) + 1).apply()
+    }
+
+    fun addTokens(n: Int) {
+        if (n <= 0) return
+        val k = "tok_" + dayStamp()
+        sp.edit().putInt(k, sp.getInt(k, 0) + n).apply()
+    }
+
+    fun tokensToday(): Int = sp.getInt("tok_" + dayStamp(), 0)
+
+    fun saveQuota(limit: String?, remaining: String?) {
+        val l = limit?.toIntOrNull() ?: return
+        val r = remaining?.toIntOrNull() ?: return
+        put("quota", JSONObject().put("l", l).put("r", r).put("at", System.currentTimeMillis()).toString())
+    }
+
+    fun quota(): Quota? {
+        val raw = s("quota")
+        if (raw.isEmpty()) return null
+        val o = JSONObject(raw)
+        return Quota(o.getInt("l"), o.getInt("r"), o.getLong("at"))
+    }
 
     fun events(): List<Event> {
         val out = mutableListOf<Event>()
@@ -222,19 +225,16 @@ class Store(context: Context) {
 
     fun clearEvents() = put("events", "[]")
 
+    private fun dayStamp(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+
     private fun keyId(key: String) = key.lowercase(Locale.ROOT).take(80)
 
-    private fun historyKey(key: String) = "h_" + keyId(key)
-
     companion object {
-        const val DEFAULT_MODEL = "gemini-flash-latest"
+        const val MEMORY_MS = 3_600_000L
         const val DEFAULT_GROQ = "llama-3.1-8b-instant"
-        const val DEFAULT_OPENROUTER = "meta-llama/llama-3.3-70b-instruct:free"
-        const val DEFAULT_URGENT = "urgent, emergency, zaroori, zaruri, jaruri, jaroori, asap, turant, call me, help me"
+        const val DEFAULT_CALL = "urgent call, call me, call karo, call kro, call kar, call krna, call him, call ansh, phone karo, phone kro, phone kar, phone uthao, call uthao, baat karni hai, baat krni hai, baat karna hai, talk to ansh, speak to ansh, need to talk, jaruri baat, zaruri baat, zaroori baat, urgent baat, emergency call"
+        const val DEFAULT_BLOCK = "fuck, fck, fuk, fk u, fku, f u, bitch, bastard, asshole, dick, gay, madarchod, mc, bc, bhosdike, bhosdi, bkl, chutiya, gandu, lund, randi, harami, kutta, kamina, mkc, behenchod, betichod, lodu, gaand"
         const val DEFAULT_UNKNOWN = "Hello! {name} is not available right now. Please tell me who you are and what you need, and I'll pass the message on."
-        const val PROVIDER_GROQ = 0
-        const val PROVIDER_OPENROUTER = 1
-        const val PROVIDER_GEMINI = 2
         const val LENGTH_MINIMAL = 0
         const val LENGTH_NORMAL = 1
         const val LENGTH_DETAILED = 2

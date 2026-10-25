@@ -31,21 +31,47 @@ class ReplyEngine(context: Context) {
 
     fun fixedUnknown(): String = fill(store.unknownText)
 
+    fun mediaNotice(kind: String, hinglish: Boolean): String {
+        val n = name()
+        return if (hinglish) {
+            "Main $n ka AI assistant hu. Tumne $kind bheji hai, $n ko bata dunga aur wo aane par dekh lega."
+        } else {
+            "I'm $n's AI assistant. You sent a $kind. I'll let $n know and it will be checked once $n is back."
+        }
+    }
+
+    fun urgentFallback(hinglish: Boolean): String {
+        val n = name()
+        return if (hinglish) "Main $n ko jaldi se jaldi bata deta hu." else "I will inform $n ASAP."
+    }
+
+    fun callbackLine(hinglish: Boolean): String {
+        val n = name()
+        return if (hinglish) "$n ko pata chal gaya hai, wo jaldi call karega." else "I have told $n. A call will come soon."
+    }
+
     fun reply(
         sender: String,
-        history: List<Pair<String, String>>,
+        mem: Memory,
+        message: String,
         first: Boolean,
         unknown: Boolean,
         isGroup: Boolean,
-        urgent: Boolean
+        call: Boolean
     ): String {
-        val system = systemPrompt(sender, unknown, isGroup, first, urgent)
+        val system = systemPrompt(sender, unknown, isGroup, first, call, mem.summary)
+        val turns = mem.turns.takeLast(6) + ("user" to message)
+        val tokens = when (store.replyLength) {
+            Store.LENGTH_MINIMAL -> 80
+            Store.LENGTH_DETAILED -> 220
+            else -> 130
+        }
         val raw = try {
-            ask(system, history)
-        } catch (e: GeminiException) {
+            ask(system, turns, tokens)
+        } catch (e: AiException) {
             if (e.message?.startsWith("429") == true) {
                 Thread.sleep(4000)
-                ask(system, history)
+                ask(system, turns, tokens)
             } else {
                 throw e
             }
@@ -53,64 +79,56 @@ class ReplyEngine(context: Context) {
         return clean(raw)
     }
 
+    fun compress(mem: Memory): String {
+        val sb = StringBuilder()
+        if (mem.summary.isNotEmpty()) sb.append("Earlier: ").append(mem.summary).append("\n")
+        mem.turns.forEach { sb.append(if (it.first == "user") "Them: " else "Assistant: ").append(it.second).append("\n") }
+        val system = "Summarize this chat in under 50 words. Keep names, facts, plans and open questions that matter. " +
+            "Use the same language as the chat. Output only the summary."
+        return clean(ask(system, listOf("user" to sb.toString()), 110))
+    }
+
     fun helper(message: String): String {
         customReply(message)?.let { return it }
-        return clean(ask(helperPrompt(), listOf("user" to message)))
+        return clean(ask(helperPrompt(), listOf("user" to message), 160))
     }
 
     fun test(): String =
-        clean(ask(systemPrompt("Test", false, false, true, false), listOf("user" to "Hi, are you there?")))
+        clean(ask(systemPrompt("Test", false, false, true, false, ""), listOf("user" to "Hi, are you there?"), 60))
 
     fun summarize(hinglish: Boolean): String {
-        val events = store.events().takeLast(150)
+        val events = store.events().takeLast(60)
         if (events.isEmpty()) return "No messages yet."
         val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
         val lines = StringBuilder()
         events.forEach {
             val time = fmt.format(Date(it.time))
+            val text = it.text.take(140)
             when (it.kind) {
-                "in" -> lines.append("[$time] ${it.who} wrote: ${it.text}\n")
-                "out" -> lines.append("[$time] Auto reply sent to ${it.who}: ${it.text}\n")
-                else -> lines.append("[$time] No reply to ${it.who}: ${it.text}\n")
+                "in" -> lines.append("[$time] ${it.who} wrote: $text\n")
+                "out" -> lines.append("[$time] Reply sent to ${it.who}: $text\n")
+                else -> lines.append("[$time] No reply to ${it.who}: $text\n")
             }
         }
         val n = name()
-        val language = if (hinglish) {
-            "Write in Hinglish (Hindi in Roman letters), casual and simple."
-        } else {
-            "Write in simple English."
-        }
+        val language = if (hinglish) "Write in Hinglish (Hindi in Roman letters), casual and simple." else "Write in simple English."
         val system = "You summarize chat activity for $n, who was away. $language " +
-            "Use plain text without markdown tables. Use these short sections: " +
-            "People who messaged (one line each: what they wanted), Important or urgent, " +
-            "Questions waiting for $n, Not replied (and why). Skip a section if it is empty. Be brief."
-        return clean(ask(system, listOf("user" to lines.toString().takeLast(7000))))
+            "Plain text, no markdown. Short sections: People who messaged (one line each), Important or urgent, " +
+            "Questions waiting for $n, Photos or voice messages received, Not replied (and why). Skip empty sections."
+        return clean(ask(system, listOf("user" to lines.toString().takeLast(5000)), 450))
     }
 
-    private fun ask(system: String, history: List<Pair<String, String>>): String = when (store.provider) {
-        Store.PROVIDER_GROQ ->
-            if (store.groqKey.isBlank()) FreeAiClient.ask(system, history) else groq(system, history)
-        Store.PROVIDER_OPENROUTER ->
-            if (store.openRouterKey.isBlank()) FreeAiClient.ask(system, history)
-            else OpenAiClient.ask(
-                OPENROUTER_URL, store.openRouterKey, store.openRouterModel, OPENROUTER_FALLBACKS, system, history
-            )
-        else ->
-            if (store.apiKey.isBlank()) FreeAiClient.ask(system, history)
-            else GeminiClient.ask(store.apiKey, store.model, system, history)
-    }
-
-    private fun groq(system: String, history: List<Pair<String, String>>): String {
-        val track = { limit: String?, left: String?, tokens: String? ->
-            store.saveQuota(Store.PROVIDER_GROQ, limit, left, tokens)
+    private fun ask(system: String, history: List<Pair<String, String>>, maxTokens: Int): String {
+        if (store.groqKey.isBlank()) throw AiException("Add your Groq API key in the AI tab")
+        val models = mutableListOf<String>()
+        if (store.use70b) models.add(GROQ_70B)
+        models.add(store.groqModel)
+        models.add(DEFAULT_8B)
+        models.add(GROQ_70B)
+        return OpenAiClient.ask(GROQ_URL, store.groqKey, models, system, history, maxTokens) { meta ->
+            store.saveQuota(meta.limit, meta.remaining)
+            store.addTokens(meta.tokens)
         }
-        if (store.use70b) {
-            try {
-                return OpenAiClient.ask(GROQ_URL, store.groqKey, GROQ_70B, emptyList(), system, history, track)
-            } catch (e: GeminiException) {
-            }
-        }
-        return OpenAiClient.ask(GROQ_URL, store.groqKey, store.groqModel, GROQ_FALLBACKS, system, history, track)
     }
 
     private fun clean(text: String): String = text.trim().removeSurrounding("\"").trim()
@@ -123,7 +141,10 @@ class ReplyEngine(context: Context) {
         if (eDigits.length >= 7 && sDigits.length >= 7) {
             return sDigits.takeLast(10) == eDigits.takeLast(10)
         }
-        return sender.contains(e, ignoreCase = true)
+        val a = Classifier.normalize(e)
+        val b = Classifier.normalize(sender)
+        if (a.isEmpty() || b.isEmpty()) return false
+        return b.contains(a) || a.contains(b)
     }
 
     private fun toneFor(sender: String): String? =
@@ -134,72 +155,63 @@ class ReplyEngine(context: Context) {
     private fun fill(template: String): String = template.replace("{name}", name())
 
     private fun lengthRule(): String = when (store.replyLength) {
-        Store.LENGTH_MINIMAL -> "Keep the reply to one very short line, under 12 words. "
+        Store.LENGTH_MINIMAL -> "Reply in one very short line, under 12 words. "
         Store.LENGTH_DETAILED -> "Reply in two to four sentences. "
         else -> "Reply in one or two short sentences. "
     }
 
     private fun styleRules(n: String): String {
         val sb = StringBuilder()
-        if (store.personality.isNotBlank()) sb.append("Custom instructions from $n, follow them: ").append(store.personality).append(". ")
+        if (store.personality.isNotBlank()) sb.append("Instructions from $n: ").append(store.personality).append(". ")
         if (store.styleSamples.isNotBlank()) {
-            sb.append("Here are real messages written by $n. Copy this texting style (word choice, length, emoji habits): ")
-                .append(store.styleSamples.take(1200)).append(" ")
+            sb.append("Copy the texting style of these real messages by $n: ").append(store.styleSamples.take(600)).append(" ")
         }
         return sb.toString()
     }
 
-    private fun systemPrompt(sender: String, unknown: Boolean, isGroup: Boolean, first: Boolean, urgent: Boolean): String {
+    private fun systemPrompt(
+        sender: String,
+        unknown: Boolean,
+        isGroup: Boolean,
+        first: Boolean,
+        call: Boolean,
+        summary: String
+    ): String {
         val n = name()
         val sb = StringBuilder()
-        sb.append("You are answering chat messages on behalf of $n, who is not online right now. ")
-        sb.append("You are $n's assistant, not $n. Never pretend to be $n and never speak as $n: always talk about $n in the third person, for example '$n is in Jaunpur, will be back by 6' and never 'I am in Jaunpur'. ")
-        sb.append("Never repeat any earlier reply in this chat. Every reply must be different and must answer what the person just said. If you do not know something, say you do not know and that you will tell $n. ")
-        sb.append("Write exactly like a real person texting: casual and natural. ")
-        sb.append("Use the same language and script as the other person's latest message. If they write Hinglish (Hindi in Roman letters), reply in Hinglish. If they write English, reply in simple English. Never answer a Hinglish message in formal English. ")
-        sb.append("Never say 'AI assistant', 'As an AI', or 'Let me know if you need anything'. No greetings like 'Hello there', no lists, no markdown, at most one emoji. ")
+        sb.append("You reply to chat messages for $n, who is offline. You are $n's assistant, never $n; always speak about $n in the third person. ")
+        sb.append("Text like a real person in the sender's language and script (Hinglish stays Hinglish). No AI talk, no markdown, at most one emoji. ")
         sb.append(lengthRule())
-        if (first) {
-            sb.append("This is the first reply in this chat: say naturally, in a few words, that $n is not online right now and you will pass the message on. ")
-        } else {
-            sb.append("Do not repeat that $n is offline. Just answer or acknowledge naturally and keep it short. ")
-        }
+        sb.append(if (first) "First reply: say briefly that $n is offline and you will pass the message on. " else "Do not repeat that $n is offline. ")
         if (store.awayActive()) {
-            if (store.awayNote.isNotBlank()) sb.append("$n left this note: ${store.awayNote}. ")
-            if (store.awayBack.isNotBlank()) sb.append("$n expects to be back around ${store.awayBack}. ")
-            sb.append("Share this only when it helps. ")
+            if (store.awayNote.isNotBlank()) sb.append("Note from $n: ${store.awayNote}. ")
+            if (store.awayBack.isNotBlank()) sb.append("Back around: ${store.awayBack}. ")
         }
-        sb.append("Never invent facts, plans, promises, payments or personal details about $n. For anything that needs $n's decision say you will pass it on. ")
-        if (urgent) sb.append("The person says this is urgent: tell them you have flagged it to $n right now. ")
-        if (isGroup) sb.append("This came from a group chat, so keep it brief. ")
+        sb.append("Never invent facts and never repeat an earlier reply. If asked for money, loans, plans or decisions, say $n will discuss it and promise nothing. ")
+        if (call) sb.append("They want $n to call: say you will inform $n ASAP. ")
+        if (isGroup) sb.append("Group chat, keep it brief. ")
         if (unknown) {
-            sb.append("The sender is not a saved contact. Be polite, share no personal information about $n, and ask who they are and what they need. ")
+            sb.append("Sender is not a saved contact: be polite, share nothing personal, ask who they are and what they need. ")
         } else {
-            sb.append("The person's name is $sender. ")
-            toneFor(sender)?.let { sb.append("About this person and the tone to use: $it. ") }
+            sb.append("The person is $sender. ")
+            toneFor(sender)?.let { sb.append("Tone for them: $it. ") }
         }
-        sb.append("If they only say hello, say hello back. Keep each reply fresh and specific to their message. ")
+        if (summary.isNotBlank()) sb.append("Earlier in this chat: $summary. ")
         sb.append(styleRules(n))
         return sb.toString()
     }
 
     private fun helperPrompt(): String {
         val n = name()
-        return "You help $n write replies to chat messages. $n will send the reply personally, so write it in first person as $n, casual and natural. " +
-            "Use the same language and script as the message; Hinglish stays Hinglish. " +
-            "No markdown, no quotes, no 'AI' wording, at most one emoji. " + lengthRule() + styleRules(n)
+        return "You help $n write replies to chat messages. $n sends the reply personally, so write in first person as $n, casual and natural, " +
+            "in the same language and script as the message (Hinglish stays Hinglish). No markdown, no quotes, at most one emoji. " +
+            lengthRule() + styleRules(n)
     }
 
     companion object {
         private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
         private const val GROQ_70B = "llama-3.3-70b-versatile"
-        private const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-        private val GROQ_FALLBACKS = listOf("llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b")
-        private val OPENROUTER_FALLBACKS = listOf(
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "google/gemma-3-27b-it:free",
-            "mistralai/mistral-small-3.2-24b-instruct:free"
-        )
+        private const val DEFAULT_8B = "llama-3.1-8b-instant"
         private val PHONE = Regex("^\\+?[\\d\\s\\-()]{7,}$")
     }
 }

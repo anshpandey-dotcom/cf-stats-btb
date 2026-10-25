@@ -5,29 +5,35 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+class AiException(message: String) : Exception(message)
+
+class AiMeta(val limit: String?, val remaining: String?, val tokens: Int)
+
 object OpenAiClient {
 
     fun ask(
         url: String,
         key: String,
-        model: String,
-        fallbacks: List<String>,
+        models: List<String>,
         system: String,
         history: List<Pair<String, String>>,
-        quota: ((String?, String?, String?) -> Unit)? = null
+        maxTokens: Int,
+        meta: ((AiMeta) -> Unit)?
     ): String {
-        var failure: GeminiException? = null
-        for (candidate in (listOf(model) + fallbacks).distinct()) {
+        var failure: AiException? = null
+        for (candidate in models.distinct()) {
             try {
-                return call(url, key, candidate, system, history, quota)
-            } catch (e: GeminiException) {
+                return call(url, key, candidate, system, history, maxTokens, meta)
+            } catch (e: AiException) {
                 failure = e
                 val msg = e.message.orEmpty()
-                val modelProblem = msg.startsWith("404") || (msg.startsWith("400") && msg.contains("model", true))
+                val modelProblem = msg.startsWith("404") ||
+                    (msg.startsWith("400") && msg.contains("model", true)) ||
+                    msg == "empty response"
                 if (!modelProblem) throw e
             }
         }
-        throw failure ?: GeminiException("No model available")
+        throw failure ?: AiException("No model available")
     }
 
     private fun call(
@@ -36,7 +42,8 @@ object OpenAiClient {
         model: String,
         system: String,
         history: List<Pair<String, String>>,
-        quota: ((String?, String?, String?) -> Unit)?
+        maxTokens: Int,
+        meta: ((AiMeta) -> Unit)?
     ): String {
         val messages = JSONArray()
         messages.put(JSONObject().put("role", "system").put("content", system))
@@ -44,7 +51,7 @@ object OpenAiClient {
             messages.put(JSONObject().put("role", if (role == "model") "assistant" else "user").put("content", text))
         }
         val body = JSONObject().put("model", model).put("messages", messages)
-            .put("temperature", 0.8).put("max_tokens", 300)
+            .put("temperature", 0.8).put("max_tokens", maxTokens)
 
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
@@ -54,24 +61,26 @@ object OpenAiClient {
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Authorization", "Bearer $key")
-            conn.setRequestProperty("X-Title", "PING AI")
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
             val code = conn.responseCode
-            quota?.invoke(
-                conn.getHeaderField("x-ratelimit-limit-requests"),
-                conn.getHeaderField("x-ratelimit-remaining-requests"),
-                conn.getHeaderField("x-ratelimit-remaining-tokens")
-            )
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
+            val tokens = runCatching { JSONObject(raw).getJSONObject("usage").getInt("total_tokens") }.getOrDefault(0)
+            meta?.invoke(
+                AiMeta(
+                    conn.getHeaderField("x-ratelimit-limit-requests"),
+                    conn.getHeaderField("x-ratelimit-remaining-requests"),
+                    tokens
+                )
+            )
             if (code !in 200..299) {
                 val msg = runCatching { JSONObject(raw).getJSONObject("error").getString("message") }.getOrDefault(raw)
-                throw GeminiException("$code ${msg.take(160)}")
+                throw AiException("$code ${msg.take(160)}")
             }
             val answer = JSONObject(raw).getJSONArray("choices").getJSONObject(0)
-                .getJSONObject("message").getString("content").trim()
-            if (answer.isEmpty()) throw GeminiException("empty response")
+                .getJSONObject("message").optString("content", "").trim()
+            if (answer.isEmpty()) throw AiException("empty response")
             return answer
         } finally {
             conn.disconnect()

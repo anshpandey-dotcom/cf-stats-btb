@@ -1,6 +1,6 @@
 # PING AI
 
-Smart reply assistant powered by free AI APIs (Groq, OpenRouter, Google Gemini). Made By Ansh.
+Smart reply assistant powered by the free Groq API. Made By Ansh.
 
 ## Two builds
 
@@ -10,4 +10,4 @@ Smart reply assistant powered by free AI APIs (Groq, OpenRouter, Google Gemini).
 
 Google Play Protect may block sideloaded apps that use notification access. Turn off "Scan apps with Play Protect" while installing, then allow restricted settings for the app in Settings, Apps.
 
-Free API keys: Groq https://console.groq.com/keys, OpenRouter https://openrouter.ai/keys, Gemini https://aistudio.google.com/apikey
+Free API key: Groq https://console.groq.com/keys

@@ -2,8 +2,6 @@ package com.anshpandey.pingai
 
 import android.app.Notification
 import android.app.RemoteInput
-import android.content.Intent
-import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
@@ -28,6 +26,7 @@ class PingListenerService : NotificationListenerService() {
     private val handled = ConcurrentHashMap<String, Long>()
     private val sent = ConcurrentHashMap<String, MutableList<Pair<Long, String>>>()
     private val recentIn = ConcurrentHashMap<String, Long>()
+    private val mediaNoticeAt = ConcurrentHashMap<String, Long>()
 
     override fun onDestroy() {
         scheduler.shutdownNow()
@@ -55,29 +54,35 @@ class PingListenerService : NotificationListenerService() {
 
         if (style != null && messages.isNotEmpty()) {
             isGroup = style.isGroupConversation
+            val userKey = style.user.key
+            val others = messages.filter { m ->
+                val p = m.person
+                val self = (p?.key != null && p.key == userKey) || p?.name?.toString().equals("You", true)
+                !self
+            }
             sender = if (isGroup) {
                 style.conversationTitle?.toString() ?: title
             } else {
-                title.ifBlank {
-                    messages.lastOrNull { it.person?.key == null || it.person?.key != style.user.key }
-                        ?.person?.name?.toString().orEmpty()
-                }
+                others.lastOrNull { it.person != null }?.person?.name?.toString() ?: title
             }
             sender = sender.trim()
-            key = sbn.packageName + "|" + sender
+            if (sender.isEmpty() || sender.equals("You", true)) sender = title
+            if (sender.isEmpty() || sender.equals("You", true)) return
+            key = sbn.packageName + "|" + Classifier.normalize(sender)
+
             val seen = handled[key] ?: 0L
             val limit = System.currentTimeMillis() - 5 * 60_000L
             var newest = seen
-            for (m in messages) {
-                val self = m.person?.key != null && m.person?.key == style.user.key
-                if (m.timestamp > newest) newest = m.timestamp
-                if (self || m.timestamp <= seen || m.timestamp < limit) continue
+            for (m in messages) if (m.timestamp > newest) newest = m.timestamp
+            for (m in others) {
+                if (m.timestamp <= seen || m.timestamp < limit) continue
                 val t = m.text?.toString()?.trim().orEmpty()
                 if (t.isNotEmpty() && !isEcho(key, t)) incoming.add(t)
             }
             handled[key] = newest
         } else {
-            key = sbn.packageName + "|" + sender
+            if (sender.isEmpty() || sender.equals("You", true)) return
+            key = sbn.packageName + "|" + Classifier.normalize(sender)
             val t = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
             val seen = handled[key] ?: 0L
             if (n.`when` <= seen) return
@@ -85,10 +90,10 @@ class PingListenerService : NotificationListenerService() {
             if (t.isNotEmpty() && !t.startsWith("You:") && !isEcho(key, t)) incoming.add(t)
         }
 
-        if (sender.isEmpty() || incoming.isEmpty()) return
+        if (incoming.isEmpty()) return
         if (isGroup && store.skipGroups) return
 
-        val fresh = incoming.filter { !isDuplicate(sbn.packageName, sender, it) }
+        val fresh = incoming.filter { !isDuplicate(sbn.packageName, it) }
         if (fresh.isEmpty()) return
         fresh.forEach { store.addEvent("in", sender, it) }
         val useful = fresh.filter { !Classifier.isNoise(it) }
@@ -111,17 +116,20 @@ class PingListenerService : NotificationListenerService() {
             p.action = action
             p.input = input
             p.texts.addAll(useful)
-            val greetingOnly = p.texts.size == 1 && Classifier.greeting(p.texts[0]) != null
-            val wait = if (greetingOnly) 2 else store.waitSeconds
+            ReplyBridge.actions[key] = action to input
+            val quick = p.texts.size == 1 && Classifier.quickReply(p.texts[0]) != null
+            val wait = if (quick) 2 else store.waitSeconds
             val left = p.firstAt + 60_000L - System.currentTimeMillis()
             val delay = minOf(wait * 1000L, maxOf(500L, left))
             p.future?.cancel(false)
             p.future = scheduler.schedule({ fire(key) }, delay, TimeUnit.MILLISECONDS)
+            Live.waiting[key] = sender to (System.currentTimeMillis() + delay)
         }
     }
 
     private fun fire(key: String) {
         val p = synchronized(pending) { pending.remove(key) } ?: return
+        Live.waiting.remove(key)
         val store = Store(applicationContext)
         try {
             process(store, key, p)
@@ -132,29 +140,50 @@ class PingListenerService : NotificationListenerService() {
 
     private fun process(store: Store, key: String, p: Pending) {
         if (!store.enabled) return
-        val message = p.texts.joinToString("\n")
         val engine = ReplyEngine(applicationContext)
+        val texts = p.texts.toList()
+        val joined = texts.joinToString("\n")
+        val now = System.currentTimeMillis()
 
         if (!engine.allowed(p.sender)) {
             store.addEvent("skip", p.sender, "not on your reply list")
             return
         }
-
-        val now = System.currentTimeMillis()
         if (store.repliesToday(key) >= store.maxPerDay) {
             store.addEvent("skip", p.sender, "daily reply limit reached for this person")
             return
         }
+        if (Classifier.hasBlocked(joined, store.blockWords)) {
+            store.addEvent("skip", p.sender, "rude words, no reply")
+            return
+        }
 
-        val urgent = Classifier.urgent(message, store.urgentWords)
-        if (urgent) Notifier.urgent(applicationContext, p.sender, message)
+        var mem = store.memory(key)
+        val past = mem.turns.filter { it.first == "user" }.joinToString(" ") { it.second }
+        val hinglish = Classifier.looksHinglish("$past $joined") ?: true
+        val call = Classifier.callRequest(joined, store.callTriggers)
+        if (call) AlertCenter.start(applicationContext, key, p.sender, joined.replace("\n", " "), hinglish)
 
-        val history = store.history(key)
-        fun finish(text: String) {
-            history.add("user" to message)
-            history.add("model" to text)
-            store.saveHistory(key, history)
+        val textOnly = texts.filter { Classifier.mediaKind(it) == null }
+        val kinds = texts.mapNotNull { Classifier.mediaKind(it) }
+        val message = if (kinds.isEmpty()) joined else textOnly.joinToString("\n") + " (they also sent a ${kinds.first()})"
+
+        fun deliver(text: String, introduced: Boolean) {
+            val turns = mem.turns + ("user" to message) + ("model" to text)
+            mem = Memory(mem.summary, turns, now, mem.introduced || introduced)
+            store.saveMemory(key, mem)
             send(store, key, p, text)
+        }
+
+        if (textOnly.isEmpty()) {
+            val last = mediaNoticeAt[key] ?: 0L
+            if (now - last > 10 * 60_000L) {
+                mediaNoticeAt[key] = now
+                deliver(engine.mediaNotice(kinds.first(), hinglish), true)
+            } else {
+                store.addEvent("skip", p.sender, "media notice already sent")
+            }
+            return
         }
 
         val unknown = engine.isUnknown(p.sender)
@@ -163,70 +192,80 @@ class PingListenerService : NotificationListenerService() {
             return
         }
         if (unknown && store.unknownMode == Store.UNKNOWN_FIXED) {
-            finish(engine.fixedUnknown())
+            deliver(engine.fixedUnknown(), true)
             return
         }
 
         engine.customReply(message)?.let {
-            finish(it)
+            deliver(it, false)
             return
         }
 
-        if (!urgent) {
-            Classifier.greeting(message)?.let {
-                finish(it)
+        if (!call && kinds.isEmpty()) {
+            val quick = textOnly.map { Classifier.quickReply(it) }
+            if (quick.all { it != null }) {
+                deliver(quick.first()!!, false)
                 return
             }
         }
 
-        val first = now - store.lastReply(key) > 6 * 3_600_000L
-        val turns = history + ("user" to message)
+        val first = !mem.introduced
         var answer = try {
-            engine.reply(p.sender, turns, first, unknown, p.isGroup, urgent)
+            engine.reply(p.sender, mem, message, first, unknown, p.isGroup, call)
         } catch (e: Exception) {
             store.addEvent("skip", p.sender, "AI failed: ${e.message?.take(80)}")
+            if (call) deliver(engine.urgentFallback(hinglish), true)
             return
         }
-        if (isRepeat(history, answer)) {
+        if (isRepeat(mem, answer)) {
             answer = try {
-                engine.reply(p.sender, turns + ("user" to "(Your last reply was repeated. Write a different one that answers my message.)"), first, unknown, p.isGroup, urgent)
+                engine.reply(p.sender, mem, "$message (write a different reply)", first, unknown, p.isGroup, call)
             } catch (e: Exception) {
                 store.addEvent("skip", p.sender, "AI failed: ${e.message?.take(80)}")
                 return
             }
-            if (isRepeat(history, answer)) {
+            if (isRepeat(mem, answer)) {
                 store.addEvent("skip", p.sender, "avoided sending the same reply twice")
                 return
             }
         }
-        finish(answer)
+        deliver(answer, true)
+
+        if (mem.chars() > 700) {
+            val summary = try {
+                engine.compress(mem)
+            } catch (e: Exception) {
+                null
+            }
+            val next = if (summary != null) {
+                Memory(summary, emptyList(), now, true)
+            } else {
+                Memory(mem.summary, mem.turns.takeLast(4), now, true)
+            }
+            store.saveMemory(key, next)
+        }
     }
 
     private fun send(store: Store, key: String, p: Pending, text: String) {
         val action = p.action ?: return
         val input = p.input ?: return
-        val intent = Intent()
-        val bundle = Bundle()
-        bundle.putCharSequence(input.resultKey, text)
-        RemoteInput.addResultsToIntent(action.remoteInputs, intent, bundle)
-        action.actionIntent.send(applicationContext, 0, intent)
-
+        ReplyBridge.deliver(applicationContext, action, input, text)
         val now = System.currentTimeMillis()
         sent.getOrPut(key) { Collections.synchronizedList(mutableListOf<Pair<Long, String>>()) }.add(now to text)
         store.bumpReplies(key)
-        store.setLastReply(key, now)
         store.addEvent("out", p.sender, text)
     }
 
-    private fun isRepeat(history: List<Pair<String, String>>, answer: String): Boolean {
+    private fun isRepeat(mem: Memory, answer: String): Boolean {
         val norm = Classifier.normalize(answer)
-        return history.takeLast(6).any { it.first == "model" && Classifier.normalize(it.second) == norm }
+        return mem.turns.takeLast(6).any { it.first == "model" && Classifier.normalize(it.second) == norm }
     }
 
-    private fun isDuplicate(pkg: String, sender: String, text: String): Boolean {
+    private fun isDuplicate(pkg: String, text: String): Boolean {
         val now = System.currentTimeMillis()
-        val id = pkg + "|" + Classifier.normalize(sender) + "|" + Classifier.normalize(text)
-        recentIn.entries.removeAll { now - it.value > 120_000L }
+        val norm = Classifier.normalize(text)
+        val id = pkg + "|" + norm.ifEmpty { text }
+        recentIn.entries.removeAll { now - it.value > 30_000L }
         val seen = recentIn[id]
         recentIn[id] = now
         return seen != null
