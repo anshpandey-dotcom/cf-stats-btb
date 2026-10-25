@@ -25,7 +25,7 @@ class UiKit(private val ctx: Context) {
 
     fun card(title: String?, build: (LinearLayout) -> Unit): View {
         val card = MaterialCardView(ctx).apply {
-            radius = dp(14).toFloat()
+            radius = dp(18).toFloat()
             cardElevation = dp(2).toFloat()
             setCardBackgroundColor(color(R.color.card_bg))
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) }

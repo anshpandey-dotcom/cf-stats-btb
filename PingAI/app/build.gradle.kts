@@ -11,8 +11,8 @@ android {
         applicationId = "com.anshpandey.pingai"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.2.3"
+        versionCode = 7
+        versionName = "1.3"
     }
 
     signingConfigs {
@@ -40,7 +40,7 @@ android {
             applicationIdSuffix = ".auto"
             versionNameSuffix = "-auto"
             buildConfigField("boolean", "AUTO", "true")
-            resValue("string", "app_name", "PING AI Auto")
+            resValue("string", "app_name", "PING AI")
         }
     }
 

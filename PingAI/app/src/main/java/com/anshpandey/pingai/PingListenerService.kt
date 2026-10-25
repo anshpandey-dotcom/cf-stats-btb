@@ -213,6 +213,16 @@ class PingListenerService : NotificationListenerService() {
             return
         }
 
+        if (call) {
+            val line = engine.urgentFallback(hinglish)
+            if (isRepeat(mem, line)) {
+                store.addEvent("skip", p.sender, "call alert raised again")
+            } else {
+                deliver(line, true)
+            }
+            return
+        }
+
         val unknown = engine.isUnknown(p.sender)
         if (unknown && store.unknownMode == Store.UNKNOWN_OFF) {
             store.addEvent("skip", p.sender, "unknown number, replies are off")

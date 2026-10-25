@@ -51,7 +51,7 @@ class EmergencyActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, 0, 1f))
 
         box.addView(button("Receive (read it out)", "#25D366") { AlertCenter.receive(this) })
-        val who = Store(this).userName.ifBlank { "the owner" }
+        val who = Store(this).userName.ifBlank { "him" }
         box.addView(button("Message: I have told $who", "#128C7E") { AlertCenter.quickMessage(this) })
         box.addView(button("Cut", "#C62828") { AlertCenter.cut(this) })
         setContentView(box)

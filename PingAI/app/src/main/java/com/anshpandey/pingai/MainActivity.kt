@@ -54,7 +54,8 @@ class MainActivity : AppCompatActivity() {
     private var showSetup = false
     private var summaryText = ""
     private var leave: (() -> Unit)? = null
-    private var liveText: TextView? = null
+    private var connText: TextView? = null
+    private var reconnectBtn: View? = null
     private var usageText: TextView? = null
     private var usageBar: ProgressBar? = null
 
@@ -155,7 +156,7 @@ class MainActivity : AppCompatActivity() {
     private fun header(): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(ui.color(R.color.green_dark))
+            setBackgroundResource(R.drawable.bg_header)
         }
         box.addView(TextView(this).apply {
             text = "PING AI"
@@ -204,16 +205,19 @@ class MainActivity : AppCompatActivity() {
                 text = (tabIcons[name] ?: "") + "\n" + name
                 textSize = 12f
                 gravity = Gravity.CENTER
-                setPadding(0, ui.dp(6), 0, ui.dp(8))
+                setPadding(0, ui.dp(6), 0, ui.dp(6))
                 setOnClickListener { showTab(i) }
-            }, LinearLayout.LayoutParams(0, -2, 1f))
+            }, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            })
         }
     }
 
     private fun showTab(index: Int) {
         leave?.invoke()
         leave = null
-        liveText = null
+        connText = null
+        reconnectBtn = null
         usageText = null
         usageBar = null
         tab = index
@@ -230,6 +234,7 @@ class MainActivity : AppCompatActivity() {
             val on = i == index
             v.setTextColor(ui.color(if (on) R.color.green_mid else R.color.text_soft))
             v.setTypeface(null, if (on) Typeface.BOLD else Typeface.NORMAL)
+            if (on) v.setBackgroundResource(R.drawable.bg_tab_on) else v.background = null
         }
         refreshLive()
         refreshUsage()
@@ -251,7 +256,6 @@ class MainActivity : AppCompatActivity() {
     private fun homePage(): View = scroll { page ->
         if (BuildConfig.AUTO) {
             page.addView(autoCard())
-            page.addView(liveCard())
             page.addView(usageCard())
             if (!setupComplete() || showSetup) {
                 page.addView(setupCard())
@@ -291,24 +295,19 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, ui.dp(6), 0, 0)
             setTextColor(if (ok) ui.color(R.color.green_mid) else 0xFFC62828.toInt())
         })
-    }
-
-    private fun liveCard(): View = ui.card("Live") { box ->
-        val t = ui.body("")
-        liveText = t
-        box.addView(t)
-        box.addView(ui.outlined("Reconnect listener") {
+        val status = ui.hint("")
+        connText = status
+        box.addView(status)
+        val retry = ui.outlined("Reconnect listener") {
             if (Build.VERSION.SDK_INT >= 24) {
                 runCatching {
                     NotificationListenerService.requestRebind(ComponentName(this, PingListenerService::class.java))
                 }
             }
             toast("Reconnecting…")
-        })
-        box.addView(ui.hint("If it stays disconnected, open notification access, turn PING AI off and on again."))
-        box.addView(ui.outlined("Open notification access") {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        })
+        }
+        reconnectBtn = retry
+        box.addView(retry)
     }
 
     private fun usageCard(): View = ui.card("Groq usage today") { box ->
@@ -326,16 +325,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshLive() {
-        val view = liveText ?: return
-        val now = System.currentTimeMillis()
-        val lines = mutableListOf<String>()
-        lines.add(if (Live.connected) "✅ Listener connected" else "⚠️ Listener not connected")
-        if (Live.lastSeen.isNotEmpty()) lines.add("Last notification: " + Live.lastSeen)
-        Live.waiting.values.forEach { (name, at) ->
-            lines.add("⏳ $name: replying in ${maxOf(0L, (at - now) / 1000)}s")
-        }
-        store.events().takeLast(5).reversed().forEach { lines.add(eventLine(it)) }
-        view.text = lines.joinToString("\n").ifEmpty { "Waiting for messages…" }
+        val view = connText ?: return
+        view.text = if (Live.connected) "Listener: connected" else "Listener: not connected. Tap Reconnect, or turn notification access off and on."
+        reconnectBtn?.visibility = if (Live.connected) View.GONE else View.VISIBLE
     }
 
     private fun refreshUsage() {
@@ -462,7 +454,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun aiPage(): View = scroll { page ->
         page.addView(ui.card("AI Setup") { box ->
-            box.addView(ui.label("Your name"))
+            box.addView(ui.label("Your name (optional)"))
             val name = ui.edit(store.userName, "Your name")
             box.addView(name)
 

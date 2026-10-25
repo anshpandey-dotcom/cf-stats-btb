@@ -40,12 +40,13 @@ object OpenAiClient {
         system: String,
         history: List<Pair<String, String>>,
         maxTokens: Int,
-        meta: ((AiMeta) -> Unit)?
+        meta: ((AiMeta) -> Unit)?,
+        effort: String = "low"
     ): String {
         var failure: AiException? = null
         for (candidate in models.distinct()) {
             try {
-                return call(url, key, candidate, system, history, maxTokens, meta)
+                return call(url, key, candidate, system, history, maxTokens, meta, effort)
             } catch (e: AiException) {
                 failure = e
                 val code = e.message.orEmpty().take(3)
@@ -64,7 +65,8 @@ object OpenAiClient {
         system: String,
         history: List<Pair<String, String>>,
         maxTokens: Int,
-        meta: ((AiMeta) -> Unit)?
+        meta: ((AiMeta) -> Unit)?,
+        effort: String
     ): String {
         val messages = JSONArray()
         messages.put(JSONObject().put("role", "system").put("content", system))
@@ -73,8 +75,8 @@ object OpenAiClient {
         }
         val reasoning = model.contains("gpt-oss")
         val body = JSONObject().put("model", model).put("messages", messages)
-            .put("temperature", 0.8).put("max_tokens", if (reasoning) maxTokens + 250 else maxTokens)
-        if (reasoning) body.put("reasoning_effort", "low")
+            .put("temperature", 0.8).put("max_tokens", if (reasoning) maxTokens + (if (effort == "low") 250 else 450) else maxTokens)
+        if (reasoning) body.put("reasoning_effort", effort)
 
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
