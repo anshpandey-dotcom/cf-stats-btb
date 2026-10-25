@@ -36,14 +36,11 @@ final class GateOverlay implements SurfaceHolder.Callback {
         void onGrant(int minutes, String purpose, boolean emergency);
 
         void onLeave();
-
-        void onPinAccepted();
     }
 
     static final int NONE = 0;
     static final int GATE = 1;
     static final int TIME_UP = 2;
-    static final int PIN = 3;
 
     private static final int FALLBACK_MS = 23000;
     private static final long BREATH_MS = 4000;
@@ -82,7 +79,6 @@ final class GateOverlay implements SurfaceHolder.Callback {
     private EditText purpose;
     private EditText customMinutes;
     private LinearLayout chips;
-    private EditText pinInput;
     private TextView error;
     private Button primary;
     private Button secondary;
@@ -217,33 +213,6 @@ final class GateOverlay implements SurfaceHolder.Callback {
         return true;
     }
 
-    boolean showPin() {
-        if (!ensureAttached()) {
-            return false;
-        }
-        mode = PIN;
-        cancelSteps();
-        releasePlayer();
-        showPanel(false, true, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        title.setText(R.string.pin_title);
-        body.setText(R.string.pin_body);
-        pinInput.setText("");
-        pinInput.setVisibility(View.VISIBLE);
-        primary.setText(R.string.unlock);
-        primary.setOnClickListener(v -> {
-            if (store.checkPin(pinInput.getText().toString())) {
-                listener.onPinAccepted();
-            } else {
-                pinInput.setText("");
-                showError(R.string.wrong_password);
-            }
-        });
-        secondary.setText(R.string.cancel);
-        secondary.setVisibility(View.VISIBLE);
-        secondary.setOnClickListener(v -> listener.onLeave());
-        return true;
-    }
-
     void hide() {
         cancelSteps();
         releasePlayer();
@@ -318,7 +287,6 @@ final class GateOverlay implements SurfaceHolder.Callback {
         purpose = view.findViewById(R.id.purpose);
         customMinutes = view.findViewById(R.id.custom_minutes);
         chips = view.findViewById(R.id.chips);
-        pinInput = view.findViewById(R.id.pin_input);
         error = view.findViewById(R.id.panel_error);
         primary = view.findViewById(R.id.primary);
         secondary = view.findViewById(R.id.secondary);
@@ -414,7 +382,6 @@ final class GateOverlay implements SurfaceHolder.Callback {
         circleBox.setVisibility(withCircle ? View.VISIBLE : View.GONE);
         panelLogo.setVisibility(withLogo ? View.VISIBLE : View.GONE);
         planBox.setVisibility(View.GONE);
-        pinInput.setVisibility(View.GONE);
         error.setVisibility(View.GONE);
         primary.setVisibility(View.VISIBLE);
         secondary.setVisibility(View.VISIBLE);

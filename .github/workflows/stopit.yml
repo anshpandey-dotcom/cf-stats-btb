@@ -44,11 +44,16 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: stopit-v1.0.${{ github.run_number }}
-          name: StopIt v1.0.${{ github.run_number }}
+          tag_name: v1.0
+          name: StopIt v1.0
           target_commitish: ${{ github.sha }}
           make_latest: true
+          overwrite_files: true
           files: StopIt/StopIt.apk
           body: |
-            StopIt for Android. Download StopIt.apk below and install it.
-            After installing, open StopIt, turn on StopIt Guard in Accessibility, and pick the apps you want to guard.
+            StopIt v1.0 for Android. Download StopIt.apk below and install it.
+
+            Setup takes two permissions: Usage access and Display over other apps.
+            StopIt has no internet permission, so nothing ever leaves your phone.
+
+            Made by Ansh Pandey ❤️ https://www.instagram.com/iam.anshpandey

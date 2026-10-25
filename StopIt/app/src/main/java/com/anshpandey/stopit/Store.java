@@ -3,11 +3,7 @@ package com.anshpandey.stopit;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.util.Base64;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
@@ -22,9 +18,6 @@ final class Store {
     static final String KEY_ACTIVE = "active";
     static final String KEY_BLOCKED = "blocked";
     private static final String KEY_SEEDED = "seeded";
-    private static final String KEY_LOCKED = "locked";
-    private static final String KEY_PIN = "pin";
-    private static final String KEY_SALT = "salt";
     private static final String KEY_EMERGENCY_DAY = "emergency_day";
     private static final String KEY_EMERGENCY_USED = "emergency_used";
     private static final String KEY_MUTED = "muted_music";
@@ -167,49 +160,30 @@ final class Store {
         return prefs.getInt(KEY_EMERGENCY_DAY, 0) == today() ? prefs.getInt(KEY_EMERGENCY_USED, 0) : 0;
     }
 
-    private static int today() {
+    static int today() {
+        return dayKey(System.currentTimeMillis());
+    }
+
+    static int dayKey(long millis) {
         Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(millis);
         return c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR);
     }
 
-    boolean isLocked() {
-        return prefs.getBoolean(KEY_LOCKED, false);
+    void recordTurnBack(long savedMillis) {
+        int day = today();
+        prefs.edit()
+                .putInt("turned_back_" + day, turnedBack(day) + 1)
+                .putLong("saved_" + day, saved(day) + savedMillis)
+                .apply();
     }
 
-    void setLocked(boolean locked) {
-        prefs.edit().putBoolean(KEY_LOCKED, locked).apply();
+    int turnedBack(int day) {
+        return prefs.getInt("turned_back_" + day, 0);
     }
 
-    boolean hasPin() {
-        return prefs.contains(KEY_PIN);
-    }
-
-    void setPin(String pin) {
-        byte[] salt = new byte[16];
-        new SecureRandom().nextBytes(salt);
-        String encoded = Base64.encodeToString(salt, Base64.NO_WRAP);
-        prefs.edit().putString(KEY_SALT, encoded).putString(KEY_PIN, hash(encoded, pin)).apply();
-    }
-
-    boolean checkPin(String pin) {
-        String salt = prefs.getString(KEY_SALT, null);
-        String stored = prefs.getString(KEY_PIN, null);
-        return salt != null && stored != null && MessageDigest.isEqual(
-                stored.getBytes(StandardCharsets.UTF_8), hash(salt, pin).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static String hash(String salt, String pin) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            digest.update(salt.getBytes(StandardCharsets.UTF_8));
-            byte[] out = digest.digest(pin.getBytes(StandardCharsets.UTF_8));
-            for (int i = 0; i < 20000; i++) {
-                out = digest.digest(out);
-            }
-            return Base64.encodeToString(out, Base64.NO_WRAP);
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+    long saved(int day) {
+        return prefs.getLong("saved_" + day, 0);
     }
 
     boolean askedCreator() {

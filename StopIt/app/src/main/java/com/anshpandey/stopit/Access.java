@@ -2,7 +2,6 @@ package com.anshpandey.stopit;
 
 import android.Manifest;
 import android.app.AppOpsManager;
-import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -39,11 +38,6 @@ final class Access {
     static boolean battery(Context context) {
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         return pm == null || pm.isIgnoringBatteryOptimizations(context.getPackageName());
-    }
-
-    static boolean admin(Context context) {
-        DevicePolicyManager dpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-        return dpm != null && dpm.isAdminActive(GuardAdmin.component(context));
     }
 
     static boolean ready(Context context) {

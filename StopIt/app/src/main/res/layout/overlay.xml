@@ -256,21 +256,6 @@
                     android:textSize="15sp" />
             </LinearLayout>
 
-            <EditText
-                android:id="@+id/pin_input"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginTop="22dp"
-                android:background="@drawable/field_bg"
-                android:gravity="center"
-                android:hint="@string/password_hint"
-                android:inputType="numberPassword"
-                android:maxLength="12"
-                android:maxLines="1"
-                android:textColor="@color/text"
-                android:textColorHint="@color/muted"
-                android:textSize="20sp" />
-
             <TextView
                 android:id="@+id/panel_error"
                 android:layout_width="match_parent"

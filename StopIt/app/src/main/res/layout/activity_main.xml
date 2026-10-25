@@ -340,7 +340,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/lock_row"
+            android:id="@+id/dashboard_row"
             style="@style/Card"
             android:background="@drawable/card_bg"
             android:gravity="center_vertical"
@@ -355,13 +355,13 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/lock_title"
+                    android:text="@string/dashboard"
                     android:textColor="@color/text"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/lock_status"
+                    android:id="@+id/dashboard_status"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
@@ -369,44 +369,12 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <Switch
-                android:id="@+id/lock"
+            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:clickable="false"
-                android:focusable="false" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/quiet_row"
-            style="@style/Card"
-            android:background="@drawable/card_bg"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/quiet_title"
-                    android:textColor="@color/text"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/quiet_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="@color/muted"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
+                android:text="›"
+                android:textColor="@color/muted"
+                android:textSize="28sp" />
         </LinearLayout>
 
         <EditText

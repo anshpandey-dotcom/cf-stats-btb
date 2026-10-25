@@ -26,14 +26,17 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class GuardService extends Service
         implements SharedPreferences.OnSharedPreferenceChangeListener, GateOverlay.Listener {
 
-    static final String CHANNEL_STATUS = "status";
+    static final String CHANNEL_TODAY = "today";
     static final String CHANNEL_REMINDERS = "reminders";
     private static final int STATUS_ID = 41;
     private static final long INTERVAL = 500;
+    private static final long SUMMARY_INTERVAL = 60_000L;
     private static final long MINUTE = 60_000L;
 
     private static final Set<String> NEUTRAL = new HashSet<>(Arrays.asList(
@@ -47,16 +50,17 @@ public class GuardService extends Service
             "com.google.android.gms"));
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final LinkedHashMap<String, String> resumed = new LinkedHashMap<>();
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final LinkedHashMap<String, String[]> resumed = new LinkedHashMap<>();
+    private final Set<String> seenAtLast = new HashSet<>();
     private Store store;
     private GateOverlay overlay;
     private UsageStatsManager usage;
     private PowerManager power;
     private NotificationManager notifications;
+    private Notification lastStatus;
     private String foreground;
-    private String foregroundClass;
     private String guarded;
-    private String pinPass;
     private String reminderPkg;
     private long lastSeen;
     private long lastQuery;
@@ -67,6 +71,14 @@ public class GuardService extends Service
         public void run() {
             check();
             handler.postDelayed(this, INTERVAL);
+        }
+    };
+
+    private final Runnable summary = new Runnable() {
+        @Override
+        public void run() {
+            refreshSummary();
+            handler.postDelayed(this, SUMMARY_INTERVAL);
         }
     };
 
@@ -132,11 +144,11 @@ public class GuardService extends Service
         if (nm == null) {
             return;
         }
-        NotificationChannel status = new NotificationChannel(CHANNEL_STATUS,
-                context.getString(R.string.channel_status), NotificationManager.IMPORTANCE_MIN);
-        status.setShowBadge(false);
-        status.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
-        nm.createNotificationChannel(status);
+        nm.deleteNotificationChannel("status");
+        NotificationChannel today = new NotificationChannel(CHANNEL_TODAY,
+                context.getString(R.string.channel_today), NotificationManager.IMPORTANCE_LOW);
+        today.setShowBadge(false);
+        nm.createNotificationChannel(today);
         NotificationChannel reminders = new NotificationChannel(CHANNEL_REMINDERS,
                 context.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_HIGH);
         reminders.setSound(null, null);
@@ -156,10 +168,11 @@ public class GuardService extends Service
         power = (PowerManager) getSystemService(POWER_SERVICE);
         notifications = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         createChannels(this);
+        lastStatus = statusNotification(getString(R.string.app_name), getString(R.string.today_loading));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(STATUS_ID, statusNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            startForeground(STATUS_ID, lastStatus, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
-            startForeground(STATUS_ID, statusNotification());
+            startForeground(STATUS_ID, lastStatus);
         }
         store.listen(this);
         IntentFilter filter = new IntentFilter();
@@ -192,11 +205,13 @@ public class GuardService extends Service
         }
         polling = true;
         handler.post(poll);
+        handler.post(summary);
     }
 
     private void stopPolling() {
         polling = false;
         handler.removeCallbacks(poll);
+        handler.removeCallbacks(summary);
     }
 
     private void check() {
@@ -226,24 +241,31 @@ public class GuardService extends Service
             boolean up = type == UsageEvents.Event.MOVE_TO_FOREGROUND;
             boolean down = type == UsageEvents.Event.MOVE_TO_BACKGROUND || type == 23;
             String pkg = event.getPackageName();
-            if ((!up && !down) || pkg == null || NEUTRAL.contains(pkg) || event.getTimeStamp() < lastSeen) {
+            long stamp = event.getTimeStamp();
+            if ((!up && !down) || pkg == null || NEUTRAL.contains(pkg) || stamp < lastSeen) {
                 continue;
             }
-            lastSeen = event.getTimeStamp();
-            resumed.remove(pkg);
+            String key = pkg + "/" + event.getClassName();
+            String signature = type + "|" + key;
+            if (stamp == lastSeen && !seenAtLast.add(signature)) {
+                continue;
+            }
+            if (stamp > lastSeen) {
+                lastSeen = stamp;
+                seenAtLast.clear();
+                seenAtLast.add(signature);
+            }
+            resumed.remove(key);
             if (up) {
-                resumed.put(pkg, event.getClassName());
+                resumed.put(key, new String[]{pkg, event.getClassName()});
             }
         }
-        String top = null;
-        String topClass = null;
-        for (Map.Entry<String, String> item : resumed.entrySet()) {
-            top = item.getKey();
-            topClass = item.getValue();
+        String[] top = null;
+        for (Map.Entry<String, String[]> item : resumed.entrySet()) {
+            top = item.getValue();
         }
         if (top != null) {
-            foreground = top;
-            foregroundClass = topClass;
+            foreground = top[0];
         }
     }
 
@@ -254,23 +276,6 @@ public class GuardService extends Service
         }
         long now = System.currentTimeMillis();
         expireBackground(pkg, now);
-        if (pinPass != null && !pinPass.equals(pkg)) {
-            pinPass = null;
-        }
-        if (store.isLocked() && isAdminScreen()) {
-            if (pkg.equals(pinPass)) {
-                hideOverlay();
-            } else if (overlay.mode() != GateOverlay.PIN) {
-                guarded = pkg;
-                if (!overlay.showPin()) {
-                    guarded = null;
-                }
-            }
-            return;
-        }
-        if (overlay.mode() == GateOverlay.PIN) {
-            hideOverlay();
-        }
         if (!pkg.equals(reminderPkg)) {
             stopReminder();
         }
@@ -317,29 +322,33 @@ public class GuardService extends Service
         }
     }
 
-    private boolean isAdminScreen() {
-        return foregroundClass != null && foregroundClass.contains("DeviceAdminAdd");
-    }
-
     private void hideOverlay() {
         if (overlay.isShowing()) {
+            if (overlay.mode() == GateOverlay.GATE && guarded != null) {
+                recordTurnBack(guarded);
+            }
             overlay.hide();
         }
         guarded = null;
     }
 
+    private void recordTurnBack(String pkg) {
+        Context context = getApplicationContext();
+        worker.execute(() -> store.recordTurnBack(Stats.typicalVisit(context, pkg)));
+    }
+
     @Override
     public void onGrant(int minutes, String purpose, boolean emergency) {
         String pkg = guarded;
+        guarded = null;
+        overlay.hide();
         if (pkg == null) {
-            hideOverlay();
             return;
         }
         if (emergency) {
             store.useEmergency();
         }
         store.startSession(pkg, minutes, purpose);
-        hideOverlay();
         Store.Session session = store.session(pkg);
         if (session != null) {
             reminderPkg = null;
@@ -360,19 +369,13 @@ public class GuardService extends Service
     }
 
     @Override
-    public void onPinAccepted() {
-        pinPass = foreground;
-        hideOverlay();
-    }
-
-    @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         if (Store.KEY_ACTIVE.equals(key)) {
             if (!store.isActive()) {
                 stopSelf();
             }
         } else if (Store.KEY_BLOCKED.equals(key) || Store.KEY_CREATOR_PAUSE.equals(key)) {
-            notifyStatus();
+            refreshSummary();
             handler.removeCallbacks(evaluateLater);
             handler.post(evaluateLater);
         }
@@ -436,31 +439,67 @@ public class GuardService extends Service
         }
     }
 
-    private Notification statusNotification() {
-        int count = store.blocked().size();
-        String text = count == 1 ? getString(R.string.status_one) : getString(R.string.status_on, count);
-        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+    private void refreshSummary() {
+        Context context = getApplicationContext();
+        Set<String> pkgs = store.blocked();
+        int day = Store.today();
+        worker.execute(() -> {
+            Map<String, Stats.App> apps = Stats.range(context, pkgs, Stats.dayStart(0), System.currentTimeMillis());
+            long total = 0;
+            StringBuilder lines = new StringBuilder();
+            for (Stats.App app : apps.values()) {
+                if (app.total < 60_000L) {
+                    continue;
+                }
+                total += app.total;
+                if (lines.length() > 0) {
+                    lines.append('\n');
+                }
+                lines.append(labelOf(app.pkg)).append("  ").append(Stats.duration(context, app.total));
+                long reels = app.reels();
+                if (reels > 0) {
+                    lines.append("  ·  ").append(getString(R.string.reels_estimate, reels));
+                }
+            }
+            long saved = store.saved(day);
+            int back = store.turnedBack(day);
+            if (back > 0) {
+                if (lines.length() > 0) {
+                    lines.append('\n');
+                }
+                lines.append(getString(R.string.saved_line, Stats.duration(context, saved), back));
+            }
+            String title = total > 0
+                    ? getString(R.string.today_title, Stats.duration(context, total))
+                    : getString(R.string.today_clean);
+            String text = lines.length() > 0 ? lines.toString() : getString(R.string.today_clean_body);
+            handler.post(() -> {
+                lastStatus = statusNotification(title, text);
+                try {
+                    notifications.notify(STATUS_ID, lastStatus);
+                } catch (RuntimeException ignored) {
+                }
+            });
+        });
+    }
+
+    private Notification statusNotification(String title, String text) {
+        Intent intent = new Intent(this, DashboardActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent open = PendingIntent.getActivity(this, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_STATUS)
+                ? new Notification.Builder(this, CHANNEL_TODAY)
                 : new Notification.Builder(this);
         return builder
                 .setSmallIcon(R.drawable.ic_stat_guard)
-                .setContentTitle(getString(R.string.app_name))
+                .setContentTitle(title)
                 .setContentText(text)
+                .setStyle(new Notification.BigTextStyle().bigText(text))
                 .setContentIntent(open)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
                 .setShowWhen(false)
-                .setVisibility(Notification.VISIBILITY_SECRET)
-                .setPriority(Notification.PRIORITY_MIN)
                 .build();
-    }
-
-    private void notifyStatus() {
-        try {
-            notifications.notify(STATUS_ID, statusNotification());
-        } catch (RuntimeException ignored) {
-        }
     }
 
     private String labelOf(String pkg) {
@@ -483,6 +522,7 @@ public class GuardService extends Service
         } catch (IllegalArgumentException ignored) {
         }
         overlay.hide();
+        worker.shutdown();
         super.onDestroy();
     }
 

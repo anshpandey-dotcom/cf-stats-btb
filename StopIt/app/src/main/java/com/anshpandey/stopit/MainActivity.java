@@ -3,7 +3,6 @@ package com.anshpandey.stopit;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.admin.DevicePolicyManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Intent;
@@ -18,7 +17,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
-import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -48,7 +46,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
 
     private static final String PROFILE = "https://www.instagram.com/iam.anshpandey";
-    private static final int REQUEST_ADMIN = 7;
     private static final int[] SECTIONS = {R.string.section_fun, R.string.section_used, R.string.section_other};
     private static final int[] PAUSES = {30, 60, 120, 240};
 
@@ -97,11 +94,9 @@ public class MainActivity extends Activity {
 
     private Store store;
     private Switch master;
-    private Switch lock;
     private TextView status;
     private TextView setupProgress;
     private TextView creatorStatus;
-    private TextView lockStatus;
     private View setupCard;
     private View restrictedBox;
     private View creatorRow;
@@ -131,11 +126,9 @@ public class MainActivity extends Activity {
         GuardService.createChannels(this);
 
         master = findViewById(R.id.master);
-        lock = findViewById(R.id.lock);
         status = findViewById(R.id.status);
         setupProgress = findViewById(R.id.setup_progress);
         creatorStatus = findViewById(R.id.creator_status);
-        lockStatus = findViewById(R.id.lock_status);
         setupCard = findViewById(R.id.setup_card);
         restrictedBox = findViewById(R.id.restricted_box);
         creatorRow = findViewById(R.id.creator_row);
@@ -149,16 +142,8 @@ public class MainActivity extends Activity {
         findViewById(R.id.app_info).setOnClickListener(v ->
                 open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
         creatorRow.setOnClickListener(v -> onCreatorTap());
-        findViewById(R.id.lock_row).setOnClickListener(v -> onLockTap());
-        View quiet = findViewById(R.id.quiet_row);
-        ((TextView) findViewById(R.id.quiet_status)).setText(R.string.quiet_status);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            quiet.setOnClickListener(v -> open(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
-                    .putExtra(Settings.EXTRA_CHANNEL_ID, GuardService.CHANNEL_STATUS)));
-        } else {
-            quiet.setVisibility(View.GONE);
-        }
+        ((TextView) findViewById(R.id.dashboard_status)).setText(R.string.dashboard_sub);
+        findViewById(R.id.dashboard_row).setOnClickListener(v -> startActivity(new Intent(this, DashboardActivity.class)));
         findViewById(R.id.about).setOnClickListener(v -> open(new Intent(Intent.ACTION_VIEW, Uri.parse(PROFILE))));
         try {
             String name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
@@ -257,14 +242,6 @@ public class MainActivity extends Activity {
         } else {
             creatorStatus.setText(R.string.creator_ready);
         }
-
-        boolean admin = Access.admin(this);
-        if (store.isLocked() && !admin) {
-            lockStatus.setText(R.string.lock_pending);
-        } else {
-            lockStatus.setText(store.isLocked() ? R.string.lock_on : R.string.lock_off);
-        }
-        lock.setChecked(store.isLocked() && admin);
     }
 
     private void markStep(int badgeId, int buttonId, boolean ok, String number) {
@@ -279,11 +256,7 @@ public class MainActivity extends Activity {
     }
 
     private void toggleMaster() {
-        if (store.isActive() && store.isLocked()) {
-            askPin(() -> setActive(false));
-        } else {
-            setActive(!store.isActive());
-        }
+        setActive(!store.isActive());
     }
 
     private void setActive(boolean active) {
@@ -293,12 +266,7 @@ public class MainActivity extends Activity {
     }
 
     private void toggleApp(Row row) {
-        boolean next = !row.toggle.isChecked();
-        if (!next && store.isLocked()) {
-            askPin(() -> setBlocked(row, false));
-        } else {
-            setBlocked(row, next);
-        }
+        setBlocked(row, !row.toggle.isChecked());
     }
 
     private void setBlocked(Row row, boolean blocked) {
@@ -362,102 +330,6 @@ public class MainActivity extends Activity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
-    }
-
-    private void onLockTap() {
-        if (!store.isLocked()) {
-            createPin(() -> {
-                store.setLocked(true);
-                requestAdmin();
-            });
-        } else if (!Access.admin(this)) {
-            requestAdmin();
-        } else {
-            askPin(() -> {
-                DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(DEVICE_POLICY_SERVICE);
-                if (dpm != null) {
-                    dpm.removeActiveAdmin(GuardAdmin.component(this));
-                }
-                store.setLocked(false);
-                refresh();
-            });
-        }
-    }
-
-    private void requestAdmin() {
-        Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, GuardAdmin.component(this))
-                .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.admin_explain));
-        try {
-            startActivityForResult(intent, REQUEST_ADMIN);
-        } catch (RuntimeException e) {
-            refresh();
-        }
-    }
-
-    private EditText pinField(int hint) {
-        EditText field = new EditText(this);
-        field.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        field.setHint(hint);
-        field.setTextColor(getColor(R.color.text));
-        field.setHintTextColor(getColor(R.color.muted));
-        return field;
-    }
-
-    private LinearLayout dialogBox(View... children) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (22 * getResources().getDisplayMetrics().density);
-        box.setPadding(pad, pad / 2, pad, 0);
-        for (View child : children) {
-            box.addView(child);
-        }
-        return box;
-    }
-
-    private void createPin(Runnable done) {
-        EditText first = pinField(R.string.password_hint);
-        EditText second = pinField(R.string.password_again);
-        AlertDialog dialog = new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-                .setTitle(R.string.create_password)
-                .setMessage(R.string.create_password_body)
-                .setView(dialogBox(first, second))
-                .setPositiveButton(R.string.save, null)
-                .setNegativeButton(R.string.cancel, null)
-                .create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String pin = first.getText().toString();
-            if (pin.length() < 4) {
-                first.setError(getString(R.string.password_short));
-            } else if (!pin.equals(second.getText().toString())) {
-                second.setError(getString(R.string.password_mismatch));
-            } else {
-                store.setPin(pin);
-                dialog.dismiss();
-                done.run();
-            }
-        }));
-        dialog.show();
-    }
-
-    private void askPin(Runnable done) {
-        EditText field = pinField(R.string.password_hint);
-        AlertDialog dialog = new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-                .setTitle(R.string.enter_password)
-                .setView(dialogBox(field))
-                .setPositiveButton(R.string.unlock, null)
-                .setNegativeButton(R.string.cancel, null)
-                .create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (store.checkPin(field.getText().toString())) {
-                dialog.dismiss();
-                done.run();
-            } else {
-                field.setText("");
-                field.setError(getString(R.string.wrong_password));
-            }
-        }));
-        dialog.show();
     }
 
     private void loadApps() {
@@ -623,8 +495,10 @@ public class MainActivity extends Activity {
     }
 
     private void requestBattery() {
-        if (!open(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())))) {
-            open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        if (open(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))) {
+            Toast.makeText(this, R.string.find_battery, Toast.LENGTH_LONG).show();
+        } else {
+            open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
         }
     }
 

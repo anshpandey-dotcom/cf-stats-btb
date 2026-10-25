@@ -45,29 +45,41 @@
         <item quantity="other">%1$d hours</item>
     </plurals>
 
-    <string name="lock_title">Uninstall lock</string>
-    <string name="lock_off">Off. Anyone can remove StopIt.</string>
-    <string name="lock_on">On. Your password is needed to remove StopIt or turn things off.</string>
-    <string name="lock_pending">Almost done. Tap and allow StopIt as device admin.</string>
-    <string name="admin_label">StopIt uninstall lock</string>
-    <string name="admin_description">Stops StopIt from being uninstalled without your password. StopIt does not use any other device admin power.</string>
-    <string name="admin_explain">This only blocks uninstalling StopIt. It cannot see, change or erase anything on your phone.</string>
-    <string name="admin_disable_warning">This removes the StopIt uninstall lock.</string>
-
-    <string name="quiet_title">Hide the always-on notification</string>
-    <string name="quiet_status">StopIt keeps working even after you hide it</string>
-
-    <string name="create_password">Create a password</string>
-    <string name="create_password_body">You will need it to remove StopIt, turn off protection or unguard an app.</string>
-    <string name="password_hint">Password (4+ digits)</string>
-    <string name="password_again">Type it again</string>
-    <string name="password_short">Use at least 4 digits</string>
-    <string name="password_mismatch">Passwords don\'t match</string>
-    <string name="enter_password">Enter your StopIt password</string>
-    <string name="wrong_password">Wrong password</string>
-    <string name="save">Save</string>
-    <string name="unlock">Unlock</string>
     <string name="cancel">Cancel</string>
+    <string name="find_battery">Find StopIt and choose Don\'t optimize or No restrictions</string>
+
+    <string name="dashboard">Dashboard</string>
+    <string name="dashboard_sub">Your screen time, reels and time saved</string>
+    <string name="back">Back</string>
+    <string name="today">Today</string>
+    <string name="approx">≈ %1$s</string>
+    <string name="saved_today">Time saved today</string>
+    <string name="turned_back_one">StopIt turned you back once today</string>
+    <string name="turned_back_many">StopIt turned you back %1$d times today</string>
+    <string name="time_today">On guarded apps</string>
+    <string name="opens_today">Times opened</string>
+    <string name="per_app_today">Today by app</string>
+    <string name="no_apps_guarded">No guarded apps yet.</string>
+    <plurals name="opens">
+        <item quantity="one">Opened %1$d time</item>
+        <item quantity="other">Opened %1$d times</item>
+    </plurals>
+    <string name="reels_estimate">≈ %1$d reels/shorts</string>
+    <string name="chart_time">Time on guarded apps · last 7 days</string>
+    <string name="chart_visit">Average visit length · last 7 days</string>
+    <string name="chart_visit_note">How long you stay each time you open a guarded app. Tap a bar to see the value.</string>
+    <string name="chart_saved">Time saved · last 7 days</string>
+    <string name="dashboard_note">How these numbers work: time and opens come straight from Android and are exact. Android does not let apps see single reels or shorts without Accessibility access, which Google blocks for apps like this, so reels are estimated at about 20 seconds each. Time saved adds your usual visit length every time StopIt turns you back. Everything is calculated on your phone.</string>
+    <string name="duration_hours">%1$dh %2$02dm</string>
+    <string name="duration_minutes">%1$dm</string>
+    <string name="duration_seconds">%1$ds</string>
+
+    <string name="channel_today">Today\'s screen time</string>
+    <string name="today_loading">Counting today\'s screen time…</string>
+    <string name="today_title">Today: %1$s on guarded apps</string>
+    <string name="today_clean">No scrolling today 💪</string>
+    <string name="today_clean_body">Keep it going. Stay hard.</string>
+    <string name="saved_line">Saved ≈ %1$s · turned back %2$d×</string>
 
     <string name="search_hint">Search apps</string>
     <string name="section_fun">Entertainment</string>
@@ -76,7 +88,6 @@
     <string name="made_by">App made by Ansh Pandey ❤️</string>
     <string name="version">Version %1$s</string>
 
-    <string name="channel_status">Protection status</string>
     <string name="channel_reminders">Time left reminders</string>
     <string name="reminder_many">%1$d min left on %2$s</string>
     <string name="reminder_one">1 min left on %1$s</string>
@@ -110,6 +121,4 @@
     <string name="time_up">Time\'s up</string>
     <string name="time_up_body">Your %1$d min on %2$s are over.</string>
     <string name="close_app">Close %1$s</string>
-    <string name="pin_title">StopIt is locked</string>
-    <string name="pin_body">Enter your StopIt password to change this setting.</string>
 </resources>
