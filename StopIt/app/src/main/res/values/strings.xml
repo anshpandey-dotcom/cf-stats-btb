@@ -20,4 +20,10 @@
     <string name="find_usage">Find StopIt and allow usage access</string>
     <string name="find_overlay">Find StopIt and allow display over other apps</string>
     <string name="channel_name">Protection status</string>
+    <string name="restricted_title">Switch greyed out?</string>
+    <string name="restricted_steps">Android locks this for apps installed from a file. Unlock it once:\n1. Tap Allow usage access above and try the switch once.\n2. Tap Open App info below.\n3. Tap ⋮ at the top right and choose Allow restricted settings.\n4. Come back and tap Allow usage access again.</string>
+    <string name="app_info">Open App info</string>
+    <string name="section_fun">Entertainment</string>
+    <string name="section_used">Most used</string>
+    <string name="section_other">Other apps</string>
 </resources>

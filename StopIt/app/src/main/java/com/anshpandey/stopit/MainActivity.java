@@ -2,10 +2,13 @@ package com.anshpandey.stopit;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.usage.UsageStats;
+import android.app.usage.UsageStatsManager;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -25,13 +28,54 @@ import android.widget.Toast;
 
 import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity implements AppAdapter.Listener {
+
+    private static final Set<String> FUN = new HashSet<>(Arrays.asList(
+            Store.INSTAGRAM, Store.INSTAGRAM_LITE, Store.YOUTUBE,
+            "com.instagram.barcelona",
+            "com.google.android.apps.youtube.music",
+            "com.google.android.apps.youtube.kids",
+            "com.facebook.katana",
+            "com.facebook.lite",
+            "com.snapchat.android",
+            "com.twitter.android",
+            "com.reddit.frontpage",
+            "com.pinterest",
+            "com.zhiliaoapp.musically",
+            "com.ss.android.ugc.trill",
+            "org.telegram.messenger",
+            "com.discord",
+            "tv.twitch.android.app",
+            "com.netflix.mediaclient",
+            "com.amazon.avod.thirdpartyclient",
+            "in.startv.hotstar",
+            "com.jio.media.ondemand",
+            "com.graymatrix.did",
+            "com.sonyliv",
+            "com.mxtech.videoplayer.ad",
+            "in.mohalla.video",
+            "in.mohalla.sharechat",
+            "com.eterno.shortvideos",
+            "com.spotify.music",
+            "com.jio.media.jiobeats",
+            "com.gaana",
+            "com.pocketfm.novel",
+            "com.dts.freefireth",
+            "com.dts.freefiremax",
+            "com.pubg.imobile",
+            "com.tencent.ig",
+            "com.supercell.clashofclans",
+            "com.mojang.minecraftpe",
+            "com.roblox.client"));
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -46,7 +90,9 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
     private Button usageAccess;
     private Button overlayAccess;
     private Button battery;
+    private View restrictedBox;
     private ProgressBar loading;
+    private boolean usageGranted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +109,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         usageAccess = findViewById(R.id.usage_access);
         overlayAccess = findViewById(R.id.overlay_access);
         battery = findViewById(R.id.battery);
+        restrictedBox = findViewById(R.id.restricted_box);
         loading = findViewById(R.id.loading);
         ListView list = findViewById(R.id.apps);
         EditText search = findViewById(R.id.search);
@@ -81,6 +128,8 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         usageAccess.setOnClickListener(v -> openUsageAccess());
         overlayAccess.setOnClickListener(v -> openOverlayAccess());
         battery.setOnClickListener(v -> requestBattery());
+        findViewById(R.id.app_info).setOnClickListener(v ->
+                open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -102,6 +151,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
             }
         });
 
+        usageGranted = Access.usage(this);
         loadApps();
     }
 
@@ -109,6 +159,11 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
     protected void onResume() {
         super.onResume();
         refresh();
+        boolean granted = Access.usage(this);
+        if (granted != usageGranted) {
+            usageGranted = granted;
+            loadApps();
+        }
         GuardService.sync(this);
     }
 
@@ -130,6 +185,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
         boolean serviceOn = usageOk && overlayOk;
         boolean batteryOk = Access.battery(this);
         usageAccess.setVisibility(usageOk ? View.GONE : View.VISIBLE);
+        restrictedBox.setVisibility(!usageOk && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? View.VISIBLE : View.GONE);
         overlayAccess.setVisibility(overlayOk ? View.GONE : View.VISIBLE);
         setupBody.setVisibility(serviceOn ? View.GONE : View.VISIBLE);
         battery.setVisibility(batteryOk ? View.GONE : View.VISIBLE);
@@ -168,6 +224,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
 
     private List<AppEntry> collectApps() {
         PackageManager pm = getPackageManager();
+        Map<String, Long> usage = usageTimes();
         Set<String> seen = new HashSet<>();
         List<AppEntry> apps = new ArrayList<>();
         Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
@@ -176,7 +233,7 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
             if (pkg.equals(getPackageName()) || !seen.add(pkg)) {
                 continue;
             }
-            apps.add(new AppEntry(pkg, info.loadLabel(pm).toString(), info.loadIcon(pm)));
+            apps.add(entry(pkg, info.activityInfo.applicationInfo, info.loadLabel(pm).toString(), info.loadIcon(pm), usage));
         }
         for (String pkg : new String[]{Store.INSTAGRAM, Store.INSTAGRAM_LITE, Store.YOUTUBE}) {
             if (seen.contains(pkg)) {
@@ -185,21 +242,72 @@ public class MainActivity extends Activity implements AppAdapter.Listener {
             try {
                 ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
                 seen.add(pkg);
-                apps.add(new AppEntry(pkg, pm.getApplicationLabel(info).toString(), pm.getApplicationIcon(info)));
+                apps.add(entry(pkg, info, pm.getApplicationLabel(info).toString(), pm.getApplicationIcon(info), usage));
             } catch (PackageManager.NameNotFoundException ignored) {
             }
         }
-        Set<String> blocked = store.blocked();
         Collator collator = Collator.getInstance();
         apps.sort((a, b) -> {
-            boolean ba = blocked.contains(a.pkg);
-            boolean bb = blocked.contains(b.pkg);
-            if (ba != bb) {
-                return ba ? -1 : 1;
+            if (a.section != b.section) {
+                return Integer.compare(a.section, b.section);
+            }
+            if (a.usage != b.usage) {
+                return Long.compare(b.usage, a.usage);
             }
             return collator.compare(a.label, b.label);
         });
         return apps;
+    }
+
+    private AppEntry entry(String pkg, ApplicationInfo info, String label, Drawable icon, Map<String, Long> usage) {
+        long time = usage.containsKey(pkg) ? usage.get(pkg) : 0L;
+        int section;
+        if (isEntertainment(pkg, info)) {
+            section = AppEntry.FUN;
+        } else if (time >= 60_000L) {
+            section = AppEntry.USED;
+        } else {
+            section = AppEntry.OTHER;
+        }
+        return new AppEntry(pkg, label, icon, section, time);
+    }
+
+    private boolean isEntertainment(String pkg, ApplicationInfo info) {
+        if (FUN.contains(pkg)) {
+            return true;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && info != null) {
+            switch (info.category) {
+                case ApplicationInfo.CATEGORY_GAME:
+                case ApplicationInfo.CATEGORY_VIDEO:
+                case ApplicationInfo.CATEGORY_SOCIAL:
+                case ApplicationInfo.CATEGORY_AUDIO:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, Long> usageTimes() {
+        Map<String, Long> times = new HashMap<>();
+        if (!Access.usage(this)) {
+            return times;
+        }
+        UsageStatsManager manager = (UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
+        if (manager == null) {
+            return times;
+        }
+        long now = System.currentTimeMillis();
+        try {
+            Map<String, UsageStats> stats = manager.queryAndAggregateUsageStats(now - 14L * 24 * 60 * 60 * 1000, now);
+            for (Map.Entry<String, UsageStats> item : stats.entrySet()) {
+                times.put(item.getKey(), item.getValue().getTotalTimeInForeground());
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return times;
     }
 
     private void openUsageAccess() {
