@@ -7,6 +7,9 @@ on:
       - ".github/workflows/pingai-apk.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,3 +38,9 @@ jobs:
         with:
           name: PING-AI-V1
           path: PingAI/PING-AI-V1.apk
+      - name: Publish direct APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete v1 --cleanup-tag --yes || true
+          gh release create v1 PING-AI-V1.apk --target "$GITHUB_SHA" --title "PING AI V1" --notes "Direct APK download. Made By Ansh."
