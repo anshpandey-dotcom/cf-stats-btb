@@ -25,25 +25,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-      - name: Build release APK
+      - name: Build release APK and AAB
         run: gradle assembleRelease bundleRelease --no-daemon
-      - name: Verify signature and rename
+      - name: Verify and collect
         run: |
-          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1)
-          $APKSIGNER verify --verbose app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk PING-AI-V1.apk
-          cp app/build/outputs/bundle/release/app-release.aab PING-AI-V1.aab
-          AAPT=$(ls $ANDROID_HOME/build-tools/*/aapt | tail -1)
-          $AAPT dump badging PING-AI-V1.apk | grep -E "^package|sdkVersion|targetSdk|launchable"
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          cp app/build/outputs/apk/lite/release/app-lite-release.apk PING-AI-V1.apk
+          cp app/build/outputs/apk/auto/release/app-auto-release.apk PING-AI-V1-Auto.apk
+          cp app/build/outputs/bundle/liteRelease/app-lite-release.aab PING-AI-V1.aab
+          cp app/build/outputs/bundle/autoRelease/app-auto-release.aab PING-AI-V1-Auto.aab
+          for f in PING-AI-V1.apk PING-AI-V1-Auto.apk; do
+            $BT/apksigner verify --verbose $f | head -4
+            $BT/aapt dump badging $f | grep -E "^package|sdkVersion|targetSdk|uses-permission"
+          done
+          $BT/aapt dump xmltree PING-AI-V1.apk AndroidManifest.xml > lite-manifest.txt
+          if grep -q "NotificationListenerService" lite-manifest.txt; then echo "Lite build must not contain a notification listener"; exit 1; fi
+          grep -q "NotificationListenerService" <($BT/aapt dump xmltree PING-AI-V1-Auto.apk AndroidManifest.xml)
       - uses: actions/upload-artifact@v4
         with:
           name: PING-AI-V1
           path: |
             PingAI/PING-AI-V1.apk
+            PingAI/PING-AI-V1-Auto.apk
             PingAI/PING-AI-V1.aab
+            PingAI/PING-AI-V1-Auto.aab
       - name: Publish direct APK release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete v1 --cleanup-tag --yes || true
-          gh release create v1 PING-AI-V1.apk PING-AI-V1.aab --target "$GITHUB_SHA" --title "PING AI V1" --notes "Direct APK download. Made By Ansh."
+          gh release create v1 PING-AI-V1.apk PING-AI-V1-Auto.apk PING-AI-V1.aab PING-AI-V1-Auto.aab --target "$GITHUB_SHA" --title "PING AI V1" --notes "PING-AI-V1.apk installs cleanly on Android 5.0 and above (works on Android 14+). PING-AI-V1-Auto.apk adds full auto reply and needs Play Protect scan turned off while installing. Made By Ansh."

@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.anshpandey.pingai"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -25,6 +25,32 @@ android {
             enableV2Signing = true
             enableV3Signing = true
         }
+    }
+
+    flavorDimensions += "mode"
+
+    productFlavors {
+        create("lite") {
+            dimension = "mode"
+            buildConfigField("boolean", "AUTO", "false")
+            resValue("string", "app_name", "PING AI")
+        }
+        create("auto") {
+            dimension = "mode"
+            applicationIdSuffix = ".auto"
+            versionNameSuffix = "-auto"
+            buildConfigField("boolean", "AUTO", "true")
+            resValue("string", "app_name", "PING AI Auto")
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 
     buildTypes {

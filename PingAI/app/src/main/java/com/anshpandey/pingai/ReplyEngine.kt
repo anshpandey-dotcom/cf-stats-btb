@@ -45,6 +45,18 @@ class ReplyEngine(context: Context) {
         return tag() + "\n" + answer
     }
 
+    fun helper(message: String): String {
+        matchCustom(message)?.let { return wrapCustom(it) }
+        if (store.apiKey.isBlank()) throw GeminiException("Add your Gemini API key in PING AI first.")
+        val answer = GeminiClient.ask(
+            store.apiKey,
+            store.model,
+            systemPrompt("the sender", false, false),
+            listOf("user" to message)
+        )
+        return tag() + "\n" + answer
+    }
+
     fun test(): String {
         val sys = systemPrompt("Test", false, false)
         return GeminiClient.ask(store.apiKey, store.model, sys, listOf("user" to "Hi, are you there?"))

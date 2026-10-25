@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
@@ -30,6 +31,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import java.util.concurrent.Executors
@@ -54,33 +58,49 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         store = Store(this)
 
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(header())
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.WHITE)
+        }
+        val header = header()
+        root.addView(header)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
-        content.addView(statusCard())
+        content.addView(if (BuildConfig.AUTO) statusCard() else helperCard())
         content.addView(aiCard())
         content.addView(repliesCard())
-        content.addView(filterCard())
-        content.addView(unknownCard())
-        content.addView(behaviourCard())
-        content.addView(logCard())
+        if (BuildConfig.AUTO) {
+            content.addView(filterCard())
+            content.addView(unknownCard())
+            content.addView(behaviourCard())
+            content.addView(logCard())
+        }
 
         val scroll = ScrollView(this).apply { addView(content) }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(footer())
         setContentView(root)
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            header.setPadding(dp(18) + bars.left, dp(18) + bars.top, dp(18) + bars.right, dp(14))
+            root.setPadding(0, 0, 0, maxOf(bars.bottom, ime.bottom))
+            insets
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        refreshStatus()
         refreshLists()
+        if (!BuildConfig.AUTO) return
+        refreshStatus()
         logText.text = store.logLines().joinToString("\n").ifEmpty { "No activity yet." }
-        if (hasAccess()) {
+        if (hasAccess() && Build.VERSION.SDK_INT >= 24) {
             runCatching {
                 NotificationListenerService.requestRebind(ComponentName(this, PingListenerService::class.java))
             }
@@ -144,6 +164,22 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.WHITE)
             setPadding(0, dp(10), 0, dp(10))
         }
+    }
+
+    private fun helperCard(): View = card("Reply Helper") { box ->
+        box.addView(hint("Get an AI reply for any message in three ways:"))
+        box.addView(hint("1) In any chat app, select the message text, open the menu and choose PING AI Reply.\n2) Share text to PING AI Reply.\n3) Paste a message below."))
+        val input = edit("", "Paste the message you received")
+        input.minLines = 3
+        box.addView(input)
+        box.addView(button("Generate reply") {
+            val text = input.text.toString().trim()
+            if (text.isEmpty()) {
+                Toast.makeText(this, "Paste a message first", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivity(Intent(this, ReplyActivity::class.java).putExtra(ReplyActivity.EXTRA_TEXT, text))
+            }
+        })
     }
 
     private fun statusCard(): View = card("Auto Reply") { box ->
@@ -320,6 +356,7 @@ class MainActivity : AppCompatActivity() {
                 refreshLists()
             })
         }
+        if (!BuildConfig.AUTO) return
         contactsBox.removeAllViews()
         val contacts = store.contacts()
         contacts.forEachIndexed { i, item ->
