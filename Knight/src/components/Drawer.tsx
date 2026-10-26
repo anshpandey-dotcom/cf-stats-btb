@@ -5,12 +5,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import type { IconName } from '../lib/ritual';
 
-export type Route = 'dashboard' | 'ritual' | 'declaration' | 'pomodoro' | 'settings';
+export type Route = 'home' | 'stats' | 'calm' | 'ritual' | 'declaration' | 'pomodoro' | 'breathe' | 'settings';
 
 const WIDTH = Math.min(Dimensions.get('window').width * 0.8, 320);
 
 const ITEMS: { route: Route; label: string; icon: IconName }[] = [
-  { route: 'dashboard', label: 'Dashboard', icon: 'view-dashboard-outline' },
+  { route: 'home', label: 'Home', icon: 'chess-knight' },
+  { route: 'stats', label: 'Stats', icon: 'chart-line' },
+  { route: 'calm', label: 'Calm', icon: 'meditation' },
   { route: 'ritual', label: 'Morning Ritual', icon: 'weather-sunset-up' },
   { route: 'pomodoro', label: 'Pomodoro Ladder', icon: 'stairs-up' },
   { route: 'settings', label: 'Settings', icon: 'cog-outline' },
@@ -58,7 +60,7 @@ export function Drawer({ open, current, onClose, onNavigate }: Props) {
         </View>
         <View style={{ marginTop: 28 }}>
           {ITEMS.map((item) => {
-            const active = item.route === current || (item.route === 'ritual' && current === 'declaration');
+            const active = item.route === current || (item.route === 'ritual' && current === 'declaration') || (item.route === 'calm' && current === 'breathe');
             return (
               <Pressable
                 key={item.route}

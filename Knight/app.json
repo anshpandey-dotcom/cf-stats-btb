@@ -2,7 +2,7 @@
   "expo": {
     "name": "Knight",
     "slug": "knight",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "knight",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.anshpandey.knight",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#0B6B30",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -52,10 +52,13 @@
         {
           "microphonePermission": "Knight listens to your voice so you can speak your morning declaration.",
           "speechRecognitionPermission": "Knight turns your speech into text to check your declaration.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-audio"
     ]
   }
 }

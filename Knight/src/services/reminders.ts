@@ -20,12 +20,15 @@ const ALARM_LINES = [
 
 export function setupNotificationHandling() {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (notification) => {
+      const quiet = notification.request.content.data?.kind === 'pomo';
+      return {
+        shouldShowBanner: !quiet,
+        shouldShowList: !quiet,
+        shouldPlaySound: !quiet,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 
@@ -91,8 +94,41 @@ function slot(base: Date, dayShift: number, hour: number, minute: number): Date 
   return date;
 }
 
+async function cancelKind(kind: string) {
+  const pending = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    pending
+      .filter((item) => item.content.data?.kind === kind)
+      .map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)),
+  );
+}
+
+export async function cancelPomoAlerts() {
+  await cancelKind('pomo');
+}
+
+export async function schedulePomoAlerts(boundaries: { at: number; phase: 'work' | 'break'; rung: number }[]) {
+  await cancelKind('pomo');
+  if (!(await notificationsGranted())) return;
+  await ensureChannels();
+  const now = Date.now();
+  for (const item of boundaries) {
+    if (item.at <= now + 2000) continue;
+    const isWork = item.phase === 'work';
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: isWork ? 'Checkpoint reached' : 'Break over',
+        body: isWork ? `Rung ${item.rung + 1} conquered. Sit and rest for 5 minutes.` : 'Back on the ladder. Keep climbing.',
+        data: { kind: 'pomo', route: 'pomodoro' },
+        priority: Notifications.AndroidNotificationPriority.MAX,
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(item.at), channelId: ALARM_CHANNEL },
+    });
+  }
+}
+
 export async function rescheduleAll(settings: Settings, doneToday: boolean): Promise<number> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  await cancelKind('reminder');
   if (!settings.reminderEnabled && !settings.alarmEnabled) return 0;
   const granted = await notificationsGranted();
   if (!granted) return 0;
@@ -110,7 +146,7 @@ export async function rescheduleAll(settings: Settings, doneToday: boolean): Pro
           content: {
             title: 'Knight · Morning Ritual',
             body: REMINDER_LINES[(now.getDate() + i) % REMINDER_LINES.length],
-            data: { route: 'declaration' },
+            data: { kind: 'reminder', route: 'declaration' },
           },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: REMINDER_CHANNEL },
         });
@@ -124,7 +160,7 @@ export async function rescheduleAll(settings: Settings, doneToday: boolean): Pro
           content: {
             title: 'Knight · Alarm',
             body: ALARM_LINES[(now.getDate() + i) % ALARM_LINES.length],
-            data: { route: 'declaration' },
+            data: { kind: 'reminder', route: 'declaration' },
             priority: Notifications.AndroidNotificationPriority.MAX,
           },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: ALARM_CHANNEL },

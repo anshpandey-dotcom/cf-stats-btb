@@ -5,11 +5,27 @@ export type SectionRecord = {
   at: number;
 };
 
+export type PomoDay = {
+  minutes: number;
+  blocks: number;
+  xp: number;
+  bestBlock: number;
+  bestRung: number;
+};
+
+export type CalmDay = {
+  minutes: number;
+  sessions: number;
+  xp: number;
+};
+
 export type DayRecord = {
   sections: Record<string, SectionRecord>;
   done: boolean;
   xp: number;
   streak: number;
+  pomo?: PomoDay;
+  calm?: CalmDay;
 };
 
 export type DayMap = Record<string, DayRecord>;
@@ -60,8 +76,21 @@ export function longestStreak(days: DayMap): number {
   return best;
 }
 
+export function dayXp(day: DayRecord | undefined): number {
+  if (!day) return 0;
+  return (day.xp || 0) + (day.pomo?.xp || 0) + (day.calm?.xp || 0);
+}
+
 export function totalXp(days: DayMap): number {
-  return Object.values(days).reduce((sum, day) => sum + (day.xp || 0), 0);
+  return Object.values(days).reduce((sum, day) => sum + dayXp(day), 0);
+}
+
+export function levelBonus(level: number): number {
+  return 1 + 0.05 * (level - 1);
+}
+
+export function scaledXp(base: number, level: number): number {
+  return Math.round(base * levelBonus(level));
 }
 
 export function nextMilestone(streak: number): { min: number; xp: number } | null {
@@ -69,14 +98,26 @@ export function nextMilestone(streak: number): { min: number; xp: number } | nul
   return ascending.find((tier) => tier.min > streak) ?? null;
 }
 
+export function levelGoal(level: number): number {
+  if (level <= 5) return Math.round(10 + (level - 1) * 22.5);
+  return 100 + (level - 5) * 30;
+}
+
 export function levelFromXp(xp: number): { level: number; into: number; needed: number } {
   let level = 1;
   let remaining = xp;
-  let needed = 100;
-  while (remaining >= needed) {
-    remaining -= needed;
+  while (remaining >= levelGoal(level)) {
+    remaining -= levelGoal(level);
     level += 1;
-    needed = 100 + (level - 1) * 50;
   }
-  return { level, into: remaining, needed };
+  return { level, into: remaining, needed: levelGoal(level) };
+}
+
+export function titleForLevel(level: number): string {
+  if (level >= 40) return 'Legend';
+  if (level >= 25) return 'Paladin';
+  if (level >= 15) return 'Champion';
+  if (level >= 8) return 'Knight';
+  if (level >= 4) return 'Squire';
+  return 'Recruit';
 }

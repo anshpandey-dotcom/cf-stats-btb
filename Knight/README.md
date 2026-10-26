@@ -25,6 +25,14 @@ Voice recognition and notifications are native modules, so Expo Go is not enough
 
 A missed day resets the streak and the ladder starts again.
 
+## Levels
+
+Goal for each level: level 1 needs 10 XP, level 5 needs 100 XP, level 10 needs 250 XP, then +30 per level. Every level adds 5% to the XP of each task.
+
+## Pomodoro Ladder
+
+Blocks climb 15, 25, 40, 60 minutes (60 from then on), each followed by a 5 minute rest. Checkpoint n pays 5 x n XP before the level bonus. The timer is timestamp based, and a notification rings at each checkpoint when the app is in the background.
+
 ## Data
 
 Progress autosaves to the phone. With the Documents folder allowed, every change is also written to `Documents/Knight/knight.ap`. The file is scrambled so a text editor shows symbols only; Knight reads it back through `src/lib/apCodec.ts`. This hides the content, it is not encryption.

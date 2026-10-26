@@ -40,8 +40,28 @@ function distance(a: string, b: string): number {
   return prev[b.length];
 }
 
+const ALIASES: Record<string, string[]> = {
+  one: ['won'],
+  percent: ['person', 'percentage', 'percents', 'percentile', 'per', 'cent', 'parson'],
+  population: ['populations'],
+  businessman: ['businessmen', 'busyman'],
+  athlete: ['athletes', 'athletic'],
+  leader: ['leaders'],
+  mentality: ['mentally'],
+  warrior: ['warriors', 'worrier'],
+};
+
+export function spokenTokens(text: string): string[] {
+  const joined = tokenize(text)
+    .join(' ')
+    .replace(/\bper cent\b/g, 'percent')
+    .replace(/\bbusiness man\b/g, 'businessman')
+  return joined.split(' ').filter(Boolean);
+}
+
 export function wordsMatch(spoken: string, target: string): boolean {
   if (spoken === target) return true;
+  if (ALIASES[target]?.includes(spoken)) return true;
   const longest = Math.max(spoken.length, target.length);
   if (longest < 5) return false;
   return distance(spoken, target) <= (longest >= 9 ? 2 : 1);
@@ -81,24 +101,26 @@ export function coverage(matched: boolean[]): number {
 }
 
 export function typedProgress(typed: string, target: string[]): { correct: number; mistake: boolean } {
-  const words = tokenize(typed);
-  const endsClean = /\s$/.test(typed) || typed.trim().length === 0;
-  let correct = 0;
-  for (let i = 0; i < words.length; i++) {
-    const isLast = i === words.length - 1;
-    if (words[i] === target[i]) {
-      correct += 1;
-      continue;
-    }
-    if (isLast && !endsClean && target[i] && target[i].startsWith(words[i])) {
-      return { correct, mistake: false };
-    }
-    return { correct, mistake: true };
+  const typedChars = tokenize(typed).join('');
+  const targetChars = target.join('');
+  let match = 0;
+  while (match < typedChars.length && match < targetChars.length && typedChars[match] === targetChars[match]) {
+    match += 1;
   }
-  return { correct, mistake: false };
+  const mistake = match < typedChars.length;
+  let correct = 0;
+  let offset = 0;
+  for (const word of target) {
+    if (offset + word.length <= match) {
+      correct += 1;
+      offset += word.length;
+    } else {
+      break;
+    }
+  }
+  return { correct, mistake };
 }
 
 export function typedComplete(typed: string, target: string[]): boolean {
-  const words = tokenize(typed);
-  return words.length === target.length && words.every((w, i) => w === target[i]);
+  return tokenize(typed).join('') === target.join('');
 }

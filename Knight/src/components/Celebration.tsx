@@ -67,6 +67,37 @@ const styles = StyleSheet.create({
   xp: { color: colors.gold, fontSize: 56, fontWeight: '900', marginVertical: 4 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   streak: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  levelBadge: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginVertical: 16 },
+  levelNumber: { color: '#1A1200', fontSize: 60, fontWeight: '900' },
   tier: { color: colors.gold, fontSize: 14, fontWeight: '700', marginTop: 12, textAlign: 'center' },
   next: { color: colors.muted, fontSize: 13, marginTop: 10, textAlign: 'center' },
 });
+
+export function LevelUp({ level, title, onShare, onClose }: { level: number | null; title: string; onShare: () => void; onClose: () => void }) {
+  const scale = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    if (level === null) return;
+    scale.setValue(0.4);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    Animated.spring(scale, { toValue: 1, friction: 4, tension: 70, useNativeDriver: true }).start();
+  }, [level, scale]);
+
+  if (level === null) return null;
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <Animated.View style={[styles.card, { borderColor: colors.gold, transform: [{ scale }] }]}>
+          <Text style={[styles.headline, { color: colors.gold }]}>LEVEL UP</Text>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelNumber}>{level}</Text>
+          </View>
+          <Text style={styles.streak}>{title}</Text>
+          <Text style={styles.next}>Every task now pays more XP. Keep climbing.</Text>
+          <Button label="Share my level" icon="share-variant-outline" variant="gold" onPress={onShare} style={{ alignSelf: 'stretch', marginTop: 22 }} />
+          <Button label="Continue" variant="ghost" onPress={onClose} style={{ alignSelf: 'stretch', marginTop: 10 }} />
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}

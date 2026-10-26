@@ -16,6 +16,8 @@ export type Settings = {
   alarmEnabled: boolean;
   alarmHour: number;
   alarmMinute: number;
+  calmSound: string;
+  calmMinutes: number;
   folderUri: string | null;
 };
 
@@ -28,6 +30,8 @@ export const DEFAULT_SETTINGS: Settings = {
   alarmEnabled: false,
   alarmHour: 5,
   alarmMinute: 45,
+  calmSound: 'om',
+  calmMinutes: 2,
   folderUri: null,
 };
 
@@ -59,6 +63,22 @@ export function sanitizeData(input: unknown): AppData {
       xp: Number(value.xp) || 0,
       streak: Number(value.streak) || 0,
     };
+    if (value.pomo && typeof value.pomo === 'object') {
+      days[key].pomo = {
+        minutes: Number(value.pomo.minutes) || 0,
+        blocks: Number(value.pomo.blocks) || 0,
+        xp: Number(value.pomo.xp) || 0,
+        bestBlock: Number(value.pomo.bestBlock) || 0,
+        bestRung: Number(value.pomo.bestRung) || 0,
+      };
+    }
+    if (value.calm && typeof value.calm === 'object') {
+      days[key].calm = {
+        minutes: Number(value.calm.minutes) || 0,
+        sessions: Number(value.calm.sessions) || 0,
+        xp: Number(value.calm.xp) || 0,
+      };
+    }
   }
   return { app: 'knight', version: 1, updatedAt: Number(raw.updatedAt) || Date.now(), days };
 }

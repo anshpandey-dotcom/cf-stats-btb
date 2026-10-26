@@ -3,9 +3,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../theme';
 
-type Props = { title: string; onMenu?: () => void; onBack?: () => void };
+type Props = { title: string; onMenu?: () => void; onBack?: () => void; onShare?: () => void };
 
-export function TopBar({ title, onMenu, onBack }: Props) {
+export function TopBar({ title, onMenu, onBack, onShare }: Props) {
   const handler = onBack ?? onMenu;
   return (
     <View style={styles.bar}>
@@ -13,7 +13,13 @@ export function TopBar({ title, onMenu, onBack }: Props) {
         <MaterialCommunityIcons name={onBack ? 'arrow-left' : 'menu'} size={28} color={colors.text} />
       </Pressable>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.iconButton} />
+      {onShare ? (
+        <Pressable onPress={onShare} hitSlop={12} style={styles.iconButton} android_ripple={{ color: '#ffffff22', radius: 24 }}>
+          <MaterialCommunityIcons name="share-variant-outline" size={24} color={colors.text} />
+        </Pressable>
+      ) : (
+        <View style={styles.iconButton} />
+      )}
     </View>
   );
 }

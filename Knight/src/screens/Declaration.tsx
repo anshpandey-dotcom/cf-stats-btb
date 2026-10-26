@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import { Button, Card } from '../components/ui';
 import { DECLARATION_TEXT, VOICE_PASS_RATIO } from '../lib/ritual';
-import { alignWords, coverage, tokenize, typedComplete, typedProgress } from '../lib/speechMatch';
+import { alignWords, coverage, spokenTokens, tokenize, typedComplete, typedProgress } from '../lib/speechMatch';
 import { useApp, Reward } from '../store/AppStore';
 import { colors } from '../theme';
 
@@ -29,6 +29,7 @@ export function Declaration({ onComplete }: Props) {
   const [typed, setTyped] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const wantListening = useRef(false);
   const failures = useRef(0);
   const finishedRef = useRef(false);
@@ -51,7 +52,7 @@ export function Declaration({ onComplete }: Props) {
 
   const matched = useMemo(() => {
     if (mode !== 'voice') return new Array(TARGET.length).fill(false) as boolean[];
-    return alignWords(tokenize(`${finals} ${interim}`), TARGET);
+    return alignWords(spokenTokens(`${finals} ${interim}`), TARGET);
   }, [finals, interim, mode]);
 
   const typedState = useMemo(() => typedProgress(typed, TARGET), [typed]);
@@ -68,6 +69,13 @@ export function Declaration({ onComplete }: Props) {
     if (mode === 'type' && typedComplete(typed, TARGET)) finish('type');
   }, [typed, mode, alreadyDone, finish]);
 
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+    return () => sub.remove();
+  }, []);
+
   const begin = useCallback(() => {
     try {
       ExpoSpeechRecognitionModule.start({
@@ -75,6 +83,7 @@ export function Declaration({ onComplete }: Props) {
         interimResults: true,
         continuous: true,
         maxAlternatives: 1,
+        contextualStrings: ['one percent', 'ninety nine percent', 'warrior mentality', 'businessman', 'number one leader', 'number one athlete'],
       });
     } catch (e: any) {
       setNotice(String(e?.message ?? e));
@@ -205,7 +214,7 @@ export function Declaration({ onComplete }: Props) {
     return (
       <Text
         key={i}
-        style={[styles.word, state === 'ok' && styles.wordOk, state === 'bad' && styles.wordBad]}
+        style={[styles.word, mode === 'type' && styles.wordSmall, state === 'ok' && styles.wordOk, state === 'bad' && styles.wordBad]}
       >
         {word}{' '}
       </Text>
@@ -215,8 +224,8 @@ export function Declaration({ onComplete }: Props) {
   const percent = Math.round(Math.min(1, ratio / (mode === 'voice' ? VOICE_PASS_RATIO : 1)) * 100);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={styles.kicker}>WARRIOR DECLARATION</Text>
         <Text style={styles.heading}>Say it like you mean it.</Text>
 
@@ -267,6 +276,7 @@ export function Declaration({ onComplete }: Props) {
               autoComplete="off"
               contextMenuHidden
               placeholder="Type the declaration here..."
+              onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
               placeholderTextColor={colors.muted}
               style={[styles.input, typedState.mistake && { borderColor: colors.danger }]}
             />
@@ -292,8 +302,9 @@ const styles = StyleSheet.create({
   switchItem: { flex: 1, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 11 },
   switchOn: { backgroundColor: colors.green },
   switchText: { color: colors.muted, fontWeight: '800', fontSize: 15 },
-  textBlock: { lineHeight: 34 },
+  textBlock: { lineHeight: 32 },
   word: { color: colors.muted, fontSize: 21, fontWeight: '700' },
+  wordSmall: { fontSize: 16 },
   wordOk: { color: colors.green },
   wordBad: { color: colors.danger, textDecorationLine: 'underline' },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
@@ -306,7 +317,7 @@ const styles = StyleSheet.create({
   micHint: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 16, textAlign: 'center' },
   small: { color: colors.muted, fontSize: 12, marginTop: 8, textAlign: 'center', lineHeight: 18 },
   input: {
-    minHeight: 150,
+    minHeight: 130,
     textAlignVertical: 'top',
     color: colors.text,
     fontSize: 18,

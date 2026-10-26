@@ -1,7 +1,9 @@
 import assert from 'node:assert';
 import { encodeAp, decodeAp } from '../src/lib/apCodec';
 import { tokenize, alignWords, coverage, typedComplete, typedProgress } from '../src/lib/speechMatch';
-import { xpForStreak, currentStreak, longestStreak, totalXp, levelFromXp } from '../src/lib/xp';
+import { advance, startRun, baseXpForRung, workMinutes, upcomingBoundaries } from '../src/lib/pomodoro';
+import { spokenTokens } from '../src/lib/speechMatch';
+import { levelGoal, scaledXp, xpForStreak, currentStreak, longestStreak, totalXp, levelFromXp } from '../src/lib/xp';
 import { addDays, todayKey } from '../src/lib/dates';
 
 const data = { a: 1, days: { '2026-01-01': { xp: 5, note: 'नमस्ते ₹ 😀 "q"' } } };
@@ -30,4 +32,37 @@ assert.equal(currentStreak(days, '2026-03-07'), 0);
 assert.equal(longestStreak(days), 5);
 assert.equal(addDays('2026-02-28', 1), '2026-03-01');
 console.log(levelFromXp(0), levelFromXp(100), levelFromXp(260), todayKey(3));
+
+const t2 = tokenize("top 1% of the population or the 99% with");
+for (const typed of ['top 1% of the population or the 99% with', 'top one percent of the population or the 99 percent with', 'top 1 % of the population or the ninety nine% with', 'top1%of the population or the 99% with']) {
+  assert(typedComplete(typed, t2), typed);
+}
+assert.equal(typedProgress('top 1', t2).mistake, false);
+assert.equal(typedProgress('top 1%', t2).correct, 3);
+assert.equal(typedProgress('top 2', t2).mistake, true);
+assert.equal(typedProgress('top on', t2).mistake, false);
+const heard = spokenTokens('this is the top one person of the population or the business man ninety nine per cent');
+const tt = tokenize('this is the top 1% of the population or the businessman 99%');
+assert.equal(coverage(alignWords(heard, tt)), 1);
+assert.equal(coverage(alignWords(spokenTokens('top 1% eating of the population'), tokenize('top 1% of the population'))), 1);
+
+assert.deepStrictEqual([1,2,3,4,5,6,10].map(levelGoal), [10,33,55,78,100,130,250]);
+assert.equal(scaledXp(5, 1), 5);
+assert.equal(scaledXp(10, 11), 15);
+
+const t0 = 1_000_000;
+let run = startRun(t0);
+assert.equal(workMinutes(0), 15);
+let step = advance(run, t0 + 14 * 60000);
+assert.equal(step.events.length, 0);
+step = advance(run, t0 + 15 * 60000);
+assert.equal(step.events.length, 1);
+assert.equal(step.state.phase, 'break');
+step = advance(run, t0 + (15 + 5 + 25 + 5) * 60000 + 1);
+assert.deepStrictEqual(step.events.map((e) => e.type), ['block', 'break-end', 'block', 'break-end']);
+assert.equal(step.state.rung, 2);
+assert.equal(step.state.phase, 'work');
+assert.deepStrictEqual([0,1,2,3,4,9].map(workMinutes), [15,25,40,60,60,60]);
+assert.deepStrictEqual([0,1,2].map(baseXpForRung), [5,10,15]);
+assert.equal(upcomingBoundaries(run, 3).length, 3);
 console.log('ok');
