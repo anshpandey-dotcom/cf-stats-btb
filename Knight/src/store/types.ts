@@ -17,7 +17,6 @@ export type Settings = {
   alarmHour: number;
   alarmMinute: number;
   folderUri: string | null;
-  driveEmail: string | null;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,7 +29,6 @@ export const DEFAULT_SETTINGS: Settings = {
   alarmHour: 5,
   alarmMinute: 45,
   folderUri: null,
-  driveEmail: null,
 };
 
 export const EMPTY_DATA: AppData = {

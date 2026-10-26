@@ -11,7 +11,6 @@ import {
 } from '../lib/xp';
 import { addDays } from '../lib/dates';
 import { writeToFolder } from '../services/folder';
-import { uploadToDrive } from '../services/drive';
 import { rescheduleAll } from '../services/reminders';
 import { loadData, loadSettings, saveData, saveSettings } from '../services/storage';
 import { AppData, DEFAULT_SETTINGS, EMPTY_DATA, Settings } from './types';
@@ -21,7 +20,6 @@ export type Reward = { xp: number; streak: number; previousTier: number };
 export type SyncStatus = {
   local: number | null;
   folder: { at: number | null; error: string | null };
-  drive: { at: number | null; error: string | null };
 };
 
 type Store = {
@@ -57,7 +55,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sync, setSync] = useState<SyncStatus>({
     local: null,
     folder: { at: null, error: null },
-    drive: { at: null, error: null },
   });
   const dataRef = useRef(data);
   const settingsRef = useRef(settings);
@@ -87,14 +84,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSync((s) => ({ ...s, folder: { at: Date.now(), error: null } }));
       } catch (e: any) {
         setSync((s) => ({ ...s, folder: { at: s.folder.at, error: String(e?.message ?? e) } }));
-      }
-    }
-    if (current.driveEmail) {
-      try {
-        await uploadToDrive(snapshot);
-        setSync((s) => ({ ...s, drive: { at: Date.now(), error: null } }));
-      } catch (e: any) {
-        setSync((s) => ({ ...s, drive: { at: s.drive.at, error: String(e?.message ?? e) } }));
       }
     }
   }, []);

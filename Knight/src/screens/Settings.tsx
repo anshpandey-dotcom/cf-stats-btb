@@ -9,7 +9,6 @@ import { TimeStepper } from '../components/TimeStepper';
 import { INSTAGRAM_URL } from '../config';
 import { decodeAp, encodeAp } from '../lib/apCodec';
 import { formatLong } from '../lib/dates';
-import { connectDrive, disconnectDrive, downloadFromDrive, driveSetupHint, uploadToDrive } from '../services/drive';
 import { readFromFolder } from '../services/folder';
 import { requestExactAlarms, requestNotifications } from '../services/reminders';
 import { useApp } from '../store/AppStore';
@@ -33,7 +32,7 @@ export function Settings() {
     try {
       await task();
     } catch (e: any) {
-      Alert.alert('Something went wrong', driveSetupHint(e));
+      Alert.alert('Something went wrong', String(e?.message ?? e));
     } finally {
       setBusy(null);
     }
@@ -96,29 +95,6 @@ export function Settings() {
         return;
       }
       confirmReplace(found, 'The Documents backup');
-    });
-
-  const connect = () =>
-    run('drive', async () => {
-      const email = await connectDrive();
-      updateSettings({ driveEmail: email });
-      await uploadToDrive(data);
-    });
-
-  const disconnect = () =>
-    run('drive', async () => {
-      await disconnectDrive();
-      updateSettings({ driveEmail: null });
-    });
-
-  const restoreFromDrive = () =>
-    run('drive', async () => {
-      const found = await downloadFromDrive();
-      if (!found) {
-        Alert.alert('Nothing to restore', 'No knight.ap file was found in your Drive Knight folder yet.');
-        return;
-      }
-      confirmReplace(found, 'The Google Drive backup');
     });
 
   return (
@@ -184,30 +160,6 @@ export function Settings() {
             <Button compact variant="ghost" icon="backup-restore" label="Restore" onPress={restoreFromFolder} />
           </View>
         ) : null}
-        <View style={styles.divider} />
-        <Row
-          icon="google-drive"
-          title="Google Drive"
-          subtitle={
-            settings.driveEmail
-              ? sync.drive.error
-                ? `Failed: ${driveSetupHint(sync.drive.error)}`
-                : `${settings.driveEmail} · synced ${ago(sync.drive.at)}`
-              : 'Back up daily into your own Drive/Knight folder'
-          }
-          tint={settings.driveEmail && sync.drive.error ? colors.danger : colors.link}
-        />
-        <View style={styles.buttons}>
-          {settings.driveEmail ? (
-            <>
-              <Button compact variant="ghost" icon="upload" label="Sync now" onPress={() => run('drive', syncNow)} />
-              <Button compact variant="ghost" icon="backup-restore" label="Restore" onPress={restoreFromDrive} />
-              <Button compact variant="danger" label="Disconnect" onPress={disconnect} />
-            </>
-          ) : (
-            <Button compact icon="google-drive" label="Connect Drive" onPress={connect} />
-          )}
-        </View>
         <View style={styles.divider} />
         <Row icon="export" title="Export data" subtitle="Share your .ap file anywhere" />
         <View style={styles.buttons}>

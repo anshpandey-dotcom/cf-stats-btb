@@ -55,8 +55,7 @@
           "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
       ],
-      "expo-sharing",
-      "@react-native-google-signin/google-signin"
+      "expo-sharing"
     ]
   }
 }
