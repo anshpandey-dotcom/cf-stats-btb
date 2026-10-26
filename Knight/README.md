@@ -31,7 +31,7 @@ Goal for each level: level 1 needs 10 XP, level 5 needs 100 XP, level 10 needs 2
 
 ## Pomodoro Ladder
 
-Blocks climb 15, 25, 40, 60 minutes (60 from then on), each followed by a 5 minute rest. Checkpoint n pays 5 x n XP before the level bonus. The timer is timestamp based, and a notification rings at each checkpoint when the app is in the background.
+Blocks climb 15, 25, 40, 60 minutes (60 from then on), each followed by a 5 minute rest. Checkpoint n pays 5 x n XP before the level bonus. The timer is timestamp based, and a notification rings at each checkpoint when the app is in the background. The full-screen scene is a vector stickman drawn from code (`src/lib/stick`): each block is planned from a seeded schedule of slow, normal and fast climbs with rests, and the background changes every few rungs. Buttons: skip (ends the break, or finishes the block early and pays it, for testing), pause/resume, stop.
 
 ## Data
 

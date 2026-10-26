@@ -43,33 +43,90 @@ function seamless(samples, fade) {
   return result;
 }
 
-function om() {
-  const seconds = 12;
-  const n = RATE * seconds;
-  const s = new Float32Array(n);
-  const base = 136;
-  const partials = [
-    [1, 1],
-    [2, 0.62],
-    [3, 0.4],
-    [4, 0.26],
-    [5, 0.16],
-    [6, 0.1],
-    [7, 0.06],
+const VOWELS = {
+  a: [[730, 90, 1.0], [1090, 110, 0.7], [2440, 160, 0.3]],
+  o: [[450, 70, 1.0], [800, 90, 0.6], [2830, 180, 0.15]],
+  u: [[320, 60, 1.0], [800, 80, 0.35], [2600, 180, 0.08]],
+  m: [[260, 50, 1.0], [1000, 80, 0.12], [2200, 200, 0.03]],
+};
+
+function formantAt(t, seconds) {
+  const x = t / seconds;
+  const keys = [
+    [0.0, 'a'],
+    [0.22, 'a'],
+    [0.38, 'o'],
+    [0.5, 'o'],
+    [0.6, 'u'],
+    [0.66, 'm'],
+    [0.9, 'm'],
+    [1.0, 'm'],
   ];
+  let i = 0;
+  while (i < keys.length - 2 && x > keys[i + 1][0]) i++;
+  const [x0, v0] = keys[i];
+  const [x1, v1] = keys[i + 1];
+  const f = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+  const k = f * f * (3 - 2 * f);
+  return VOWELS[v0].map((fm, j) => fm.map((val, n) => val + (VOWELS[v1][j][n] - val) * k));
+}
+
+function omEnvelope(t, seconds) {
+  const x = t / seconds;
+  const attack = Math.min(1, Math.max(0, (x - 0.02) / 0.1));
+  const release = Math.min(1, Math.max(0, (0.95 - x) / 0.1));
+  const swell = 0.8 + 0.2 * Math.sin(Math.PI * 2 * x * 3 - 1);
+  const body = x > 0.66 ? 0.9 : 1;
+  return attack * release * swell * body;
+}
+
+function om() {
+  const seconds = 14;
+  const n = RATE * seconds;
+  const out = new Float32Array(n);
+  const voices = [
+    { f0: 108, gain: 1, detune: 0 },
+    { f0: 108.6, gain: 0.6, detune: 0.7 },
+    { f0: 54, gain: 0.35, detune: 0 },
+  ];
+  const phases = voices.map(() => 0);
+  const harmonics = 36;
+  const amps = voices.map(() => new Float32Array(harmonics));
   for (let i = 0; i < n; i++) {
     const t = i / RATE;
-    const swell = 0.78 + 0.22 * Math.sin((2 * Math.PI * t) / 6);
-    const formant = 0.5 + 0.5 * Math.sin((2 * Math.PI * t) / 12 - 1.2);
-    let v = 0;
-    for (const [k, a] of partials) {
-      const weight = a * (k <= 2 ? 1 : 0.55 + 0.45 * formant);
-      v += weight * Math.sin(2 * Math.PI * base * k * t);
-      v += weight * 0.45 * Math.sin(2 * Math.PI * (base + 0.5) * k * t + 0.8);
+    if (i % 200 === 0) {
+      const fm = formantAt(t, seconds);
+      const nasal = t / seconds > 0.64 ? 1 : 0;
+      voices.forEach((v, vi) => {
+        for (let k = 1; k <= harmonics; k++) {
+          const freq = v.f0 * k;
+          let g = 0;
+          for (const [cf, bw, amp] of fm) g += amp * Math.exp(-Math.pow((freq - cf) / bw, 2) * 0.5);
+          const tilt = 1 / Math.pow(k, 0.9);
+          amps[vi][k - 1] = g * tilt * (nasal && freq > 1200 ? 0.15 : 1);
+        }
+      });
     }
-    s[i] = v * swell;
+    const vibrato = 1 + 0.006 * Math.sin(2 * Math.PI * 5.2 * t) + 0.004 * Math.sin(2 * Math.PI * 0.35 * t);
+    let sample = 0;
+    voices.forEach((v, vi) => {
+      phases[vi] += (2 * Math.PI * v.f0 * vibrato) / RATE;
+      let s = 0;
+      for (let k = 1; k <= harmonics; k++) s += amps[vi][k - 1] * Math.sin(phases[vi] * k);
+      sample += s * v.gain;
+    });
+    const breath = (t / seconds < 0.1 || t / seconds > 0.9 ? 0.02 : 0.006) * random();
+    out[i] = (sample + breath * 6) * omEnvelope(t, seconds);
   }
-  return s;
+  const wet = new Float32Array(n);
+  const taps = [[0.041, 0.42], [0.067, 0.36], [0.097, 0.3], [0.143, 0.24]];
+  for (const [delay, gain] of taps) {
+    const d = Math.round(delay * RATE);
+    for (let i = 0; i < n; i++) wet[i] += out[(i - d + n) % n] * gain;
+  }
+  const mix = new Float32Array(n);
+  for (let i = 0; i < n; i++) mix[i] = out[i] + wet[i] * 0.7;
+  return mix;
 }
 
 function ocean() {
@@ -91,18 +148,28 @@ function ocean() {
 }
 
 function rain() {
-  const seconds = 10;
+  const seconds = 16;
   const n = RATE * (seconds + 2);
   const raw = new Float32Array(n);
-  let low = 0;
-  let band = 0;
+  let lp = 0;
+  let hp = 0;
+  let rumble = 0;
+  const drops = [];
   for (let i = 0; i < n; i++) {
     const white = random();
-    low += 0.35 * (white - low);
-    band += 0.02 * (low - band);
-    let drop = 0;
-    if (Math.abs(random()) > 0.499) drop = random() * 1.4;
-    raw[i] = (low - band) * 1.2 + drop * 0.5;
+    lp += 0.45 * (white - lp);
+    hp += 0.04 * (lp - hp);
+    rumble += 0.004 * (white - rumble);
+    let v = (lp - hp) * 0.9 + rumble * 5;
+    if (Math.abs(random()) > 0.4985) drops.push({ at: i, freq: 1800 + (random() + 0.5) * 3500, amp: 0.25 + Math.abs(random()) * 0.7 });
+    raw[i] = v;
+  }
+  for (const d of drops) {
+    const len = Math.round(RATE * 0.012);
+    for (let j = 0; j < len && d.at + j < n; j++) {
+      const env = Math.exp(-j / (len * 0.35));
+      raw[d.at + j] += Math.sin((2 * Math.PI * d.freq * j) / RATE) * env * d.amp * 0.5;
+    }
   }
   return seamless(raw, RATE * 2);
 }

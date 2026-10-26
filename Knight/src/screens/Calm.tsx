@@ -21,6 +21,8 @@ const SOUND_ICONS: Record<SoundId, IconName> = {
 
 export function Calm({ go }: { go: (route: Route) => void }) {
   const { settings, updateSettings, data, today } = useApp();
+  const [previewing, setPreviewing] = useState<SoundId | null>(null);
+  useEffect(() => () => stopAmbient(), []);
   const calmToday = data.days[today]?.calm;
 
   return (
@@ -46,8 +48,13 @@ export function Calm({ go }: { go: (route: Route) => void }) {
               key={sound.id}
               onPress={() => {
                 updateSettings({ calmSound: sound.id });
-                startAmbient(sound.id, sound.id !== 'bowl' ? true : true);
-                setTimeout(stopAmbient, 3500);
+                if (previewing === sound.id || sound.id === 'none') {
+                  stopAmbient();
+                  setPreviewing(null);
+                } else {
+                  startAmbient(sound.id, true);
+                  setPreviewing(sound.id);
+                }
               }}
               style={[styles.soundRow, index > 0 && styles.soundDivider]}
             >
@@ -58,12 +65,13 @@ export function Calm({ go }: { go: (route: Route) => void }) {
                 <Text style={styles.soundTitle}>{sound.label}</Text>
                 <Text style={styles.soundHint}>{sound.hint}</Text>
               </View>
+              {previewing === sound.id ? <MaterialCommunityIcons name="volume-high" size={22} color={colors.gold} /> : null}
               {on ? <MaterialCommunityIcons name="check-circle" size={24} color={colors.green} /> : null}
             </Pressable>
           );
         })}
       </Card>
-      <Text style={styles.tapHint}>Tap a sound to hear a short preview.</Text>
+      <Text style={styles.tapHint}>Tap a sound to play it. Tap again to stop.</Text>
 
       <Button
         label={`Begin ${settings.calmMinutes}-minute session`}
@@ -71,6 +79,7 @@ export function Calm({ go }: { go: (route: Route) => void }) {
         style={{ marginTop: 22 }}
         onPress={() => {
           stopAmbient();
+          setPreviewing(null);
           go('breathe');
         }}
       />

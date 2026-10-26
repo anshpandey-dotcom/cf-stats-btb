@@ -12,6 +12,8 @@ export type PomoState = {
   focusMinutes: number;
   blocks: number;
   xp: number;
+  pausedAt?: number | null;
+  lastXp?: number;
 };
 
 export type PomoEvent =
@@ -70,12 +72,12 @@ export function advance(state: PomoState, now: number): { state: PomoState; even
 }
 
 export function remainingMs(state: PomoState, now: number): number {
-  return Math.max(0, state.phaseEnd - now);
+  return Math.max(0, state.phaseEnd - (state.pausedAt ?? now));
 }
 
 export function phaseProgress(state: PomoState, now: number): number {
   const total = state.phaseEnd - state.phaseStart;
-  return Math.min(1, Math.max(0, (now - state.phaseStart) / total));
+  return Math.min(1, Math.max(0, ((state.pausedAt ?? now) - state.phaseStart) / total));
 }
 
 export function upcomingBoundaries(state: PomoState, count: number): { at: number; phase: PomoPhase; rung: number }[] {

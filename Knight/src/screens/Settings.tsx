@@ -207,7 +207,7 @@ export function Settings() {
           </Text>
         </Text>
         <Text style={styles.credits}>
-          Knight model by Quaternius (CC0). Knight icon from Font Awesome Free (CC BY 4.0).
+          Knight icon from Font Awesome Free (CC BY 4.0).
         </Text>
       </View>
     </ScrollView>

@@ -23,7 +23,7 @@ import {
 } from '../lib/xp';
 import { writeToFolder } from '../services/folder';
 import { loadPomo, savePomo } from '../services/pomoStorage';
-import { cancelPomoAlerts, rescheduleAll, schedulePomoAlerts } from '../services/reminders';
+import { cancelPomoAlerts, hidePomoLive, rescheduleAll, schedulePomoAlerts, showPomoLive } from '../services/reminders';
 import { playEffect } from '../services/sounds';
 import { loadData, loadSettings, saveData, saveSettings } from '../services/storage';
 import { AppData, DEFAULT_SETTINGS, EMPTY_DATA, Settings } from './types';
@@ -58,6 +58,9 @@ type Store = {
   syncNow: () => Promise<void>;
   startPomo: () => void;
   stopPomo: () => void;
+  pausePomo: () => void;
+  resumePomo: () => void;
+  skipPomo: () => void;
   clearPomoNotice: () => void;
   recordCalm: (minutes: number) => number;
 };
@@ -233,16 +236,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const tickPomo = useCallback(() => {
     const current = pomoRef.current;
-    if (!current) return;
+    if (!current || current.pausedAt) return;
     const step = advance(current, Date.now());
     if (step.events.length === 0) return;
     const awarded = applyPomoEvents(step.events);
     const finished = step.events[step.events.length - 1];
-    const next = { ...step.state, xp: step.state.xp + awarded };
+    const next = { ...step.state, xp: step.state.xp + awarded, lastXp: awarded > 0 ? awarded : step.state.lastXp };
     pomoRef.current = next;
     setPomo(next);
     savePomo(next);
     schedulePomoAlerts(upcomingBoundaries(next, 4)).catch(() => {});
+    showPomoLive({ phase: next.phase, rung: next.rung, endsAt: next.phaseEnd, paused: false }).catch(() => {});
     playEffect('bell').catch(() => {});
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     if (finished.type === 'break-end') {
@@ -270,6 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPomo(state);
     savePomo(state);
     schedulePomoAlerts(upcomingBoundaries(state, 4)).catch(() => {});
+    showPomoLive({ phase: state.phase, rung: state.rung, endsAt: state.phaseEnd, paused: false }).catch(() => {});
   }, []);
 
   const stopPomo = useCallback(() => {
@@ -277,7 +282,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPomo(null);
     savePomo(null);
     cancelPomoAlerts().catch(() => {});
+    hidePomoLive().catch(() => {});
   }, []);
+
+  const pausePomo = useCallback(() => {
+    const cur = pomoRef.current;
+    if (!cur || cur.pausedAt) return;
+    const next = { ...cur, pausedAt: Date.now() };
+    pomoRef.current = next;
+    setPomo(next);
+    savePomo(next);
+    cancelPomoAlerts().catch(() => {});
+    showPomoLive({ phase: next.phase, rung: next.rung, endsAt: next.phaseEnd, paused: true }).catch(() => {});
+  }, []);
+
+  const resumePomo = useCallback(() => {
+    const cur = pomoRef.current;
+    if (!cur || !cur.pausedAt) return;
+    const delta = Date.now() - cur.pausedAt;
+    const next = { ...cur, pausedAt: null, phaseStart: cur.phaseStart + delta, phaseEnd: cur.phaseEnd + delta };
+    pomoRef.current = next;
+    setPomo(next);
+    savePomo(next);
+    schedulePomoAlerts(upcomingBoundaries(next, 4)).catch(() => {});
+    showPomoLive({ phase: next.phase, rung: next.rung, endsAt: next.phaseEnd, paused: false }).catch(() => {});
+  }, []);
+
+  const skipPomo = useCallback(() => {
+    const cur = pomoRef.current;
+    if (!cur) return;
+    const now = Date.now();
+    const next = { ...cur, pausedAt: null, phaseEnd: now };
+    pomoRef.current = next;
+    setPomo(next);
+    tickPomo();
+  }, [tickPomo]);
 
   const clearPomoNotice = useCallback(() => setPomoNotice(null), []);
 
@@ -328,6 +367,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncNow,
     startPomo,
     stopPomo,
+    pausePomo,
+    resumePomo,
+    skipPomo,
     clearPomoNotice,
     recordCalm,
   };

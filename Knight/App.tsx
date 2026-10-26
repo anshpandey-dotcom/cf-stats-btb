@@ -18,12 +18,13 @@ import { Pomodoro } from './src/screens/Pomodoro';
 import { Ritual } from './src/screens/Ritual';
 import { Settings } from './src/screens/Settings';
 import { Stats } from './src/screens/Stats';
-import { setupNotificationHandling } from './src/services/reminders';
+import { setupNotificationHandling, setupPomoCategory } from './src/services/reminders';
 import { shareLevel, shareStats } from './src/services/share';
 import { AppProvider, Reward, useApp } from './src/store/AppStore';
 import { colors } from './src/theme';
 
 setupNotificationHandling();
+setupPomoCategory();
 
 const TITLES: Record<Route, string> = {
   home: 'Knight',
@@ -49,7 +50,7 @@ const BACK_TARGET: Partial<Record<Route, Route>> = {
 
 function Shell() {
   const insets = useSafeAreaInsets();
-  const { ready, data, xp, streak, longest, level, pomoNotice, clearPomoNotice } = useApp();
+  const { ready, data, xp, streak, longest, level, pomoNotice, clearPomoNotice, pomo, skipPomo, stopPomo } = useApp();
   const [route, setRoute] = useState<Route>('home');
   const [menuOpen, setMenuOpen] = useState(false);
   const [reward, setReward] = useState<Reward | null>(null);
@@ -86,13 +87,17 @@ function Shell() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const open = (response: Notifications.NotificationResponse | null) => {
-      const target = response?.notification.request.content.data?.route;
+      if (!response) return;
+      const action = response.actionIdentifier;
+      if (action === 'skip') skipPomo();
+      else if (action === 'stop') stopPomo();
+      const target = response.notification.request.content.data?.route;
       if (target === 'declaration' || target === 'pomodoro') setRoute(target);
     };
     open(Notifications.getLastNotificationResponse());
     const sub = Notifications.addNotificationResponseReceivedListener(open);
     return () => sub.remove();
-  }, []);
+  }, [skipPomo, stopPomo]);
 
   const handleComplete = useCallback((earned: Reward | null) => {
     if (earned) setReward(earned);
@@ -100,9 +105,21 @@ function Shell() {
 
   if (!ready) return <View style={styles.root} />;
 
+  const fullPomo = route === 'pomodoro' && !!pomo;
   const isTab = TABS.includes(route);
   const backTarget = BACK_TARGET[route];
   const snapshot = { days: data.days, xp, streak, longest };
+
+  if (fullPomo) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="light" />
+        <Pomodoro onBack={() => setRoute('home')} />
+        <Celebration reward={reward} onClose={() => { setReward(null); setRoute('home'); }} />
+        <LevelUp level={reward ? null : levelUp} title={titleForLevel(levelUp ?? 1)} onShare={() => shareLevel(snapshot).catch(() => {})} onClose={() => setLevelUp(null)} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -121,7 +138,7 @@ function Shell() {
         {route === 'breathe' ? <Breathe onExit={() => setRoute('calm')} /> : null}
         {route === 'ritual' ? <Ritual go={go} /> : null}
         {route === 'declaration' ? <Declaration onComplete={handleComplete} /> : null}
-        {route === 'pomodoro' ? <Pomodoro /> : null}
+        {route === 'pomodoro' ? <Pomodoro onBack={() => setRoute('home')} /> : null}
         {route === 'settings' ? <Settings /> : null}
       </View>
       {isTab ? <BottomTabs current={route} onSelect={go} /> : null}

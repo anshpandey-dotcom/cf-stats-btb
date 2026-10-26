@@ -4,6 +4,7 @@ import { Settings } from '../store/types';
 
 const REMINDER_CHANNEL = 'knight-reminder';
 const ALARM_CHANNEL = 'knight-alarm';
+const LIVE_CHANNEL = 'knight-live';
 const HORIZON_DAYS = 14;
 
 const REMINDER_LINES = [
@@ -21,7 +22,7 @@ const ALARM_LINES = [
 export function setupNotificationHandling() {
   Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-      const quiet = notification.request.content.data?.kind === 'pomo';
+      const quiet = String(notification.request.content.data?.kind ?? '').startsWith('pomo');
       return {
         shouldShowBanner: !quiet,
         shouldShowList: !quiet,
@@ -39,6 +40,12 @@ async function ensureChannels() {
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 200, 250],
     lightColor: '#22C55E',
+  });
+  await Notifications.setNotificationChannelAsync(LIVE_CHANNEL, {
+    name: 'Pomodoro running',
+    importance: Notifications.AndroidImportance.LOW,
+    vibrationPattern: [0],
+    sound: null,
   });
   await Notifications.setNotificationChannelAsync(ALARM_CHANNEL, {
     name: 'Morning alarm',
@@ -170,4 +177,39 @@ export async function rescheduleAll(settings: Settings, doneToday: boolean): Pro
     }
   }
   return count;
+}
+
+export async function setupPomoCategory() {
+  try {
+    await Notifications.setNotificationCategoryAsync('pomo', [
+      { identifier: 'skip', buttonTitle: 'Skip', options: { opensAppToForeground: true } },
+      { identifier: 'stop', buttonTitle: 'Stop', options: { opensAppToForeground: true } },
+    ]);
+  } catch {}
+}
+
+export async function showPomoLive(info: { phase: 'work' | 'break'; rung: number; endsAt: number; paused: boolean }) {
+  if (!(await notificationsGranted())) return;
+  await ensureChannels();
+  const time = new Date(info.endsAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const label = info.phase === 'work' ? 'Climbing' : 'Resting at checkpoint';
+  await Notifications.scheduleNotificationAsync({
+    identifier: 'pomo-live',
+    content: {
+      title: 'Knight · Pomodoro Ladder',
+      body: info.paused ? `Paused · rung ${info.rung + 1}` : `${label} · rung ${info.rung + 1} · until ${time}`,
+      data: { kind: 'pomo-live', route: 'pomodoro' },
+      categoryIdentifier: 'pomo',
+      sticky: true,
+      autoDismiss: false,
+    },
+    trigger: { channelId: LIVE_CHANNEL },
+  });
+}
+
+export async function hidePomoLive() {
+  try {
+    await Notifications.dismissNotificationAsync('pomo-live');
+    await Notifications.cancelScheduledNotificationAsync('pomo-live');
+  } catch {}
 }
