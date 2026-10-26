@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Knight",
+    "slug": "knight",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "knight",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#06100A",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B6B30"
+    },
+    "android": {
+      "package": "com.anshpandey.knight",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0B6B30",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#0B6B30"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#22C55E"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Knight listens to your voice so you can speak your morning declaration.",
+          "speechRecognitionPermission": "Knight turns your speech into text to check your declaration.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ],
+      "expo-sharing",
+      "@react-native-google-signin/google-signin"
+    ]
+  }
+}

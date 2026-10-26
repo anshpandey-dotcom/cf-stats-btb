@@ -1,0 +1,38 @@
+name: Knight APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/knight-app-v1-o5g9o2]
+    paths:
+      - 'Knight/**'
+      - '.github/workflows/knight-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Knight
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Knight/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx tsx tests/logic.test.ts
+      - run: npx expo prebuild --platform android --no-install
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: Knight/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: knight-apk
+          path: Knight/android/app/build/outputs/apk/release/*.apk
