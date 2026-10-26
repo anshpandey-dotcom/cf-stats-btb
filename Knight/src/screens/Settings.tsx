@@ -206,6 +206,9 @@ export function Settings() {
             Ansh
           </Text>
         </Text>
+        <Text style={styles.credits}>
+          Knight model by Quaternius (CC0). Knight icon from Font Awesome Free (CC BY 4.0).
+        </Text>
       </View>
     </ScrollView>
   );
@@ -221,4 +224,5 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', marginTop: 34 },
   madeBy: { color: colors.muted, fontSize: 15, fontWeight: '600' },
   link: { color: colors.link, fontWeight: '900' },
+  credits: { color: colors.muted, fontSize: 11, marginTop: 14, textAlign: 'center', paddingHorizontal: 24 },
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Knight",
     "slug": "knight",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "knight",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.anshpandey.knight",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#0B6B30",
         "foregroundImage": "./assets/android-icon-foreground.png",
