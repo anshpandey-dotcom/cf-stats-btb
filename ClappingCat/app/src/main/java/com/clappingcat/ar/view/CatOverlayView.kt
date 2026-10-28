@@ -3,6 +3,9 @@ package com.clappingcat.ar.view
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.util.AttributeSet
@@ -37,6 +40,19 @@ class CatOverlayView(context: Context, attrs: AttributeSet?) : View(context, att
 
     private val spritePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).also {
+        it.color = 0xFF000000.toInt()
+        it.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+        it.strokeCap = Paint.Cap.ROUND
+        it.strokeJoin = Paint.Join.ROUND
+    }
+    private val maskPath = Path()
+    private val handPoints = FloatArray(42)
+
+    private var heldX = Float.NaN
+    private var heldY = Float.NaN
+    private var heldScale = Float.NaN
 
     private var lastRotation: DoubleArray? = null
     private var lastCamera = doubleArrayOf(0.0, FloorTracker.DEFAULT_CAMERA_HEIGHT, 0.0)
@@ -87,23 +103,111 @@ class CatOverlayView(context: Context, attrs: AttributeSet?) : View(context, att
         val sequence = ((elapsed * SpriteClip.FPS / 1_000_000_000L) % clip.sequenceLength).toInt()
         player?.request(sequence)
 
+        val frame = scene.hands
+        val hands = if (frame != null && now - frame.timeNanos < HAND_TTL_NS) frame.hands else emptyList()
+        val layer = if (hands.isNotEmpty()) canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null) else -1
+
         val rotation = sensors.at(now - RENDER_LATENCY_NS) ?: sensors.latest()
         if (rotation == null) {
             report(Status.WAITING_SENSORS)
         } else if (handshake) {
-            drawHeld(canvas, clip, player?.current)
+            drawHeld(canvas, clip, player?.current, hands)
             report(Status.HANDSHAKE)
         } else {
             drawWorld(canvas, clip, player?.current, rotation)
         }
+
+        if (layer >= 0) {
+            for (hand in hands) eraseHand(canvas, hand)
+            canvas.restoreToCount(layer)
+        }
         postInvalidateOnAnimation()
     }
 
-    private fun drawHeld(canvas: Canvas, clip: SpriteClip, bitmap: android.graphics.Bitmap?) {
+    private fun drawHeld(canvas: Canvas, clip: SpriteClip, bitmap: android.graphics.Bitmap?, hands: List<FloatArray>) {
+        val defaultScale = (focal * HELD_HEIGHT * scene.scale / HELD_DISTANCE).toFloat() / clip.catHeight
+        val defaultX = centerX
+        val defaultY = centerY + (focal * HELD_DROP / HELD_DISTANCE).toFloat()
+        var targetX = defaultX
+        var targetY = defaultY
+        var targetScale = defaultScale
+        if (hands.isNotEmpty()) {
+            val hand = largestHand(hands)
+            toScreen(hand)
+            val wristX = handPoints[0]
+            val wristY = handPoints[1]
+            val tipX = handPoints[24]
+            val tipY = handPoints[25]
+            val length = hypot(tipX - wristX, tipY - wristY)
+            val anchorX = wristX + (tipX - wristX) * PAW_ALONG_HAND
+            val anchorY = wristY + (tipY - wristY) * PAW_ALONG_HAND
+            targetScale = (length * PAW_SIZE_RATIO / PAW_LENGTH).coerceIn(defaultScale * 0.6f, defaultScale * 2.2f)
+            targetX = anchorX + (clip.feetX - PAW_X) * targetScale
+            targetY = anchorY + (clip.feetY - PAW_Y) * targetScale
+        }
+        if (heldX.isNaN()) {
+            heldX = targetX
+            heldY = targetY
+            heldScale = targetScale
+        } else {
+            heldX += (targetX - heldX) * HELD_SMOOTHING
+            heldY += (targetY - heldY) * HELD_SMOOTHING
+            heldScale += (targetScale - heldScale) * HELD_SMOOTHING
+        }
         bitmap ?: return
-        val heightPx = (focal * HELD_HEIGHT * scene.scale / HELD_DISTANCE).toFloat()
-        val feetY = centerY + (focal * HELD_DROP / HELD_DISTANCE).toFloat()
-        drawSprite(canvas, clip, bitmap, centerX, feetY, 0f, heightPx / clip.catHeight, 1f)
+        drawSprite(canvas, clip, bitmap, heldX, heldY, 0f, heldScale, 1f)
+    }
+
+    private fun largestHand(hands: List<FloatArray>): FloatArray {
+        var best = hands[0]
+        var bestSize = -1f
+        for (hand in hands) {
+            val size = hypot(hand[0] - hand[24], hand[1] - hand[25])
+            if (size > bestSize) {
+                bestSize = size
+                best = hand
+            }
+        }
+        return best
+    }
+
+    private fun toScreen(hand: FloatArray) {
+        val imageHeight = max(height.toFloat(), width / IMAGE_ASPECT)
+        val imageWidth = imageHeight * IMAGE_ASPECT
+        for (i in 0 until 21) {
+            handPoints[2 * i] = width / 2f + (hand[2 * i] - 0.5f) * imageWidth
+            handPoints[2 * i + 1] = height / 2f + (hand[2 * i + 1] - 0.5f) * imageHeight
+        }
+    }
+
+    private fun eraseHand(canvas: Canvas, hand: FloatArray) {
+        if (hand.size < 42) return
+        toScreen(hand)
+        val p = handPoints
+        val palmWidth = hypot(p[10] - p[34], p[11] - p[35])
+        val finger = palmWidth * FINGER_WIDTH
+        maskPaint.style = Paint.Style.FILL_AND_STROKE
+        maskPaint.strokeWidth = finger
+        maskPath.reset()
+        val palm = intArrayOf(0, 1, 5, 9, 13, 17)
+        maskPath.moveTo(p[2 * palm[0]], p[2 * palm[0] + 1])
+        for (k in 1 until palm.size) maskPath.lineTo(p[2 * palm[k]], p[2 * palm[k] + 1])
+        maskPath.close()
+        canvas.drawPath(maskPath, maskPaint)
+
+        maskPaint.style = Paint.Style.STROKE
+        val chains = arrayOf(intArrayOf(1, 2, 3, 4), intArrayOf(5, 6, 7, 8), intArrayOf(9, 10, 11, 12), intArrayOf(13, 14, 15, 16), intArrayOf(17, 18, 19, 20))
+        for (chain in chains) {
+            maskPath.reset()
+            maskPath.moveTo(p[2 * chain[0]], p[2 * chain[0] + 1])
+            for (k in 1 until chain.size) maskPath.lineTo(p[2 * chain[k]], p[2 * chain[k] + 1])
+            canvas.drawPath(maskPath, maskPaint)
+        }
+
+        maskPaint.strokeWidth = palmWidth * FOREARM_WIDTH
+        val armX = p[0] + (p[0] - p[18]) * FOREARM_LENGTH
+        val armY = p[1] + (p[1] - p[19]) * FOREARM_LENGTH
+        canvas.drawLine(p[0], p[1], armX, armY, maskPaint)
     }
 
     private fun drawWorld(canvas: Canvas, clip: SpriteClip, bitmap: android.graphics.Bitmap?, rotation: DoubleArray) {
@@ -303,5 +407,16 @@ class CatOverlayView(context: Context, attrs: AttributeSet?) : View(context, att
         const val HELD_HEIGHT = 0.55
         const val HELD_DISTANCE = 0.7
         const val HELD_DROP = 0.36
+        const val HELD_SMOOTHING = 0.35f
+        const val HAND_TTL_NS = 250_000_000L
+        const val IMAGE_ASPECT = 0.75f
+        const val FINGER_WIDTH = 0.28f
+        const val FOREARM_WIDTH = 1.05f
+        const val FOREARM_LENGTH = 1.2f
+        const val PAW_X = 150f
+        const val PAW_Y = 800f
+        const val PAW_LENGTH = 250f
+        const val PAW_SIZE_RATIO = 1.1f
+        const val PAW_ALONG_HAND = 0.5f
     }
 }

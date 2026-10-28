@@ -18,6 +18,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.clappingcat.ar.hands.HandTracker
 import com.clappingcat.ar.scene.SceneState
 import com.clappingcat.ar.sensors.OrientationProvider
 import com.clappingcat.ar.tracking.FloorTracker
@@ -34,6 +35,7 @@ class CameraController(
 ) {
 
     private val executor = Executors.newSingleThreadExecutor()
+    private val handTracker = HandTracker(context, scene)
     private var realtimeTimestamps = true
 
     fun start() {
@@ -43,6 +45,7 @@ class CameraController(
 
     fun stop() {
         executor.shutdown()
+        handTracker.close()
     }
 
     @OptIn(ExperimentalCamera2Interop::class)
@@ -86,6 +89,7 @@ class CameraController(
 
     private fun analyze(image: ImageProxy) {
         try {
+            handTracker.submit(image)
             val rotation = image.imageInfo.rotationDegrees
             val stamp = if (realtimeTimestamps) image.imageInfo.timestamp else SystemClock.elapsedRealtimeNanos() - FALLBACK_LATENCY_NS
             val orientation = sensors.at(stamp) ?: return

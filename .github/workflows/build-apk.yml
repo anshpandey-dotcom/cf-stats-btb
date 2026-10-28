@@ -26,17 +26,23 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Build release APK
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ClappingCat.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ClappingCat-apk
-          path: ClappingCat/ClappingCat.apk
 
       - name: Publish APK release
         env:
@@ -45,5 +51,5 @@ jobs:
           gh release delete clapping-cat-latest --yes --cleanup-tag || true
           gh release create clapping-cat-latest ClappingCat.apk \
             --title "Clapping Cat APK (latest build)" \
-            --notes "Install ClappingCat.apk on an ARCore supported Android phone." \
+            --notes "Download ClappingCat.apk and install it over the old version. This build is signed with a fixed key, so later builds update in place." \
             --target "${{ github.sha }}"

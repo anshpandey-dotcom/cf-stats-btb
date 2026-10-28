@@ -4,6 +4,8 @@ import com.clappingcat.ar.tracking.FloorTracker
 
 enum class Mode { CLAP, HANDSHAKE }
 
+class HandFrame(val hands: List<FloatArray>, val timeNanos: Long)
+
 class SceneState {
 
     @Volatile
@@ -11,6 +13,9 @@ class SceneState {
 
     @Volatile
     var focalOverHeight = DEFAULT_FOCAL_OVER_HEIGHT
+
+    @Volatile
+    var hands: HandFrame? = null
 
     @Volatile
     var mode = Mode.CLAP
