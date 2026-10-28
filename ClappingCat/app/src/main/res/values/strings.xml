@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Clapping Cat</string>
+    <string name="mode_clap">Clap</string>
+    <string name="mode_handshake">Handshake</string>
+    <string name="reset">Reset</string>
+    <string name="sound_on">Sound on</string>
+    <string name="sound_off">Sound off</string>
+    <string name="hint_no_tracking">Move your phone slowly so it can see the floor</string>
+    <string name="hint_find_floor">Point at the floor and keep moving slowly</string>
+    <string name="hint_tap_place">Tap to place the cat</string>
+    <string name="hint_placed">Pinch to resize, tap to move the cat</string>
+    <string name="hint_handshake">Reach your hand toward the camera to shake paws</string>
+    <string name="camera_needed">Camera permission is required to place the cat in your room</string>
+    <string name="ar_unavailable">This device does not support ARCore</string>
+    <string name="ar_failed">Could not start the camera</string>
+</resources>
