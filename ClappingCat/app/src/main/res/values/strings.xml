@@ -6,12 +6,14 @@
     <string name="reset">Reset</string>
     <string name="sound_on">Sound on</string>
     <string name="sound_off">Sound off</string>
-    <string name="hint_no_tracking">Move your phone slowly so it can see the floor</string>
-    <string name="hint_find_floor">Point at the floor and keep moving slowly</string>
-    <string name="hint_tap_place">Tap to place the cat</string>
-    <string name="hint_placed">Pinch to resize, tap to move the cat</string>
+    <string name="face_on">Face me: on</string>
+    <string name="face_off">Face me: off</string>
+    <string name="hint_waiting">Starting sensors</string>
+    <string name="hint_behind">The cat is out of view, turn around or press Reset</string>
+    <string name="hint_locked">Locked to the floor. Drag to move, pinch to resize</string>
+    <string name="hint_weak">Floor lock is weak, show a textured floor</string>
+    <string name="hint_searching">Looking for floor texture, the cat holds by rotation only</string>
     <string name="hint_handshake">Reach your hand toward the camera to shake paws</string>
     <string name="camera_needed">Camera permission is required to place the cat in your room</string>
-    <string name="ar_unavailable">This device does not support ARCore</string>
-    <string name="ar_failed">Could not start the camera</string>
+    <string name="no_sensor">This phone has no rotation sensor</string>
 </resources>

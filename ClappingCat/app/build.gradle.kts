@@ -33,7 +33,13 @@ android {
     }
 
     androidResources {
-        noCompress += "mp4"
+        noCompress += listOf("webp", "m4a")
+    }
+
+    testOptions {
+        unitTests.all {
+            it.testLogging.showStandardStreams = true
+        }
     }
 
     lint {
@@ -43,5 +49,10 @@ android {
 }
 
 dependencies {
-    implementation("com.google.ar:core:1.57.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.camera:camera-core:1.4.2")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    testImplementation("junit:junit:4.13.2")
 }

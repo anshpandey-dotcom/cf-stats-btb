@@ -5,8 +5,13 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
-    <android.opengl.GLSurfaceView
-        android:id="@+id/surface"
+    <androidx.camera.view.PreviewView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.clappingcat.ar.view.CatOverlayView
+        android:id="@+id/cat"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -22,6 +27,8 @@
             android:layout_gravity="top|center_horizontal"
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_status"
+            android:gravity="center"
+            android:maxWidth="320dp"
             android:paddingHorizontal="18dp"
             android:paddingVertical="10dp"
             android:textColor="@android:color/white"
@@ -32,29 +39,46 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
             android:layout_marginBottom="20dp"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingHorizontal="8dp">
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-            <Button
-                android:id="@+id/btnClap"
-                style="@style/ControlButton"
-                android:text="@string/mode_clap" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btnHandshake"
-                style="@style/ControlButton"
-                android:text="@string/mode_handshake" />
+                <Button
+                    android:id="@+id/btnClap"
+                    style="@style/ControlButton"
+                    android:text="@string/mode_clap" />
 
-            <Button
-                android:id="@+id/btnReset"
-                style="@style/ControlButton"
-                android:text="@string/reset" />
+                <Button
+                    android:id="@+id/btnHandshake"
+                    style="@style/ControlButton"
+                    android:text="@string/mode_handshake" />
 
-            <Button
-                android:id="@+id/btnSound"
-                style="@style/ControlButton"
-                android:text="@string/sound_on" />
+                <Button
+                    android:id="@+id/btnSound"
+                    style="@style/ControlButton"
+                    android:text="@string/sound_on" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnFace"
+                    style="@style/ControlButton"
+                    android:text="@string/face_on" />
+
+                <Button
+                    android:id="@+id/btnReset"
+                    style="@style/ControlButton"
+                    android:text="@string/reset" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 </FrameLayout>
