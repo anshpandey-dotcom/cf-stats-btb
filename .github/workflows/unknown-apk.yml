@@ -1,4 +1,4 @@
-name: Build Unknown APK
+name: Build Unknown APKs
 
 on:
   workflow_dispatch:
@@ -12,8 +12,20 @@ permissions:
   contents: write
 
 jobs:
-  apk:
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: host
+            label: Unknown
+            package: com.fleetmc.unknown.host
+            file: Unknown-Host.apk
+          - role: ghost
+            label: Ghost
+            package: com.fleetmc.unknown.ghost
+            file: Unknown-Ghost.apk
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,12 +49,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/app"
           cd "$RUNNER_TEMP/app"
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/app@6 @capawesome-team/capacitor-android-foreground-service@6.2.0
           mkdir www
           rsync -a --exclude README.md "$GITHUB_WORKSPACE/horror-chat/" www/
-          npx cap init Unknown com.fleetmc.unknown --web-dir www
+          sed -i "s/FIXED_ROLE = null/FIXED_ROLE = '${{ matrix.role }}'/" www/js/config.js
+          npx cap init "${{ matrix.label }}" "${{ matrix.package }}" --web-dir www
           npx cap add android
-          python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_android.py" "$RUNNER_TEMP/app" "$GITHUB_WORKSPACE/horror-chat/assets/icon-512.png"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_android.py" "$RUNNER_TEMP/app" "$GITHUB_WORKSPACE/horror-chat/assets/icon-512.png" "${{ matrix.role }}" "${{ matrix.package }}" "${{ matrix.label }}"
           npx cap sync android
 
       - name: Build debug APK
@@ -50,20 +63,32 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Collect APK
-        run: cp "$RUNNER_TEMP/app/android/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/Unknown.apk"
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$RUNNER_TEMP/app/android/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/out/${{ matrix.file }}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Unknown-apk
-          path: ${{ runner.temp }}/Unknown.apk
+          name: ${{ matrix.file }}
+          path: ${{ runner.temp }}/out/${{ matrix.file }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          path: apks
+          merge-multiple: true
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: unknown-latest
           target_commitish: ${{ github.sha }}
-          name: Unknown APK
-          body: Latest build of the Unknown horror chat app. Download Unknown.apk and install it on both phones.
-          files: ${{ runner.temp }}/Unknown.apk
+          name: Unknown APKs
+          body: Download Unknown-Host.apk for the Host phone (chat only) and Unknown-Ghost.apk for the Ghost phone (chat and control room).
+          files: apks/*.apk
           make_latest: 'false'

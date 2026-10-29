@@ -5,9 +5,9 @@ import { compressImage, uid } from './media.js';
 const $ = (id) => document.getElementById(id);
 
 const DEFAULTS = [
-  { name: 'Ghost', keyword: 'bhoot', effect: 'face', target: 'guest', duration: 3, delay: 0, flash: true, shake: true, vibrate: true },
+  { name: 'Ghost', keyword: 'bhoot', effect: 'face', target: 'host', duration: 3, delay: 0, flash: true, shake: true, vibrate: true },
   { name: 'Darkness', keyword: 'andhera', effect: 'eyes', target: 'both', duration: 5, delay: 1, flash: false, shake: false, vibrate: true },
-  { name: 'Glitch', keyword: 'peeche dekh', effect: 'glitch', target: 'guest', duration: 3, delay: 0, flash: true, shake: true, vibrate: true }
+  { name: 'Glitch', keyword: 'peeche dekh', effect: 'glitch', target: 'host', duration: 3, delay: 0, flash: true, shake: true, vibrate: true }
 ];
 
 const STORY_HELP = 'One message per line. Put a delay in seconds before the pipe: 3|Are you there?\nStart with ! for blood text, ~ for a whisper. Fire a saved scare with: 4|@scare Ghost';
@@ -48,7 +48,7 @@ export function initPanel(api) {
     if (editing) return pane.append(buildForm(editing));
     const list = await db.triggers.all();
     pane.append(button('New scare', () => {
-      editing = { id: uid(), name: '', keyword: '', effect: 'face', target: 'guest', duration: 3, delay: 0, flash: true, shake: true, vibrate: true, enabled: true, image: null, sound: null };
+      editing = { id: uid(), name: '', keyword: '', effect: 'face', target: 'host', duration: 3, delay: 0, flash: true, shake: true, vibrate: true, enabled: true, image: null, sound: null };
       renderScares();
     }, 'btn primary'));
     pane.append(el('p', { className: 'hint', textContent: 'When a chat message contains a keyword, the scare plays on the chosen phone. You can also fire any scare by hand.' }));
@@ -58,7 +58,7 @@ export function initPanel(api) {
       title.append(el('b', { textContent: t.name || 'Untitled' }), el('span', { textContent: `${t.keyword || 'manual'} → ${t.target}` }));
       const actions = el('div', { className: 'actions' });
       actions.append(
-        button('Fire on guest', () => api.fireTrigger({ ...t, delay: 0 }, 'guest')),
+        button('Fire on host', () => api.fireTrigger({ ...t, delay: 0 }, 'host')),
         button('Test here', () => api.playLocal(t)),
         button('Edit', () => {
           editing = t;
@@ -83,7 +83,7 @@ export function initPanel(api) {
     const effect = el('select');
     Object.entries(EFFECTS).forEach(([k, v]) => effect.append(el('option', { value: k, textContent: v, selected: t.effect === k })));
     const target = el('select');
-    [['guest', 'Guest phone'], ['host', 'This phone'], ['both', 'Both phones']].forEach(([k, v]) => target.append(el('option', { value: k, textContent: v, selected: t.target === k })));
+    [['host', 'Host phone'], ['ghost', 'This phone (Ghost)'], ['both', 'Both phones']].forEach(([k, v]) => target.append(el('option', { value: k, textContent: v, selected: t.target === k })));
     const duration = el('input', { type: 'number', min: 1, max: 20, value: t.duration });
     const delay = el('input', { type: 'number', min: 0, max: 60, value: t.delay });
 
@@ -184,7 +184,7 @@ export function initPanel(api) {
       return card;
     };
     pane.append(
-      group('Guest phone',
+      group('Host phone',
         button('Typing 4s', () => api.sendFx('typing', 4)),
         button('Typing 10s', () => api.sendFx('typing', 10)),
         button('Flicker', () => api.sendFx('flicker')),
@@ -204,11 +204,11 @@ export function initPanel(api) {
         button('Whisper', () => api.sendFx('sound', 'whisper')),
         button('Music box', () => api.sendFx('sound', 'musicbox'))
       ),
-      group('Fake call on guest',
-        button('Ring', () => api.callGuest({ scare: false })),
-        button('Ring + scare', () => api.callGuest({ scare: true }))
+      group('Fake call on host',
+        button('Ring', () => api.callHost({ scare: false })),
+        button('Ring + scare', () => api.callHost({ scare: true }))
       ),
-      group('Name glitch on guest',
+      group('Name glitch on host',
         button('Behind you', () => api.sendFx('name', 'Behind you')),
         button('Dont look', () => api.sendFx('name', 'Dont look')),
         button('Your name', () => api.sendFx('name', 'I see you'))

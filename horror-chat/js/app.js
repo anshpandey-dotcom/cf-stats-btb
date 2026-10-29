@@ -5,6 +5,7 @@ import { Link, roomLink, parseCode, randomCode } from './net.js';
 import { compressImage, VoiceRecorder, uid, clock, dayLabel } from './media.js';
 import { initPanel } from './panel.js';
 import * as call from './call.js';
+import { FIXED_ROLE } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const dpUrl = new URL('assets/dp.jpg', document.baseURI).href;
@@ -133,12 +134,22 @@ function setTick(id, status) {
   if (el) el.innerHTML = ICONS[status] || ICONS.sent;
 }
 
+let renderToken = 0;
+let renderTimer = 0;
+
 async function renderAll() {
+  const token = ++renderToken;
+  const list = await db.messages.all();
+  if (token !== renderToken) return;
   thread.innerHTML = '';
   state.lastDay = '';
   state.typingEl = null;
-  const list = await db.messages.all();
   list.forEach(appendBubble);
+}
+
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderAll, 80);
 }
 
 function openLightbox(src) {
@@ -245,7 +256,7 @@ async function receiveMessage(wire, live) {
   setPeerTyping(false);
   await db.messages.put(m);
   if (live) appendBubble(m);
-  else await renderAll();
+  else scheduleRender();
   send({ t: 'ack', id: m.id, s: 'delivered' });
   markSeen();
   if (live) {
@@ -320,13 +331,13 @@ async function changeMessage(id, patch) {
 }
 
 async function syncTriggers() {
-  if (state.role !== 'host' || !state.link || !state.link.open) return;
+  if (state.role !== 'ghost' || !state.link || !state.link.open) return;
   const list = await db.triggers.all();
   send({ t: 'triggers', list });
 }
 
 function scheduleVanish(m) {
-  if (state.role !== 'host' || !m.text.startsWith('^')) return;
+  if (state.role !== 'ghost' || !m.text.startsWith('^')) return;
   setTimeout(() => changeMessage(m.id, { kind: 'deleted' }), 6000);
 }
 
@@ -335,7 +346,7 @@ function splitKeywords(value) {
 }
 
 async function checkTriggers(text) {
-  if (state.role !== 'host') return;
+  if (state.role !== 'ghost') return;
   const lower = text.toLowerCase();
   const list = await db.triggers.all();
   for (const t of list) {
@@ -345,10 +356,10 @@ async function checkTriggers(text) {
 }
 
 function fireTrigger(t, forceTarget) {
-  const target = forceTarget || t.target || 'guest';
+  const target = forceTarget || t.target || 'host';
   setTimeout(() => {
-    if (target === 'host' || target === 'both') scare.play(t, dpUrl);
-    if (target === 'guest' || target === 'both') send({ t: 'scare', id: t.id, def: t.image || t.sound ? null : t });
+    if (target === 'ghost' || target === 'both') scare.play(t, dpUrl);
+    if (target === 'host' || target === 'both') send({ t: 'scare', id: t.id, def: t.image || t.sound ? null : t });
   }, Math.max(0, Number(t.delay) || 0) * 1000);
 }
 
@@ -410,7 +421,8 @@ async function handleData(data) {
   switch (data.t) {
     case 'hello':
       await pushMissing(data.index || []);
-      if (state.role === 'host') {
+      if (!data.reply) send({ t: 'hello', reply: true, index: await messageIndex(), role: state.role });
+      if (state.role === 'ghost') {
         syncTriggers();
         send({ t: 'fx', name: 'ambient', arg: state.ambient });
       }
@@ -456,10 +468,10 @@ async function onLinkState(s, detail) {
   linkBtn.classList.toggle('linked', s === 'open');
   const labels = {
     signaling: 'Starting up…',
-    waiting: 'Waiting for the guest phone…',
+    waiting: 'Waiting for the other phone…',
     connecting: 'Connecting…',
     open: 'Connected',
-    lost: 'Host not found, retrying…',
+    lost: 'Connection lost, reconnecting…',
     busy: 'This link is already open on another tab, retrying…',
     error: `Network error${detail ? ` (${detail})` : ''}, retrying…`,
     idle: ''
@@ -490,6 +502,53 @@ async function startLink() {
   state.link.start();
 }
 
+function resumeLink() {
+  if (!state.link) return;
+  state.link.resume();
+  if (state.link.open) sendHello();
+}
+
+async function newLiveLink() {
+  if (!confirm('Create a new live link? The other phone will have to paste it again.')) return;
+  state.code = randomCode();
+  await db.meta.set('hostCode', state.code);
+  $('hostLink').value = roomLink(state.code);
+  startLink();
+}
+
+const nativePlugins = new Map();
+
+function nativePlugin(name) {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+  if (!nativePlugins.has(name)) {
+    nativePlugins.set(name, (cap.Plugins && cap.Plugins[name]) || (cap.registerPlugin ? cap.registerPlugin(name) : null));
+  }
+  return nativePlugins.get(name);
+}
+
+async function keepAlive() {
+  const service = nativePlugin('ForegroundService');
+  if (!service) return;
+  try {
+    await service.requestPermissions();
+  } catch (e) {}
+  try {
+    await service.startForegroundService({ id: 4107, title: 'Unknown', body: 'Syncing', smallIcon: 'ic_stat_sync' });
+  } catch (e) {}
+}
+
+function listenForLinks() {
+  const app = nativePlugin('App');
+  if (!app) return;
+  const take = (url) => {
+    if (state.role === 'host' && parseCode(url || '') && /join=/.test(url)) joinFromInput(url);
+  };
+  app.addListener('appUrlOpen', (e) => take(e.url));
+  app.addListener('resume', resumeLink);
+  app.getLaunchUrl().then((r) => r && take(r.url)).catch(() => {});
+}
+
 async function primeAudioAndMic() {
   sound.unlock();
   try {
@@ -499,10 +558,10 @@ async function primeAudioAndMic() {
 }
 
 function openConnect() {
-  $('connectTitle').textContent = state.role === 'host' ? 'Live link' : 'Join live';
-  $('hostPane').hidden = state.role !== 'host';
-  $('guestPane').hidden = state.role !== 'guest';
-  if (state.role === 'host') $('hostLink').value = roomLink(state.code);
+  $('connectTitle').textContent = state.role === 'ghost' ? 'Live link' : 'Join live';
+  $('hostPane').hidden = state.role !== 'ghost';
+  $('guestPane').hidden = state.role !== 'host';
+  if (state.role === 'ghost') $('hostLink').value = roomLink(state.code);
   $('connectSheet').hidden = false;
 }
 
@@ -549,10 +608,10 @@ async function switchRole() {
 function buildMenu() {
   const menu = $('menu');
   const items = [];
-  if (state.role === 'host') items.push(['Control room', () => openPanel()]);
-  items.push([state.role === 'host' ? 'Live link' : 'Join live', openConnect]);
+  if (state.role === 'ghost') items.push(['Control room', () => openPanel()]);
+  items.push([state.role === 'ghost' ? 'Live link' : 'Join live', openConnect]);
   items.push(['Export chat', exportChat]);
-  items.push(['Switch role', switchRole]);
+  if (!FIXED_ROLE) items.push(['Switch role', switchRole]);
   menu.innerHTML = '';
   items.forEach(([label, fn]) => {
     const b = document.createElement('button');
@@ -654,8 +713,8 @@ async function openMsgMenu(id) {
     box.append(b);
   };
   if (m.kind === 'text') add('Copy', () => navigator.clipboard && navigator.clipboard.writeText(m.text));
-  if (state.role === 'host' && m.kind === 'text') add('Edit', () => startEditing(m));
-  if (state.role === 'host') add('Delete for everyone', () => changeMessage(id, { kind: 'deleted' }), 'danger-text');
+  if (state.role === 'ghost' && m.kind === 'text') add('Edit', () => startEditing(m));
+  if (state.role === 'ghost') add('Delete for everyone', () => changeMessage(id, { kind: 'deleted' }), 'danger-text');
   $('msgMenu').hidden = false;
 }
 
@@ -736,7 +795,7 @@ const api = {
   toast,
   syncTriggers,
   fireTrigger,
-  callGuest: (opts) => send({ t: 'call', opts }),
+  callHost: (opts) => send({ t: 'call', opts }),
   sendFx,
   applyFx,
   exportChat,
@@ -794,7 +853,7 @@ function wireUi() {
   });
   $('linkBtn').addEventListener('click', openConnect);
   $('videoBtn').addEventListener('click', openConnect);
-  $('callBtn').addEventListener('click', () => (state.role === 'host' ? openPanel() : openConnect()));
+  $('callBtn').addEventListener('click', () => (state.role === 'ghost' ? openPanel() : openConnect()));
   $('menuBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     $('menu').hidden = !$('menu').hidden;
@@ -836,9 +895,11 @@ function wireUi() {
     if (document.visibilityState === 'visible') {
       markSeen();
       keepAwake();
-      if (state.link && !state.link.open && state.role === 'guest') state.link.schedule();
+      resumeLink();
     }
   });
+  window.addEventListener('online', resumeLink);
+  $('newLink').addEventListener('click', newLiveLink);
   document.addEventListener('pointerdown', () => sound.unlock(), { once: true });
   setInterval(setStatus, 30000);
 }
@@ -854,18 +915,19 @@ async function enterChat(role) {
   $('setup').hidden = true;
   $('chat').hidden = false;
   buildMenu();
-  panel.setRole(role);
   state.lastSeen = (await db.meta.get('lastSeen')) || 0;
   state.ambient = !!(await db.meta.get('ambient'));
   setAmbient(state.ambient);
   await renderAll();
   setStatus();
   keepAwake();
+  keepAlive();
+  listenForLinks();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 
-  if (role === 'host') {
+  if (role === 'ghost') {
     let code = await db.meta.get('hostCode');
-    if (!code) {
+    if (!code || code.length < 12) {
       code = randomCode();
       await db.meta.set('hostCode', code);
     }
@@ -876,7 +938,7 @@ async function enterChat(role) {
   } else {
     const fromHash = parseCode(location.hash.replace(/^#/, ''));
     const saved = await db.meta.get('joinCode');
-    const code = fromHash || saved;
+    const code = fromHash || (saved && saved.length >= 12 ? saved : null);
     if (fromHash) history.replaceState(null, '', location.pathname);
     if (code) {
       state.code = code;
@@ -888,27 +950,41 @@ async function enterChat(role) {
   }
 }
 
+async function migrate() {
+  if ((await db.meta.get('schema')) === 3) return;
+  const oldRole = await db.meta.get('role');
+  if (oldRole === 'host') await db.meta.set('role', 'ghost');
+  else if (oldRole === 'guest') await db.meta.set('role', 'host');
+  const map = { guest: 'host', host: 'ghost' };
+  for (const t of await db.triggers.all()) {
+    t.target = map[t.target] || t.target;
+    await db.triggers.put(t);
+  }
+  await db.meta.set('hostCode', null);
+  await db.meta.set('joinCode', null);
+  await db.meta.set('schema', 3);
+}
+
+async function chooseRole(role) {
+  await db.meta.set('role', role);
+  await primeAudioAndMic();
+  enterChat(role);
+}
+
 async function boot() {
   wireUi();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
-  const role = await db.meta.get('role');
-  const hashCode = parseCode(location.hash.replace(/^#/, ''));
-  if (hashCode && /join=/.test(location.hash)) {
-    await db.meta.set('role', 'guest');
+  if ('serviceWorker' in navigator && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(() => {});
+  await migrate();
+  if (FIXED_ROLE) {
+    await db.meta.set('role', FIXED_ROLE);
     await primeAudioAndMic();
-    return enterChat('guest');
+    return enterChat(FIXED_ROLE);
   }
+  const role = await db.meta.get('role');
+  if (/join=/.test(location.hash) && parseCode(location.hash.replace(/^#/, ''))) return chooseRole('host');
   if (role) return enterChat(role);
-  $('roleHost').addEventListener('click', async () => {
-    await db.meta.set('role', 'host');
-    await primeAudioAndMic();
-    enterChat('host');
-  });
-  $('roleGuest').addEventListener('click', async () => {
-    await db.meta.set('role', 'guest');
-    await primeAudioAndMic();
-    enterChat('guest');
-  });
+  $('roleGhost').addEventListener('click', () => chooseRole('ghost'));
+  $('roleHost').addEventListener('click', () => chooseRole('host'));
 }
 
 boot();

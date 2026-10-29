@@ -19,8 +19,8 @@
     <img class="setup-dp" src="assets/dp.jpg" alt="">
     <h1>Unknown</h1>
     <p>Pick what this phone does tonight</p>
-    <button id="roleHost" class="big">Host phone<small>I stream and control the scares</small></button>
-    <button id="roleGuest" class="big alt">Guest phone<small>I join the live link</small></button>
+    <button id="roleGhost" class="big">Ghost<small>I control the scares and the chat</small></button>
+    <button id="roleHost" class="big alt">Host<small>I just chat and join the live link</small></button>
   </section>
 
   <section id="chat" class="screen" hidden>
@@ -70,13 +70,13 @@
   <div class="sheet-body">
     <div class="sheet-head"><h2 id="connectTitle">Connect</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></button></div>
     <div id="hostPane" hidden>
-      <p class="hint">Send this live link to the guest phone. It stays the same every time, so the guest only pastes it once.</p>
+      <p class="hint">Send this live link to the Host phone. It stays the same, so the Host phone only pastes it once and reconnects by itself, even after the app is closed.</p>
       <input id="hostLink" readonly>
-      <div class="row"><button id="copyLink" class="primary">Copy link</button><button id="shareLink">Share</button></div>
+      <div class="row"><button id="copyLink" class="primary">Copy link</button><button id="shareLink">Share</button><button id="newLink">New link</button></div>
       <p id="hostState" class="state"></p>
     </div>
     <div id="guestPane" hidden>
-      <p class="hint">Paste the live link from the host phone.</p>
+      <p class="hint">Paste the live link from the Ghost phone.</p>
       <input id="guestLink" placeholder="Paste live link here" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="row"><button id="pasteLink">Paste</button><button id="joinLink" class="primary">Connect</button></div>
       <p id="guestState" class="state"></p>
@@ -104,7 +104,7 @@
 <div id="fog"></div>
 <div id="toast" hidden></div>
 
-<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/mqtt.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
