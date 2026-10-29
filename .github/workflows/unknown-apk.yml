@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - 'horror-chat/**'
-      - '.github/workflows/build-apk.yml'
+      - '.github/workflows/unknown-apk.yml'
       - '.github/scripts/prepare_android.py'
 
 permissions:
