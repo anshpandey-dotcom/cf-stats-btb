@@ -1,0 +1,69 @@
+name: Build Unknown APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'horror-chat/**'
+      - '.github/workflows/build-apk.yml'
+      - '.github/scripts/prepare_android.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Python imaging
+        run: pip install pillow
+
+      - name: Create Capacitor project
+        run: |
+          mkdir -p "$RUNNER_TEMP/app"
+          cd "$RUNNER_TEMP/app"
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          mkdir www
+          rsync -a --exclude README.md "$GITHUB_WORKSPACE/horror-chat/" www/
+          npx cap init Unknown com.fleetmc.unknown --web-dir www
+          npx cap add android
+          python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_android.py" "$RUNNER_TEMP/app" "$GITHUB_WORKSPACE/horror-chat/assets/icon-512.png"
+          npx cap sync android
+
+      - name: Build debug APK
+        working-directory: ${{ runner.temp }}/app/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: cp "$RUNNER_TEMP/app/android/app/build/outputs/apk/debug/app-debug.apk" "$RUNNER_TEMP/Unknown.apk"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unknown-apk
+          path: ${{ runner.temp }}/Unknown.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: unknown-latest
+          target_commitish: ${{ github.sha }}
+          name: Unknown APK
+          body: Latest build of the Unknown horror chat app. Download Unknown.apk and install it on both phones.
+          files: ${{ runner.temp }}/Unknown.apk
+          make_latest: 'false'

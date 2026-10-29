@@ -4,6 +4,7 @@ import * as scare from './scare.js';
 import { Link, roomLink, parseCode, randomCode } from './net.js';
 import { compressImage, VoiceRecorder, uid, clock, dayLabel } from './media.js';
 import { initPanel } from './panel.js';
+import * as call from './call.js';
 
 const $ = (id) => document.getElementById(id);
 const dpUrl = new URL('assets/dp.jpg', document.baseURI).href;
@@ -35,6 +36,7 @@ const state = {
   storyRun: 0,
   recorder: null,
   recTimer: 0,
+  editing: null,
   urls: new Map()
 };
 
@@ -52,6 +54,7 @@ function blobUrl(m) {
 }
 
 function parseStyle(text) {
+  if (text.startsWith('^')) return { cls: 'vanish', body: text.slice(1).trim() };
   if (text.startsWith('!')) return { cls: 'blood', body: text.slice(1).trim() };
   if (text.startsWith('~')) return { cls: 'whisper', body: text.slice(1).trim() };
   return { cls: '', body: text };
@@ -61,8 +64,16 @@ function buildBubble(m) {
   const el = document.createElement('div');
   el.className = `msg ${m.mine ? 'out' : 'in'}`;
   el.dataset.id = m.id;
-  const meta = `<span class="meta"><span>${clock(m.ts)}</span>${m.mine ? `<span class="ticks">${ICONS[m.status] || ICONS.sent}</span>` : ''}</span>`;
-  if (m.kind === 'image') {
+  const edited = m.edited ? '<span>edited</span>' : '';
+  const meta = `<span class="meta">${edited}<span>${clock(m.ts)}</span>${m.mine ? `<span class="ticks">${ICONS[m.status] || ICONS.sent}</span>` : ''}</span>`;
+  if (m.kind === 'deleted') {
+    el.classList.add('deleted');
+    const body = document.createElement('span');
+    body.className = 'body';
+    body.textContent = m.mine ? 'You deleted this message' : 'This message was deleted';
+    el.append(body);
+    el.insertAdjacentHTML('beforeend', meta);
+  } else if (m.kind === 'image') {
     el.classList.add('image');
     const img = new Image();
     img.src = blobUrl(m);
@@ -86,7 +97,16 @@ function buildBubble(m) {
     el.append(body);
     el.insertAdjacentHTML('beforeend', meta);
   }
+  if (m.react) {
+    el.classList.add('reacted');
+    el.insertAdjacentHTML('beforeend', `<span class="react">${m.react}</span>`);
+  }
   return el;
+}
+
+function refreshBubble(m) {
+  const old = thread.querySelector(`.msg[data-id="${m.id}"]`);
+  if (old) old.replaceWith(buildBubble(m));
 }
 
 function appendBubble(m) {
@@ -172,7 +192,7 @@ function send(data) {
 }
 
 async function toWire(m) {
-  const wire = { id: m.id, ts: m.ts, kind: m.kind, text: m.text || '', secs: m.secs || 0 };
+  const wire = { id: m.id, ts: m.ts, kind: m.kind, text: m.text || '', secs: m.secs || 0, rev: m.rev || 0, edited: !!m.edited, react: m.react || '' };
   if (m.blob) {
     wire.mime = m.blob.type;
     wire.data = await m.blob.arrayBuffer();
@@ -192,7 +212,10 @@ async function commitOutgoing(partial) {
       setTick(m.id, 'sent');
     }
   }
-  if (m.kind === 'text') checkTriggers(m.text);
+  if (m.kind === 'text') {
+    checkTriggers(m.text);
+    scheduleVanish(m);
+  }
   return m;
 }
 
@@ -200,6 +223,9 @@ async function receiveMessage(wire, live) {
   const existing = await db.messages.get(wire.id);
   if (existing) {
     send({ t: 'ack', id: wire.id, s: 'delivered' });
+    if ((wire.rev || 0) > (existing.rev || 0)) {
+      await applyPatch(wire.id, { kind: wire.kind, text: wire.text, edited: wire.edited, react: wire.react }, wire.rev);
+    }
     return;
   }
   const m = {
@@ -210,7 +236,10 @@ async function receiveMessage(wire, live) {
     text: wire.text,
     secs: wire.secs,
     status: 'delivered',
-    seen: false
+    seen: false,
+    rev: wire.rev || 0,
+    edited: wire.edited,
+    react: wire.react
   };
   if (wire.data) m.blob = new Blob([wire.data], { type: wire.mime });
   setPeerTyping(false);
@@ -221,7 +250,10 @@ async function receiveMessage(wire, live) {
   markSeen();
   if (live) {
     if (document.visibilityState !== 'visible') sound.ping();
-    if (m.kind === 'text') checkTriggers(m.text);
+    if (m.kind === 'text') {
+      checkTriggers(m.text);
+      scheduleVanish(m);
+    }
     if (state.ambient && Math.random() < 0.35) flicker();
   }
 }
@@ -246,18 +278,56 @@ async function applyAck(id, status) {
   setTick(id, status);
 }
 
-async function pushMissing(peerIds) {
-  const known = new Set(peerIds);
+async function pushMissing(peerIndex) {
+  const known = new Map(peerIndex);
   const list = await db.messages.all();
   for (const m of list) {
-    if (m.mine && !known.has(m.id)) send({ t: 'msg', sync: true, m: await toWire(m) });
+    const peerRev = known.get(m.id);
+    const lacks = peerRev === undefined && m.mine;
+    const newer = peerRev !== undefined && (m.rev || 0) > peerRev;
+    if (lacks || newer) send({ t: 'msg', sync: true, m: await toWire(m) });
   }
+}
+
+async function messageIndex() {
+  return (await db.messages.all()).map((m) => [m.id, m.rev || 0]);
+}
+
+async function applyPatch(id, patch, rev) {
+  const m = await db.messages.get(id);
+  if (!m || rev <= (m.rev || 0)) return null;
+  Object.assign(m, patch, { rev });
+  if (m.kind === 'deleted') {
+    m.blob = undefined;
+    m.text = '';
+    m.react = '';
+    if (state.urls.has(id)) {
+      URL.revokeObjectURL(state.urls.get(id));
+      state.urls.delete(id);
+    }
+  }
+  await db.messages.put(m);
+  refreshBubble(m);
+  return m;
+}
+
+async function changeMessage(id, patch) {
+  const m = await db.messages.get(id);
+  if (!m) return;
+  const rev = (m.rev || 0) + 1;
+  await applyPatch(id, patch, rev);
+  send({ t: 'upd', id, patch, rev });
 }
 
 async function syncTriggers() {
   if (state.role !== 'host' || !state.link || !state.link.open) return;
   const list = await db.triggers.all();
   send({ t: 'triggers', list });
+}
+
+function scheduleVanish(m) {
+  if (state.role !== 'host' || !m.text.startsWith('^')) return;
+  setTimeout(() => changeMessage(m.id, { kind: 'deleted' }), 6000);
 }
 
 function splitKeywords(value) {
@@ -313,6 +383,13 @@ function applyFx(name, arg) {
     state.peerTypingTimer = setTimeout(() => setPeerTyping(false), (arg || 4) * 1000);
   }
   if (name === 'ambient') setAmbient(!!arg);
+  if (name === 'sound') scare.play({ effect: arg, duration: 4 }, dpUrl);
+  if (name === 'name') {
+    const nameEl = $('peerName');
+    nameEl.textContent = arg || 'Unknown';
+    flicker();
+    setTimeout(() => (nameEl.textContent = 'Unknown'), 6000);
+  }
 }
 
 function setAmbient(on) {
@@ -332,7 +409,7 @@ async function handleData(data) {
   db.meta.set('lastSeen', state.lastSeen);
   switch (data.t) {
     case 'hello':
-      await pushMissing(data.ids || []);
+      await pushMissing(data.index || []);
       if (state.role === 'host') {
         syncTriggers();
         send({ t: 'fx', name: 'ambient', arg: state.ambient });
@@ -340,6 +417,19 @@ async function handleData(data) {
       break;
     case 'msg':
       await receiveMessage(data.m, !data.sync);
+      break;
+    case 'upd':
+      await applyPatch(data.id, data.patch, data.rev);
+      break;
+    case 'call':
+      call.show(data.opts || {}, {
+        dpUrl,
+        answered: (r) => send({ t: 'callres', r }),
+        scare: () => scare.play({ effect: 'face', duration: 3, flash: true, shake: true, vibrate: true }, dpUrl)
+      });
+      break;
+    case 'callres':
+      toast(data.r === 'answered' ? 'Call answered' : 'Call declined');
       break;
     case 'ack':
       applyAck(data.id, data.s);
@@ -390,7 +480,7 @@ async function onLinkState(s, detail) {
 }
 
 async function sendHello() {
-  send({ t: 'hello', ids: await db.messages.ids(), role: state.role });
+  send({ t: 'hello', index: await messageIndex(), role: state.role });
   markSeen();
 }
 
@@ -507,7 +597,66 @@ async function sendText() {
   input.value = '';
   onInput();
   sendTyping(false);
+  if (state.editing) {
+    const id = state.editing;
+    stopEditing();
+    await changeMessage(id, { text, edited: true });
+    return;
+  }
   await commitOutgoing({ kind: 'text', text });
+}
+
+function startEditing(m) {
+  state.editing = m.id;
+  $('editBar').hidden = false;
+  input.value = m.text;
+  onInput();
+  input.focus();
+}
+
+function stopEditing() {
+  state.editing = null;
+  $('editBar').hidden = true;
+}
+
+let pressTimer = 0;
+let pressAt = null;
+
+function closeMsgMenu() {
+  $('msgMenu').hidden = true;
+}
+
+async function openMsgMenu(id) {
+  const m = await db.messages.get(id);
+  if (!m || m.kind === 'deleted') return;
+  const box = $('msgMenuBody');
+  box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'emoji-row';
+  ['❤️', '💀', '😂', '😨', '👍'].forEach((emoji) => {
+    const b = document.createElement('button');
+    b.textContent = emoji;
+    b.addEventListener('click', () => {
+      closeMsgMenu();
+      changeMessage(id, { react: m.react === emoji ? '' : emoji });
+    });
+    row.append(b);
+  });
+  box.append(row);
+  const add = (label, fn, cls = '') => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = cls;
+    b.addEventListener('click', () => {
+      closeMsgMenu();
+      fn();
+    });
+    box.append(b);
+  };
+  if (m.kind === 'text') add('Copy', () => navigator.clipboard && navigator.clipboard.writeText(m.text));
+  if (state.role === 'host' && m.kind === 'text') add('Edit', () => startEditing(m));
+  if (state.role === 'host') add('Delete for everyone', () => changeMessage(id, { kind: 'deleted' }), 'danger-text');
+  $('msgMenu').hidden = false;
 }
 
 async function sendImages(files) {
@@ -587,6 +736,7 @@ const api = {
   toast,
   syncTriggers,
   fireTrigger,
+  callGuest: (opts) => send({ t: 'call', opts }),
   sendFx,
   applyFx,
   exportChat,
@@ -602,6 +752,28 @@ const api = {
 const panel = initPanel(api);
 
 function wireUi() {
+  thread.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('.msg');
+    if (!el) return;
+    pressAt = [e.clientX, e.clientY];
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => openMsgMenu(el.dataset.id), 480);
+  });
+  thread.addEventListener('pointermove', (e) => {
+    if (pressAt && Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 12) clearTimeout(pressTimer);
+  });
+  ['pointerup', 'pointercancel', 'scroll'].forEach((ev) => thread.addEventListener(ev, () => clearTimeout(pressTimer), { passive: true }));
+  thread.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.msg')) e.preventDefault();
+  });
+  $('msgMenu').addEventListener('click', (e) => {
+    if (e.target === $('msgMenu')) closeMsgMenu();
+  });
+  $('editCancel').addEventListener('click', () => {
+    stopEditing();
+    input.value = '';
+    onInput();
+  });
   $('sendBtn').addEventListener('click', () => (input.value.trim() ? sendText() : toggleRecording()));
   $('recCancel').addEventListener('click', cancelRecording);
   input.addEventListener('input', onInput);

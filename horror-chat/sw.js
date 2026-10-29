@@ -1,4 +1,4 @@
-const CACHE = 'unknown-chat-v1';
+const CACHE = 'unknown-chat-v2';
 const SHELL = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   'js/panel.js',
   'js/scare.js',
   'js/sound.js',
+  'js/call.js',
   'vendor/peerjs.min.js',
   'assets/dp.jpg',
   'assets/bg.svg',

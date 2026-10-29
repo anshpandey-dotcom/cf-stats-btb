@@ -140,3 +140,97 @@ export function ping() {
   osc.start(t);
   osc.stop(t + 0.3);
 }
+
+function thud(start, freq, vol) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, start);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + 0.12);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(vol, start + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + 0.2);
+}
+
+export function knock() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  [0, 0.28, 0.56, 1.5, 1.78, 2.06].forEach((offset) => thud(t + offset, 150, 1));
+}
+
+export function footsteps(seconds = 5) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const steps = Math.floor(seconds / 0.7);
+  for (let i = 0; i < steps; i++) thud(t + i * 0.7, i % 2 ? 90 : 110, 0.9 - i * 0.04);
+}
+
+export function whisper(seconds = 4) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const src = noise(seconds);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 3200;
+  filter.Q.value = 2.5;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  for (let i = 0; i < seconds * 2.5; i++) {
+    const at = t + i * 0.4;
+    gain.gain.linearRampToValueAtTime(0.5 + Math.random() * 0.4, at + 0.12);
+    gain.gain.linearRampToValueAtTime(0.03, at + 0.35);
+  }
+  gain.gain.linearRampToValueAtTime(0.0001, t + seconds);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  src.start(t);
+}
+
+export function musicbox(seconds = 8) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const notes = [659, 622, 659, 622, 659, 494, 587, 523, 440, 262, 330, 440, 494];
+  const count = Math.min(notes.length, Math.floor(seconds / 0.45));
+  for (let i = 0; i < count; i++) {
+    const start = t + i * 0.45;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = notes[i] * (i % 5 === 4 ? 0.985 : 1);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.5, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 1);
+  }
+}
+
+export function ringtone() {
+  if (!ctx) return () => {};
+  const play = () => {
+    const t = ctx.currentTime;
+    [0, 0.25, 0.5, 0.75].forEach((offset) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = offset % 0.5 ? 740 : 587;
+      gain.gain.setValueAtTime(0.0001, t + offset);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.25);
+    });
+  };
+  play();
+  const id = setInterval(play, 2200);
+  return () => clearInterval(id);
+}

@@ -142,3 +142,32 @@ body.shake #app{animation:shake .12s linear infinite}
 @keyframes strobe{0%{filter:none}50%{filter:invert(1) contrast(1.6)}}
 @keyframes zoomIn{from{transform:scale(.6)}to{transform:scale(1.18)}}
 @keyframes eyeOpen{0%{transform:scaleY(.05);opacity:0}30%{opacity:1}100%{transform:scaleY(1);opacity:1}}
+
+.msg.deleted .body{font-style:italic;color:var(--muted);font-size:14.5px}
+.msg.vanish .body{color:#ffd0d3;animation:bloodFlicker 1.2s infinite}
+.msg.reacted{margin-bottom:12px}
+.msg .react{position:absolute;left:8px;bottom:-13px;background:#241418;border:1px solid #0b0507;border-radius:12px;padding:1px 6px;font-size:14px;line-height:1.3}
+.msg.out .react{left:auto;right:8px}
+.msg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.sheet.center{align-items:center;justify-content:center}
+.pop{background:var(--panel);border:1px solid #4a1a21;border-radius:16px;min-width:250px;max-width:86%;overflow:hidden}
+.pop button{display:block;width:100%;text-align:left;padding:15px 20px;font-size:16px}
+.pop button:active{background:#ffffff12}
+.pop .danger-text{color:#ff6b74}
+.emoji-row{display:flex;justify-content:space-around;padding:10px 6px;border-bottom:1px solid #2f1a1f}
+.emoji-row button{width:auto;padding:6px 8px;font-size:26px;text-align:center}
+.edit-bar{display:flex;align-items:center;justify-content:space-between;background:#2a1418;border-radius:14px 14px 0 0;padding:2px 6px 2px 16px;margin:0 54px -4px 0;font-size:13px;color:var(--accent-soft)}
+#call{position:fixed;inset:0;z-index:95;background:radial-gradient(circle at 50% 25%,#2d0a10,#050203 75%);display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top) + 90px) 24px 60px}
+#call[hidden]{display:none}
+.call-dp{width:150px;height:150px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 6px #ffffff10,0 0 60px #c4161f55;animation:ringPulse 1.4s ease-in-out infinite}
+#call.live .call-dp{animation:none;filter:contrast(1.3) brightness(.8)}
+.call-name{font-size:30px;margin-top:26px}
+.call-state{color:var(--muted);margin-top:8px;font-size:17px}
+.call-actions{margin-top:auto;display:flex;gap:90px}
+#call.live .call-btn.answer{display:none}
+#call.live .call-actions{justify-content:center}
+.call-btn{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.call-btn svg{width:30px;height:30px}
+.call-btn.decline{background:#e0303a}
+.call-btn.answer{background:#25b45a;animation:ringPulse 1s ease-in-out infinite}
+@keyframes ringPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}

@@ -197,6 +197,23 @@ export function initPanel(api) {
         button('Blackout 5s', () => api.applyFx('blackout', 5))
       )
     );
+    pane.append(
+      group('Sound board',
+        button('Knock', () => api.sendFx('sound', 'knock')),
+        button('Footsteps', () => api.sendFx('sound', 'footsteps')),
+        button('Whisper', () => api.sendFx('sound', 'whisper')),
+        button('Music box', () => api.sendFx('sound', 'musicbox'))
+      ),
+      group('Fake call on guest',
+        button('Ring', () => api.callGuest({ scare: false })),
+        button('Ring + scare', () => api.callGuest({ scare: true }))
+      ),
+      group('Name glitch on guest',
+        button('Behind you', () => api.sendFx('name', 'Behind you')),
+        button('Dont look', () => api.sendFx('name', 'Dont look')),
+        button('Your name', () => api.sendFx('name', 'I see you'))
+      )
+    );
     const ambient = el('input', { type: 'checkbox', checked: api.isAmbient() });
     ambient.addEventListener('change', () => {
       api.setAmbient(ambient.checked);

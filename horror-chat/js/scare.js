@@ -5,8 +5,14 @@ export const EFFECTS = {
   eyes: 'Eyes in the dark',
   glitch: 'Screen glitch',
   static: 'TV static',
+  knock: 'Knocking (sound only)',
+  footsteps: 'Footsteps (sound only)',
+  whisper: 'Whisper (sound only)',
+  musicbox: 'Music box (sound only)',
   custom: 'Custom image / sound'
 };
+
+const SOUND_ONLY = { knock: sound.knock, footsteps: sound.footsteps, whisper: sound.whisper, musicbox: sound.musicbox };
 
 const root = document.getElementById('scare');
 const img = document.getElementById('scareImg');
@@ -60,6 +66,11 @@ export function play(def, dpUrl) {
   sound.unlock();
   const seconds = Math.max(1, Number(def.duration) || 3);
   const effect = def.effect || 'face';
+  if (SOUND_ONLY[effect] && !def.image && !def.sound) {
+    SOUND_ONLY[effect](seconds);
+    if (def.vibrate && navigator.vibrate) navigator.vibrate([300, 100, 300]);
+    return;
+  }
   root.hidden = false;
   root.className = 'no-image';
 

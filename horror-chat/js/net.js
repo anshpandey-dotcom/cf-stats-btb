@@ -7,8 +7,10 @@ const ICE = {
   ]
 };
 
+const PUBLIC_URL = 'https://anshpandey-dotcom.github.io/cf-stats-btb/horror-chat/';
+
 export function roomLink(code) {
-  return `${location.origin}${location.pathname}#join=${code}`;
+  return `${PUBLIC_URL}#join=${code}`;
 }
 
 export function parseCode(text) {
