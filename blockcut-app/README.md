@@ -2,7 +2,7 @@
 
 Minecraft animation video maker that runs fully on the phone. No server, no internet needed after install.
 
-**Download:** [`release/BlockcutStudio-v1.0.0.apk`](release/BlockcutStudio-v1.0.0.apk) or the latest build on the Releases page (tag `blockcut-latest`).
+**Download:** [`release/BlockcutStudio-v1.0.1.apk`](release/BlockcutStudio-v1.0.1.apk) or the latest build on the Releases page (tag `blockcut-latest`).
 
 ## Features
 

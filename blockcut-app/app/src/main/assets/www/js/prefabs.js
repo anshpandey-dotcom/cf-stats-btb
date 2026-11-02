@@ -255,8 +255,8 @@ export const TEMPLATES = {
   talk: { name: 'Talk show', desc: 'Two friends talking', script: {
     blockcut: 1, duration: 10, aspect: '9:16', world: { template: 'village', time: 11 },
     characters: [
-      { id: 'steve', name: 'Steve', skin: 'steve', at: [-1.2, 0], facing: 90, actions: [{ t: 0.3, say: 'Bro, did you see the new update?', dur: 2.2 }, { t: 5, say: 'No way! Let us build it!', dur: 2 }, { t: 5, face: 'happy', dur: 3 }, { t: 7.5, move: 'celebrate', dur: 2 }] },
-      { id: 'alex', name: 'Alex', skin: 'alex', at: [1.2, 0], facing: -90, actions: [{ t: 2.8, say: 'Yes! It has a huge new castle!', dur: 2 }, { t: 2.8, move: 'point', dur: 2 }, { t: 7.5, move: 'dance', dur: 2.5 }] },
+      { id: 'steve', name: 'Steve', skin: 'steve', at: [-1.3, 0], facing: 55, actions: [{ t: 0.3, say: 'Bro, did you see the new update?', dur: 2.2 }, { t: 5, say: 'No way! Let us build it!', dur: 2 }, { t: 5, face: 'happy', dur: 3 }, { t: 7.5, move: 'celebrate', dur: 2 }] },
+      { id: 'alex', name: 'Alex', skin: 'alex', at: [1.3, 0], facing: -55, actions: [{ t: 2.8, say: 'Yes! It has a huge new castle!', dur: 2 }, { t: 2.8, move: 'point', dur: 2 }, { t: 7.5, move: 'dance', dur: 2.5 }] },
     ],
     camera: [{ t: 0, shot: 'face', on: 'steve' }, { t: 2.7, shot: 'face', on: 'alex' }, { t: 5, shot: 'face', on: 'steve' }, { t: 7.4, shot: 'front', on: 'alex' }],
     texts: [{ t: 0, dur: 2.5, text: 'EPISODE 1', pos: 'top' }],

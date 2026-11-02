@@ -73,67 +73,114 @@ function langMap(text) {
 export async function importArchive(file, onProgress = () => {}) {
   if (!window.zip) throw new Error('The zip reader did not load');
   zip.configure({ useWebWorkers: false });
-  const stats = { tex: 0, snd: 0, fsb: 0, items: 0, blocks: 0, entities: 0, skins: 0, geos: 0, anims: 0, kind: 'pack' };
+  const stats = { tex: 0, snd: 0, fsb: 0, items: 0, blocks: 0, entities: 0, skins: 0, geos: 0, anims: 0, kind: 'pack', done: 0, total: 0 };
   const json = { itemTex: {}, terrain: {}, blocksJson: {}, entities: [], geos: [], anims: [], bpItems: [], bpBlocks: [], lang: {}, skins: null, skinFiles: {}, pngs: [], manifests: [] };
-  await walk(file, '', json, stats, onProgress);
+  let last = 0;
+  const report = force => {
+    const now = performance.now();
+    if (!force && now - last < 150) return;
+    last = now;
+    onProgress(stats.total ? stats.done / stats.total : 0, stats);
+  };
+  report(true);
+  await walk(file, json, stats, report);
+  report(true);
   return finish(json, stats, file.name || 'pack');
 }
 
-async function walk(file, base, json, stats, onProgress) {
+const SKIP_TEX = /^textures\/(ui|gui|persona_thumbnails|map|painting|trims|colormap|misc|flame_atlas|forcefield_atlas|gradients|marketplace|skin_previews|models\/armor_trim|font)\//;
+const WANT_JSON = /(^|\/)(manifest|skins|blocks)\.json$|textures\/(item|terrain)_texture\.json$|(^|\/)(entity|items|blocks)\/[^/]+\.json$|\.entity\.json$/;
+const GEO_JSON = /(^|\/)models\/.+\.json$|\.geo\.json$/;
+const ANIM_JSON = /(^|\/)animations\/.+\.json$|\.animation\.json$/;
+
+async function pool(list, n, fn) {
+  let i = 0;
+  const run = async () => { while (i < list.length) { const k = i++; try { await fn(list[k]); } catch {} } };
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, run));
+}
+
+async function walk(file, json, stats, report) {
   const reader = new zip.ZipReader(new zip.BlobReader(file));
-  const entries = await reader.getEntries();
-  let batch = [], done = 0;
-  const seen = new Set();
-  const flush = async () => { if (batch.length) { await Assets.add(batch); batch = []; } };
+  const entries = (await reader.getEntries()).filter(e => !e.directory);
+  const name = e => e.filename.replace(/\\/g, '/');
+  const pngKeys = new Set();
+  const media = [], jsons = [], geos = [], anims = [], nested = [], loose = [];
+  let lang = null;
   for (const e of entries) {
-    done++;
-    if (done % 30 === 0) { onProgress(done / entries.length, stats); await wait(0); }
-    if (e.directory) continue;
-    const name = e.filename.replace(/\\/g, '/');
-    const low = name.toLowerCase();
-    if (/\.(zip|mcpack|mcaddon)$/.test(low)) {
-      await flush();
-      await walk(await e.getData(new zip.BlobWriter()), name, json, stats, null);
+    const n = name(e), low = n.toLowerCase();
+    if (/\.(zip|mcpack|mcaddon)$/.test(low)) { nested.push(e); continue; }
+    if (low.endsWith('.fsb')) { stats.fsb++; continue; }
+    if (low.endsWith('.json')) {
+      if (WANT_JSON.test(low) && !/(^|\/)models\//.test(low) && !(/(^|\/)textures\//.test(low) && !/_texture\.json$/.test(low))) jsons.push(e);
+      else if (GEO_JSON.test(low)) geos.push(e);
+      else if (ANIM_JSON.test(low)) anims.push(e);
       continue;
     }
-    if (/\.json$/.test(low)) {
-      const text = await e.getData(new zip.TextWriter());
-      const j = readJSON(text);
-      if (!j) continue;
-      if (/(^|\/)manifest\.json$/.test(low)) json.manifests.push(j);
-      else if (/(^|\/)skins\.json$/.test(low)) json.skins = { j, dir: name.replace(/skins\.json$/i, '') };
-      else if (/textures\/item_texture\.json$/.test(low)) Object.assign(json.itemTex, j.texture_data || {});
-      else if (/textures\/terrain_texture\.json$/.test(low)) Object.assign(json.terrain, j.texture_data || {});
-      else if (/(^|\/)blocks\.json$/.test(low)) Object.assign(json.blocksJson, j);
-      else if (j['minecraft:client_entity']) json.entities.push(j['minecraft:client_entity']);
-      else if (j['minecraft:item']) json.bpItems.push(j['minecraft:item']);
-      else if (j['minecraft:block']) json.bpBlocks.push(j['minecraft:block']);
-      else if (j.animations) json.anims.push(...normalizeAnims(j));
-      else if (j['minecraft:geometry'] || Object.keys(j).some(k => k.startsWith('geometry.'))) json.geos.push(...normalizeGeo(j));
+    if (/texts\/en_us\.lang$/.test(low)) { lang = e; continue; }
+    const key = assetKey(n);
+    if (key) {
+      if (SKIP_TEX.test(key)) continue;
+      if (low.endsWith('.png')) pngKeys.add(key);
+      media.push([e, key, low.split('.').pop()]);
       continue;
     }
-    if (/texts\/en_us\.lang$/.test(low)) { Object.assign(json.lang, langMap(await e.getData(new zip.TextWriter()))); continue; }
-    const ext = low.split('.').pop();
-    let key = assetKey(name);
-    if (!key && /\.(png|tga)$/.test(low)) {
-      const blob = await e.getData(new zip.BlobWriter(MIME[ext] || 'image/png'));
-      json.pngs.push({ name, blob: ext === 'tga' ? await tgaToPng(await blob.arrayBuffer()) : blob });
-      json.skinFiles[name.split('/').pop().toLowerCase()] = json.pngs[json.pngs.length - 1];
-      continue;
-    }
-    if (!key && /\.(ogg|wav|mp3|m4a)$/.test(low)) key = 'sounds/custom/' + slug(name.split('/').pop());
-    if (!key) continue;
-    if (ext === 'fsb') { stats.fsb++; continue; }
-    if (seen.has(key) && ext === 'tga') continue;
-    seen.add(key);
+    if (SKIP.test(low) || /(^|\/)textures\//.test(low)) continue;
+    if (/\.(png|tga)$/.test(low)) loose.push(e);
+    else if (/\.(ogg|wav|mp3|m4a)$/.test(low)) media.push([e, 'sounds/custom/' + slug(n.split('/').pop()), low.split('.').pop()]);
+  }
+  const todo = media.filter(([, key, ext]) => !(ext === 'tga' && pngKeys.has(key)));
+  stats.total += jsons.length + todo.length + loose.length + nested.length + 1;
+  report(true);
+  const parsed = [];
+  await pool(jsons, 8, async e => { parsed.push([e, readJSON(await e.getData(new zip.TextWriter()))]); stats.done++; report(); });
+  for (const [e, j] of parsed) {
+    const low = name(e).toLowerCase();
+    if (!j) continue;
+    if (/(^|\/)manifest\.json$/.test(low)) json.manifests.push(j);
+    else if (/(^|\/)skins\.json$/.test(low)) json.skins = { j, dir: name(e).replace(/skins\.json$/i, '') };
+    else if (/textures\/item_texture\.json$/.test(low)) Object.assign(json.itemTex, j.texture_data || {});
+    else if (/textures\/terrain_texture\.json$/.test(low)) Object.assign(json.terrain, j.texture_data || {});
+    else if (/(^|\/)blocks\.json$/.test(low) && !j['minecraft:block']) Object.assign(json.blocksJson, j);
+    else if (j['minecraft:client_entity']) json.entities.push(j['minecraft:client_entity']);
+    else if (j['minecraft:item']) json.bpItems.push(j['minecraft:item']);
+    else if (j['minecraft:block']) json.bpBlocks.push(j['minecraft:block']);
+    else if (j['minecraft:geometry'] || Object.keys(j).some(k => k.startsWith('geometry.'))) json.geos.push(...normalizeGeo(j));
+    else if (j.animations) json.anims.push(...normalizeAnims(j));
+  }
+  if (lang) Object.assign(json.lang, langMap(await lang.getData(new zip.TextWriter())));
+  const custom = json.entities.some(ce => ce.description && ce.description.identifier && !ce.description.identifier.startsWith('minecraft:'));
+  const characterZip = !json.entities.length && !json.manifests.length;
+  if (custom || characterZip) {
+    stats.total += geos.length + anims.length;
+    await pool(geos, 6, async e => { const j = readJSON(await e.getData(new zip.TextWriter())); if (j) json.geos.push(...normalizeGeo(j)); stats.done++; report(); });
+    await pool(anims, 6, async e => { const j = readJSON(await e.getData(new zip.TextWriter())); if (j) json.anims.push(...normalizeAnims(j)); stats.done++; report(); });
+  }
+  let batch = [];
+  let flushing = Promise.resolve();
+  const flush = () => { if (!batch.length) return flushing; const b2 = batch; batch = []; flushing = flushing.then(() => Assets.add(b2)); return flushing; };
+  await pool(todo, 8, async ([e, key, ext]) => {
     let blob = await e.getData(new zip.BlobWriter(MIME[ext] || 'application/octet-stream'));
     if (ext === 'tga') blob = await tgaToPng(await blob.arrayBuffer());
-    if (!blob) continue;
-    batch.push([key, blob]);
-    key.startsWith('textures/') ? stats.tex++ : stats.snd++;
-    if (batch.length >= 120) await flush();
-  }
+    stats.done++;
+    if (blob) {
+      batch.push([key, blob]);
+      key.startsWith('textures/') ? stats.tex++ : stats.snd++;
+      if (batch.length >= 200) flush();
+    }
+    report();
+  });
+  await pool(loose, 4, async e => {
+    const low = name(e).toLowerCase(), ext = low.split('.').pop();
+    const blob = await e.getData(new zip.BlobWriter(MIME[ext] || 'image/png'));
+    const item = { name: name(e), blob: ext === 'tga' ? await tgaToPng(await blob.arrayBuffer()) : blob };
+    json.pngs.push(item);
+    json.skinFiles[name(e).split('/').pop().toLowerCase()] = item;
+    stats.done++;
+    report();
+  });
   await flush();
+  for (const e of nested) { await walk(await e.getData(new zip.BlobWriter()), json, stats, report); stats.done++; }
+  stats.done++;
   await reader.close();
 }
 

@@ -39,6 +39,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import org.json.JSONObject;
@@ -84,9 +85,12 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(14, 18, 16));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        setContentView(web);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.rgb(14, 18, 16));
+        root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
         if (Build.VERSION.SDK_INT >= 30) {
-            web.setOnApplyWindowInsetsListener((v, insets) -> {
+            root.setOnApplyWindowInsetsListener((v, insets) -> {
                 android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
                 v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
                 return WindowInsets.CONSUMED;

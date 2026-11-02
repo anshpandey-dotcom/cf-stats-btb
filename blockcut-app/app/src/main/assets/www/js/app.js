@@ -116,7 +116,7 @@ function changed(rebuild) {
   drawTimeline();
 }
 
-S.hooks.changed = r => { changed(r); if (r !== 'world') renderPanel(); };
+S.hooks.changed = r => { changed(r); renderTransport(); if (r !== 'world') renderPanel(); };
 S.hooks.history = pushHistory;
 S.hooks.time = kind => { updateTimeUI(); if (kind === 'play') { setPlayIcon(); if (!S.playing) refreshPanelForTime(); } };
 S.hooks.select = kind => {
@@ -193,7 +193,6 @@ function layout() {
   resize(vw, vh, free);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   ov.width = Math.round(vw * dpr); ov.height = Math.round(vh * dpr);
-  $('#vbadge').textContent = `${w}×${hh} · ${S.project.fps}fps`;
   sizeTimeline();
 }
 new ResizeObserver(() => layout()).observe(stage);
@@ -206,7 +205,7 @@ afterFrame.push(t => {
 });
 
 const tlc = $('#tl'), tctx = tlc.getContext('2d');
-const TL = { pps: 70, label: 70, ruler: 22, rows: [], h: 0, drag: null, pointers: new Map(), pinch: null };
+const TL = { pps: 70, label: 46, ruler: 18, rows: [], h: 0, drag: null, pointers: new Map(), pinch: null };
 const COL = {};
 function readColors() { for (const n of ['bg', 'panel', 'raised', 'raised2', 'sunk', 'line', 'fg', 'muted', 'accent', 'cam', 'char', 'sky', 'snd', 'face', 'voice', 'prop', 'text', 'danger']) COL[n] = getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim(); }
 
@@ -231,11 +230,11 @@ function soundLanes() {
 
 function layoutRows() {
   const P = S.project;
-  const rows = [{ kind: 'camera', label: 'Camera', icon: '🎥', color: COL.cam, h: 26 }, { kind: 'env', label: 'Sky', icon: '🌤️', color: COL.sky, h: 26 }];
-  P.characters.forEach(c => rows.push({ kind: 'char', id: c.id, label: c.name, color: COL.char, h: 62 }));
-  P.props.forEach(p => rows.push({ kind: 'prop', id: p.id, label: p.name, icon: '📦', color: COL.prop, h: 34 }));
-  rows.push({ kind: 'text', label: 'Text', icon: '🔤', color: COL.text, h: 26 });
-  rows.push({ kind: 'sound', label: 'Sound', icon: '🔊', color: COL.snd, h: 10 + soundLanes() * 18 });
+  const rows = [{ kind: 'camera', label: 'Camera', icon: '🎥', color: COL.cam, h: 22 }, { kind: 'env', label: 'Sky', icon: '🌤️', color: COL.sky, h: 22 }];
+  P.characters.forEach(c => rows.push({ kind: 'char', id: c.id, label: c.name, color: COL.char, h: 52 }));
+  P.props.forEach(p => rows.push({ kind: 'prop', id: p.id, label: p.name, icon: '📦', color: COL.prop, h: 30 }));
+  if (P.texts.length || tool === 'text') rows.push({ kind: 'text', label: 'Text', icon: '🔤', color: COL.text, h: 22 });
+  if (P.sounds.length || tool === 'sound') rows.push({ kind: 'sound', label: 'Sound', icon: '🔊', color: COL.snd, h: 6 + soundLanes() * 15 });
   let y = TL.ruler;
   rows.forEach(r => { r.y = y; y += r.h; });
   TL.rows = rows;
@@ -309,7 +308,7 @@ function drawTimeline() {
   if (startX > TL.label) c.fillRect(TL.label, TL.ruler, startX - TL.label, H);
   const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60];
   const step = steps.find(s => s * TL.pps >= 56) || 60;
-  c.font = '10.5px ui-monospace, monospace';
+  c.font = '9.5px ui-monospace, monospace';
   c.textBaseline = 'middle';
   for (let t = Math.max(0, Math.floor(x0() / step) * step); tx(t) < W; t += step) {
     const x = tx(t);
@@ -325,13 +324,13 @@ function drawTimeline() {
     c.save();
     c.beginPath(); c.rect(TL.label, r.y, W - TL.label, r.h); c.clip();
     if (r.kind === 'char') drawChar(c, r, it);
-    else if (r.kind === 'sound') for (const s of S.project.sounds) bar(c, tx(s.t), tx(s.t + soundLen(s)), r.y + 5 + (s._lane || 0) * 18, 15, COL.snd, s.path.split('/').slice(-2).join('/'), it?.ev === s);
-    else if (r.kind === 'text') for (const t of S.project.texts) bar(c, tx(t.t), tx(t.t + t.dur), r.y + 5, 15, COL.text, t.text, it?.text === t);
+    else if (r.kind === 'sound') for (const s of S.project.sounds) bar(c, tx(s.t), tx(s.t + soundLen(s)), r.y + 4 + (s._lane || 0) * 15, 11, COL.snd, s.path.split('/').pop(), it?.ev === s);
+    else if (r.kind === 'text') for (const t of S.project.texts) bar(c, tx(t.t), tx(t.t + t.dur), r.y + 5, 12, COL.text, t.text, it?.text === t);
     else if (r.kind === 'prop') {
       const p = S.project.props.find(x => x.id === r.id);
       if (p) {
-        p.keys.forEach(k => diamond(c, tx(k.t), r.y + 9, COL.prop, it?.key === k));
-        p.fx.forEach(f => bar(c, tx(f.t), tx(f.t + f.dur), r.y + 17, 13, COL.prop, f.type, it?.fx === f));
+        p.keys.forEach(k => diamond(c, tx(k.t), r.y + 8, COL.prop, it?.key === k));
+        p.fx.forEach(f => bar(c, tx(f.t), tx(f.t + f.dur), r.y + 15, 11, COL.prop, f.type, it?.fx === f));
       }
     } else {
       const keys = r.kind === 'camera' ? S.project.camera.keys : S.project.env.keys;
@@ -340,18 +339,16 @@ function drawTimeline() {
     }
     c.restore();
     c.fillStyle = selected ? COL.raised : COL.panel; c.fillRect(0, r.y, TL.label, r.h - 1);
-    c.fillStyle = r.color; c.fillRect(0, r.y + 4, 3, r.h - 9);
-    c.fillStyle = selected ? COL.fg : COL.muted;
-    c.font = `${selected ? 700 : 600} 11px Inter, sans-serif`;
+    c.fillStyle = r.color; c.fillRect(0, r.y + 3, 3, r.h - 7);
     if (r.kind === 'char') {
       const ch = S.project.characters.find(x => x.id === r.id);
-      if (ch) { c.imageSmoothingEnabled = false; c.drawImage(tlThumb(ch), 8, r.y + 6, 22, 22); }
-      c.fillText(r.label.length > 9 ? r.label.slice(0, 8) + '…' : r.label, 8, r.y + 40);
+      if (ch) { c.imageSmoothingEnabled = false; c.drawImage(tlThumb(ch), 12, r.y + (r.h - 24) / 2, 24, 24); }
+      if (selected) { c.strokeStyle = COL.accent; c.lineWidth = 2; c.strokeRect(11, r.y + (r.h - 24) / 2 - 1, 26, 26); }
     } else {
       c.font = '13px sans-serif';
-      c.fillText(r.icon || '', 8, r.y + Math.min(r.h, 26) / 2 + 1);
-      c.font = `${selected ? 700 : 600} 10.5px Inter, sans-serif`;
-      c.fillText(r.label.length > 6 ? r.label.slice(0, 5) + '…' : r.label, 28, r.y + Math.min(r.h, 26) / 2 + 1);
+      c.textAlign = 'center';
+      c.fillText(r.icon || '', 24, r.y + Math.min(r.h, 22) / 2 + 1);
+      c.textAlign = 'left';
     }
   }
   c.fillStyle = COL.line; c.fillRect(TL.label - 1, 0, 1, H); c.fillRect(0, TL.ruler - 1, W, 1);
@@ -363,17 +360,17 @@ function drawTimeline() {
 
 function diamond(c, x, y, color, on) {
   c.save(); c.translate(x, y); c.rotate(Math.PI / 4);
-  c.fillStyle = color; c.fillRect(-5, -5, 10, 10);
-  if (on) { c.strokeStyle = COL.fg; c.lineWidth = 2; c.strokeRect(-6.5, -6.5, 13, 13); }
+  c.fillStyle = color; c.fillRect(-4, -4, 8, 8);
+  if (on) { c.strokeStyle = COL.fg; c.lineWidth = 2; c.strokeRect(-5.5, -5.5, 11, 11); }
   c.restore();
 }
 
 function bar(c, a, b, y, hh, color, label, on) {
-  c.fillStyle = color + (on ? 'ff' : 'aa');
-  c.beginPath(); c.roundRect(a, y, Math.max(5, b - a), hh, 4); c.fill();
-  if (on) { c.strokeStyle = COL.fg; c.lineWidth = 2; c.stroke(); c.fillStyle = COL.fg; c.fillRect(b - 4, y + 3, 2, hh - 6); }
+  c.fillStyle = color + (on ? 'ff' : 'b0');
+  c.beginPath(); c.roundRect(a, y, Math.max(5, b - a), hh, hh / 2); c.fill();
+  if (on) { c.strokeStyle = COL.fg; c.lineWidth = 1.5; c.stroke(); c.fillStyle = COL.fg; c.fillRect(b - 4, y + 2, 2, hh - 4); }
   c.fillStyle = '#121614';
-  c.font = `700 10px Inter, sans-serif`;
+  c.font = `700 ${Math.max(8, hh - 3)}px Inter, sans-serif`;
   c.save(); c.beginPath(); c.rect(a, y, Math.max(0, b - a - 4), hh); c.clip();
   c.fillText(label, a + 5, y + hh / 2 + 0.5);
   c.restore();
@@ -382,12 +379,12 @@ function bar(c, a, b, y, hh, color, label, on) {
 function drawChar(c, r, it) {
   const ch = S.project.characters.find(x => x.id === r.id);
   if (!ch) return;
-  const ky = r.y + 10;
+  const ky = r.y + 7;
   if (ch.keys.length > 1) { c.fillStyle = COL.char + '30'; c.fillRect(tx(ch.keys[0].t), ky - 2, tx(ch.keys[ch.keys.length - 1].t) - tx(ch.keys[0].t), 4); }
   ch.keys.forEach(k => diamond(c, tx(k.t), ky, COL.char, it?.key === k));
-  ch.clips.forEach(cl => bar(c, tx(cl.t), tx(cl.t + cl.dur), r.y + 19, 13, COL.accent, (MOVES[cl.type]?.em || '🎞️') + ' ' + (MOVES[cl.type]?.label || cl.type.replace(/^anim:/, '').split('.').pop()), it?.clip === cl));
-  ch.faces.forEach(f => bar(c, tx(f.t), tx(f.t + f.dur), r.y + 33, 12, COL.face, (FACES[f.type]?.em || '') + ' ' + (FACES[f.type]?.label || f.type), it?.face === f));
-  ch.voices.forEach(v => bar(c, tx(v.t), tx(v.t + (v.dur || 1)), r.y + 46, 12, COL.voice, (v.path ? '🎙 ' : '💬 ') + (v.text || 'voice'), it?.voice === v));
+  ch.clips.forEach(cl => bar(c, tx(cl.t), tx(cl.t + cl.dur), r.y + 14, 11, COL.accent, (MOVES[cl.type]?.em || '🎞️') + ' ' + (MOVES[cl.type]?.label || cl.type.replace(/^anim:/, '').split('.').pop()), it?.clip === cl));
+  ch.faces.forEach(f => bar(c, tx(f.t), tx(f.t + f.dur), r.y + 26, 11, COL.face, (FACES[f.type]?.em || '') + ' ' + (FACES[f.type]?.label || f.type), it?.face === f));
+  ch.voices.forEach(v => bar(c, tx(v.t), tx(v.t + (v.dur || 1)), r.y + 38, 11, COL.voice, (v.path ? '🎙 ' : '💬 ') + (v.text || 'voice'), it?.voice === v));
 }
 
 function hitTest(x, y) {
@@ -397,22 +394,22 @@ function hitTest(x, y) {
   if (r.kind === 'char') {
     const ch = S.project.characters.find(c => c.id === r.id);
     const ly = y - r.y;
-    if (ly < 17) { const k = ch.keys.find(k => Math.abs(tx(k.t) - x) < 10); if (k) return { row: r, key: k, keys: ch.keys, owner: ch }; }
-    const lane = ly < 32 ? ch.clips : ly < 45 ? ch.faces : ch.voices;
-    const kind = ly < 32 ? 'clip' : ly < 45 ? 'face' : 'voice';
+    if (ly < 13) { const k = ch.keys.find(k => Math.abs(tx(k.t) - x) < 10); if (k) return { row: r, key: k, keys: ch.keys, owner: ch }; }
+    const lane = ly < 25.5 ? ch.clips : ly < 37.5 ? ch.faces : ch.voices;
+    const kind = ly < 25.5 ? 'clip' : ly < 37.5 ? 'face' : 'voice';
     for (const o of [...lane].reverse()) if (within(o.t, o.dur || 1, x)) return { row: r, obj: o, kind, owner: ch, edge: x > tx(o.t + (o.dur || 1)) - 12 };
     return { row: r };
   }
   if (r.kind === 'prop') {
     const p = S.project.props.find(q => q.id === r.id);
-    if (y - r.y < 16) { const k = p.keys.find(k => Math.abs(tx(k.t) - x) < 10); if (k) return { row: r, key: k, keys: p.keys, prop: p }; }
+    if (y - r.y < 14) { const k = p.keys.find(k => Math.abs(tx(k.t) - x) < 10); if (k) return { row: r, key: k, keys: p.keys, prop: p }; }
     for (const f of [...p.fx].reverse()) if (within(f.t, f.dur, x)) return { row: r, obj: f, kind: 'fx', prop: p, edge: x > tx(f.t + f.dur) - 12 };
     return { row: r };
   }
   if (r.kind === 'sound') {
     for (const s of S.project.sounds) {
-      const sy = r.y + 5 + (s._lane || 0) * 18;
-      if (y >= sy && y <= sy + 15 && within(s.t, soundLen(s), x)) return { row: r, obj: s, kind: 'sound' };
+      const sy = r.y + 4 + (s._lane || 0) * 15;
+      if (y >= sy - 2 && y <= sy + 13 && within(s.t, soundLen(s), x)) return { row: r, obj: s, kind: 'sound' };
     }
     return { row: r };
   }
@@ -614,28 +611,23 @@ function renderTransport() {
   const tr = $('#transport');
   const it = S.sel.item;
   const canDup = it && ['clip', 'face', 'voice', 'fx', 'sound', 'text'].includes(it.kind);
-  tr.replaceChildren(
+  tr.replaceChildren(...[
     h('span', { class: 'tc', id: 'tc' }),
     h('button', { class: 'ib sm', 'aria-label': 'Go to start', onclick: () => setTime(0) }, icon('start')),
     h('button', { class: 'ib play', id: 'tPlay', 'aria-label': 'Play', onclick: () => { Audio.ensure(); setPlaying(!S.playing); } }, icon(S.playing ? 'pause' : 'play')),
-    h('button', { class: 'ib sm', 'aria-label': 'Add keyframe', onclick: addKeyHere, title: 'Add keyframe' }, icon('key')),
-    h('button', { class: 'ib sm', 'aria-label': 'Delete', disabled: !it, onclick: deleteSelected }, icon('trash')),
-    h('button', { class: 'ib sm', 'aria-label': 'Duplicate', disabled: !canDup, onclick: duplicateSelected }, icon('dup')),
+    h('button', { class: 'ib sm', 'aria-label': 'Add keyframe', onclick: addKeyHere }, icon('key')),
     h('span', { class: 'spacer' }),
-    h('button', { class: 'ib sm', 'aria-label': 'Loop', 'aria-pressed': String(S.loop), onclick: e => { S.loop = !S.loop; e.currentTarget.setAttribute('aria-pressed', S.loop); } }, icon('rotate')),
-    h('button', { class: 'ib sm', 'aria-label': 'Fit timeline', onclick: fitTimeline }, icon('crop')),
-  );
+    canDup ? h('button', { class: 'ib sm', 'aria-label': 'Duplicate', onclick: duplicateSelected }, icon('dup')) : null,
+    it ? h('button', { class: 'ib sm', 'aria-label': 'Delete', onclick: deleteSelected }, icon('trash')) : null,
+  ].filter(Boolean));
   updateTimeUI();
 }
 
 function renderStageTools() {
-  const v = $('#vtools');
   const free = S.viewMode === 'free';
-  v.replaceChildren(
-    h('button', { class: 'ib', 'aria-label': 'Camera view', 'aria-pressed': String(!free), onclick: () => { setView(free ? 'shot' : 'free'); renderStageTools(); } }, icon('camera')),
-    h('button', { class: 'ib', 'aria-label': 'Move', 'aria-pressed': String(free && S.gizmoMode === 'translate'), onclick: () => { setGizmo('translate'); renderStageTools(); } }, icon('move')),
-    h('button', { class: 'ib', 'aria-label': 'Turn', 'aria-pressed': String(free && S.gizmoMode === 'rotate'), onclick: () => { setGizmo('rotate'); renderStageTools(); } }, icon('turn')),
-    h('button', { class: 'ib', 'aria-label': 'Grid', 'aria-pressed': String(!$('#guides').hidden), onclick: () => { $('#guides').hidden = !$('#guides').hidden; renderStageTools(); } }, icon('grid')),
+  $('#vtools').replaceChildren(
+    h('button', { class: 'ib', 'aria-label': free ? 'Free view' : 'Camera view', 'aria-pressed': String(!free), onclick: () => { setView(free ? 'shot' : 'free'); renderStageTools(); } }, icon(free ? 'eye' : 'camera')),
+    h('button', { class: 'ib', 'aria-label': 'Move or turn', onclick: () => { setGizmo(S.gizmoMode === 'translate' ? 'rotate' : 'translate'); renderStageTools(); } }, icon(S.gizmoMode === 'translate' ? 'move' : 'turn')),
   );
   $('#vright').replaceChildren(
     h('button', { class: 'ib', 'aria-label': 'Build mode', onclick: () => enterBuild() }, icon('build')),
@@ -781,10 +773,11 @@ async function importArchiveFlow(file, after) {
     askText('Character name', titleCase(f.name.replace(/\.png$/i, '')), async name => { await addSkin(name, f, null); reloadLib(); toast('Skin saved'); after && after(); });
     return;
   }
-  const pr = progress('Importing ' + (f.name || 'file'));
+  let bg = false;
+  const pr = progress('Importing ' + (f.name || 'file'), () => { bg = true; pr.close(); toast('Importing in the background…', 3000); }, 'Continue in background');
   try {
     try { await navigator.storage?.persist?.(); } catch {}
-    const st = await importArchive(f, (p, s) => pr.set(`${s.tex} textures · ${s.snd} sounds · ${s.items} items`, p));
+    const st = await importArchive(f, (p, s) => { if (!bg) pr.set(`${s.done} / ${s.total || '…'} files · ${s.tex} textures · ${s.snd} sounds`, p); });
     Assets.name = f.name;
     await Store.put('kv', 'packName', f.name).catch(() => {});
     reloadLib();
@@ -1406,10 +1399,10 @@ function confirmDlg(text, yes) {
 function choose(title, options) {
   return new Promise(res => modal(close => [h('h2', { text: title }), h('div', { class: 'sec' }, options.map(([v, l]) => pill(l, () => { close(); res(v); }, 'ghost'))), pill('Cancel', () => { close(); res(null); }, 'ghost')]));
 }
-function progress(title, onCancel) {
-  let bar, msg;
-  const close = modal(() => [h('h2', { text: title }), h('div', { class: 'meter' }, (bar = h('i'))), (msg = h('p', { text: 'Working…' })), onCancel ? pill('Cancel', () => onCancel(), 'ghost') : null]);
-  return { set: (m, p) => { msg.textContent = m; if (p != null) bar.style.width = Math.round(clamp(p, 0, 1) * 100) + '%'; }, close };
+function progress(title, onCancel, cancelLabel = 'Cancel') {
+  let bar, msg, open = true;
+  const shut = modal(() => [h('h2', { text: title }), h('div', { class: 'meter' }, (bar = h('i'))), (msg = h('p', { text: 'Reading file list…' })), onCancel ? pill(cancelLabel, () => onCancel(), 'ghost') : null]);
+  return { set: (m, p) => { if (!open) return; msg.textContent = m; if (p != null) bar.style.width = Math.round(clamp(p, 0, 1) * 100) + '%'; }, close: () => { if (open) { open = false; shut(); } } };
 }
 function showMenu(anchor, items) {
   const old = $('.menu');
@@ -1801,7 +1794,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) windo
 
 async function boot() {
   $('#hAbout').replaceChildren(icon('info'));
-  $('#hAbout').onclick = () => modal(close => [h('h2', {}, 'Blockcut Studio', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))), h('p', { text: 'Version 1.0 · FleetMc Studio' }), h('p', { text: 'Minecraft animation editor for phones. Projects, characters, worlds and packs are saved on this device.' }), h('p', { text: 'Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.' })]);
+  $('#hAbout').onclick = () => modal(close => [h('h2', {}, 'Blockcut Studio', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))), h('p', { text: 'Version 1.0.1 · FleetMc Studio' }), h('p', { text: 'Minecraft animation editor for phones. Projects, characters, worlds and packs are saved on this device.' }), h('p', { text: 'Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.' })]);
   $('#hNew').firstChild.replaceChildren(icon('plus'));
   $('#hNew').onclick = () => modal(close => [
     h('h2', {}, 'New project', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))),
