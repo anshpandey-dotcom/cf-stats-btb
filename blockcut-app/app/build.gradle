@@ -1,0 +1,49 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.fleetmc.blockcut"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.fleetmc.blockcut"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    def ksProps = new Properties()
+    def ksFile = rootProject.file("keystore.properties")
+    if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
+    def ksPath = ksProps.getProperty("storeFile") ?: System.getenv("BLOCKCUT_KEYSTORE")
+
+    signingConfigs {
+        release {
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword ksProps.getProperty("storePassword") ?: System.getenv("BLOCKCUT_KEYSTORE_PASSWORD")
+                keyAlias ksProps.getProperty("keyAlias") ?: System.getenv("BLOCKCUT_KEY_ALIAS")
+                keyPassword ksProps.getProperty("keyPassword") ?: System.getenv("BLOCKCUT_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig ksPath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        noCompress += ["png", "ogg", "js", "json", "zip", "woff2"]
+        ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+}

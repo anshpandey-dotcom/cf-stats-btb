@@ -1,0 +1,58 @@
+name: Build Blockcut Studio APK
+
+on:
+  push:
+    paths:
+      - 'blockcut-app/**'
+      - '.github/workflows/blockcut-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: blockcut-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build release APK
+        env:
+          KEYSTORE_B64: ${{ secrets.BLOCKCUT_KEYSTORE_B64 }}
+          BLOCKCUT_KEYSTORE_PASSWORD: ${{ secrets.BLOCKCUT_KEYSTORE_PASSWORD }}
+          BLOCKCUT_KEY_ALIAS: ${{ secrets.BLOCKCUT_KEY_ALIAS }}
+          BLOCKCUT_KEY_PASSWORD: ${{ secrets.BLOCKCUT_KEY_PASSWORD }}
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/blockcut.jks"
+            export BLOCKCUT_KEYSTORE="$RUNNER_TEMP/blockcut.jks"
+          fi
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk BlockcutStudio.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlockcutStudio-apk
+          path: blockcut-app/BlockcutStudio.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: blockcut-latest
+          name: Blockcut Studio (latest build)
+          prerelease: false
+          make_latest: true
+          files: blockcut-app/BlockcutStudio.apk
+          body: |
+            Blockcut Studio Android app, built from ${{ github.sha }}.
+            Download BlockcutStudio.apk below and install it on your phone.
