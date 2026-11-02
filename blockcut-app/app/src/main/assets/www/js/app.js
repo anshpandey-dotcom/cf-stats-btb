@@ -3,7 +3,7 @@ import {
   S, POSE, NUM, zeroPose, MOVES, FACES, SHOTS, snapT, keyAt, sortKeys, fmt, segment, baseState, charState, charPosIn, propState, invalidate, envBase,
   reloadTextures, skinTex, refreshCustomBlocks, blockList, blockIcon, blockFaces, engineInit, buildWorld, syncRigs, syncProps, selChar, selProp,
   evalShot, shotPose, applyQuickShot, keyCamera, setView, setGizmo, outSize, frame, activeCam, afterFrame, setFly, resize, cancelCorner, Audio,
-  setPlaying, drawTexts, snapshot, renderVideo, getCams, animClipDur, itemTexture, propBlocks,
+  setPlaying, drawTexts, snapshot, renderVideo, getCams, animClipDur, itemTexture, propBlocks, worldObstacles,
 } from './engine.js';
 import { MOBS } from './geo.js';
 import { readMcworld, writeMcstructure, blockTexture } from './mcworld.js';
@@ -1429,6 +1429,7 @@ function aiContext() {
     customBlocks: Library.data.blocks,
     structures: Library.data.structures,
     builds: Object.keys(PREFABS),
+    buildSizes: Object.keys(PREFABS).map(id => { const b = prefabBlocks(id); let x0 = 0, x1 = 0, z0 = 0, z1 = 0, y1 = 0; for (const q of b) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[2]); y1 = Math.max(y1, q[1]); } return `${id}: ${x1 - x0 + 1}x${z1 - z0 + 1}, ${y1 + 1} tall`; }),
     worlds: Object.keys(WORLDS),
     savedWorlds: Library.data.worlds,
     items: [...Library.data.items.map(i => i.id), ...Assets.list('textures/items/').map(p => p.slice(15))],
@@ -1443,12 +1444,20 @@ const ALIAS_MOVE = { waving: 'wave', hit: 'punch', attack: 'attack', slash: 'att
 
 function scriptApi() {
   const ent = Assets.list('textures/entity/');
-  const libByName = n => allChars().find(c => c.name.toLowerCase() === String(n).toLowerCase());
+  const norm = v => String(v || '').toLowerCase().replace(/^minecraft:/, '').replace(/[^a-z0-9]/g, '');
+  const libByName = n => {
+    if (!n) return null;
+    const list = [...Library.data.characters, ...builtins()];
+    const raw = String(n).toLowerCase(), k = norm(n);
+    return list.find(c => c.id.toLowerCase() === raw) || list.find(c => c.skin && c.skin.toLowerCase() === raw) || list.find(c => norm(c.name) === k)
+      || (k.length > 3 ? list.find(c => norm(c.name).includes(k) || k.includes(norm(c.name))) : null);
+  };
   return {
     blankProject,
     zeroPose,
     worldTemplate: id => (WORLDS[String(id).toLowerCase()] ? WORLDS[String(id).toLowerCase()].make() : (Library.data.worlds.find(w => w.name.toLowerCase() === String(id).toLowerCase())?.world && JSON.parse(JSON.stringify(Library.data.worlds.find(w => w.name.toLowerCase() === String(id).toLowerCase()).world)))),
     structureBlocks,
+    obstacles: worldObstacles,
     resolveBlock: name => {
       if (!name) return null;
       const n = String(name).toLowerCase().trim();
@@ -1508,7 +1517,7 @@ function scriptApi() {
           }
         }
       }
-      if (!L) L = libByName(c.name) || BUILTIN[0];
+      if (!L) L = libByName(c.name) || libByName(c.id) || BUILTIN[0];
       const ch = charFromLib(L);
       ch.name = c.name || L.name;
       if (c.body) ch.body = c.body;
@@ -1566,7 +1575,12 @@ function openAI(prefill) {
     const err = h('p', { class: 'hint', style: 'color:var(--danger)' });
     let voices = !!(Native && Native.ttsReady && Native.ttsReady());
     const apply = async mode => {
-      const j = readJSON(code.value.replace(/^```(?:json)?|```$/gm, '').trim());
+      let raw = code.value;
+      const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) raw = fence[1];
+      const a0 = raw.indexOf('{'), a1 = raw.lastIndexOf('}');
+      if (a0 >= 0 && a1 > a0) raw = raw.slice(a0, a1 + 1);
+      const j = readJSON(raw);
       if (!j) { err.textContent = 'That is not valid JSON. Copy the whole reply from the AI.'; return; }
       let P, errors = [];
       if (looksLikeProject(j)) P = normalize({ ...j, id: uid() + uid() });
@@ -1794,7 +1808,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) windo
 
 async function boot() {
   $('#hAbout').replaceChildren(icon('info'));
-  $('#hAbout').onclick = () => modal(close => [h('h2', {}, 'Blockcut Studio', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))), h('p', { text: 'Version 1.0.1 · FleetMc Studio' }), h('p', { text: 'Minecraft animation editor for phones. Projects, characters, worlds and packs are saved on this device.' }), h('p', { text: 'Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.' })]);
+  $('#hAbout').onclick = () => modal(close => [h('h2', {}, 'Blockcut Studio', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))), h('p', { text: 'Version 1.0.2 · FleetMc Studio' }), h('p', { text: 'Minecraft animation editor for phones. Projects, characters, worlds and packs are saved on this device.' }), h('p', { text: 'Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.' })]);
   $('#hNew').firstChild.replaceChildren(icon('plus'));
   $('#hNew').onclick = () => modal(close => [
     h('h2', {}, 'New project', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))),

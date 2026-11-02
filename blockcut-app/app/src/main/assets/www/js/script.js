@@ -55,6 +55,65 @@ export function compileScript(src, api) {
   if (sky.length) P.env.keys = sky.map(k => ({ t: n(k.t), hour: n(k.hour ?? k.time, 12), weather: ['clear', 'rain', 'thunder', 'snow'].includes(k.weather) ? k.weather : 'clear', fog: clamp(n(k.fog), 0, 1), ease: 'smooth' })).sort((a, b) => a.t - b.t);
   let end = 0;
   const byId = new Map();
+  const blocked = api.obstacles ? api.obstacles(P.world) : new Set();
+  const half = (P.world.size || 64) / 2 - 1;
+  const free = (x, z) => !blocked.has(Math.floor(x) + ',' + Math.floor(z)) && Math.abs(x) < half + 1 && Math.abs(z) < half + 1;
+  const nearestFree = p => {
+    if (free(p.x, p.z)) return p;
+    for (let r = 1; r < 12; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+      const x = Math.floor(p.x) + dx + 0.5, z = Math.floor(p.z) + dz + 0.5;
+      if (free(x, z)) return { ...p, x, z };
+    }
+    return p;
+  };
+  const clear = (a, b) => {
+    const d = Math.hypot(b.x - a.x, b.z - a.z), steps = Math.ceil(d / 0.2);
+    for (let i = 1; i < steps; i++) {
+      const x = a.x + (b.x - a.x) * i / steps, z = a.z + (b.z - a.z) * i / steps;
+      for (const [ox, oz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) if (!free(x + ox, z + oz)) return false;
+    }
+    return true;
+  };
+  const findPath = (a, b) => {
+    if (clear(a, b)) return [b];
+    const sx = Math.floor(a.x), sz = Math.floor(a.z), gx = Math.floor(b.x), gz = Math.floor(b.z);
+    const key = (x, z) => x + ',' + z;
+    const open = [[sx, sz]], g = new Map([[key(sx, sz), 0]]), from = new Map();
+    const hh = (x, z) => Math.hypot(x - gx, z - gz);
+    const cellFree = (x, z) => free(x + 0.5, z + 0.5);
+    let found = false, guard = 0;
+    while (open.length && guard++ < 30000) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (g.get(key(...open[i])) + hh(...open[i]) < g.get(key(...open[bi])) + hh(...open[bi])) bi = i;
+      const [x, z] = open.splice(bi, 1)[0];
+      if (x === gx && z === gz) { found = true; break; }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (!cellFree(nx, nz) && !(nx === gx && nz === gz)) continue;
+        if (dx && dz && (!cellFree(x + dx, z) || !cellFree(x, z + dz))) continue;
+        const ng = g.get(key(x, z)) + Math.hypot(dx, dz);
+        const k = key(nx, nz);
+        if (g.has(k) && g.get(k) <= ng) continue;
+        g.set(k, ng); from.set(k, [x, z]);
+        open.push([nx, nz]);
+      }
+    }
+    if (!found) return [b];
+    const cells = [];
+    for (let c = [gx, gz]; c && !(c[0] === sx && c[1] === sz); c = from.get(key(...c))) cells.unshift({ x: c[0] + 0.5, z: c[1] + 0.5 });
+    cells[cells.length - 1] = b;
+    const out = [];
+    let cur = a;
+    while (cells.length) {
+      let j = cells.length - 1;
+      while (j > 0 && !clear(cur, cells[j])) j--;
+      out.push(cells[j]);
+      cur = cells[j];
+      cells.splice(0, j + 1);
+    }
+    return out;
+  };
   for (const c of arr(s.characters)) {
     const ch = api.makeCharacter(c);
     if (!ch) { errors.push('Could not add character ' + (c.name || c.id)); continue; }
@@ -62,7 +121,7 @@ export function compileScript(src, api) {
     byId.set(cid, ch);
     byId.set(ch.name.toLowerCase(), ch);
     ch._sid = cid;
-    const at = xz(c.at || c.start || c.position) || { x: 0, y: 0, z: 0 };
+    const at = nearestFree(xz(c.at || c.start || c.position) || { x: 0, y: 0, z: 0 });
     const cur = { t: 0, x: at.x, y: at.y, z: at.z, yaw: n(c.facing ?? c.yaw, 0), gait: 'walk', ease: 'smooth', ...api.zeroPose() };
     ch.keys = [{ ...cur }];
     P.characters.push(ch);
@@ -98,14 +157,33 @@ export function compileScript(src, api) {
       const t = n(a.t ?? a.time);
       const dur = Math.max(0.1, n(a.dur ?? a.duration, 0));
       if (a.walk_to || a.run_to || a.sneak_to || a.fly_to || a.move_to || a.go_to) {
-        const target = targetOf(a.walk_to || a.run_to || a.sneak_to || a.fly_to || a.move_to || a.go_to, t);
+        let target = targetOf(a.walk_to || a.run_to || a.sneak_to || a.fly_to || a.move_to || a.go_to, t);
         if (!target) continue;
         const gait = a.run_to ? 'run' : a.sneak_to ? 'sneak' : ['walk', 'run', 'sneak'].includes(a.gait) ? a.gait : 'walk';
-        const dist = Math.hypot(target.x - cur.x, target.z - cur.z);
-        const d = n(a.dur ?? a.duration, 0) || Math.max(0.4, dist / (gait === 'run' ? 4.2 : gait === 'sneak' ? 1.1 : 1.8));
-        const yaw = facePoint(target, t);
-        addKey(t, { yaw, gait });
-        addKey(t + d, { x: target.x, z: target.z, y: a.fly_to ? target.y : (Array.isArray(a.walk_to) && a.walk_to.length > 2 ? target.y : cur.y), yaw, gait });
+        const ty = a.fly_to ? target.y : (Array.isArray(a.walk_to) && a.walk_to.length > 2 ? target.y : cur.y);
+        if (!a.fly_to) target = nearestFree(target);
+        const pts = a.fly_to ? [target] : findPath({ x: cur.x, z: cur.z }, target);
+        let len = 0, prev = { x: cur.x, z: cur.z };
+        for (const p of pts) { len += Math.hypot(p.x - prev.x, p.z - prev.z); prev = p; }
+        const d = n(a.dur ?? a.duration, 0) || Math.max(0.4, len / (gait === 'run' ? 4.2 : gait === 'sneak' ? 1.1 : 1.8));
+        let tt = t;
+        prev = { x: cur.x, z: cur.z };
+        addKey(t, { yaw: facePoint(pts[0], t), gait });
+        pts.forEach((p, i) => {
+          const seg = Math.hypot(p.x - prev.x, p.z - prev.z);
+          const yaw = facePoint(p, tt);
+          tt += len > 0 ? d * seg / len : d;
+          addKey(tt, { x: p.x, z: p.z, y: i === pts.length - 1 ? ty : cur.y, yaw, gait });
+          const nxt = pts[i + 1];
+          if (nxt) {
+            const ny = facePoint(nxt, tt);
+            const step = Math.min(0.2, (d * Math.hypot(nxt.x - p.x, nxt.z - p.z) / Math.max(0.01, len)) / 3);
+            const f = step / Math.max(0.01, d * Math.hypot(nxt.x - p.x, nxt.z - p.z) / Math.max(0.01, len));
+            addKey(tt + step, { x: p.x + (nxt.x - p.x) * f, z: p.z + (nxt.z - p.z) * f, yaw: ny, gait });
+            cur.x = p.x; cur.z = p.z;
+          }
+          prev = p;
+        });
       } else if (a.turn_to != null || a.look_at != null || a.face_to != null) {
         const v = a.turn_to ?? a.look_at ?? a.face_to;
         const yaw = typeof v === 'number' ? near(v, cur.yaw) : (p => (p ? facePoint(p, t) : cur.yaw))(targetOf(v, t));
@@ -178,8 +256,10 @@ export function compileScript(src, api) {
   api.finalizeCharacters(P);
   let prevOn = null;
   const cams = arr(s.camera || s.cameras || s.shots).filter(c => c && typeof c === 'object').sort((a, b) => n(a.t) - n(b.t));
-  for (const c of cams) {
+  for (let ci = 0; ci < cams.length; ci++) {
+    const c = cams[ci];
     const t = n(c.t ?? c.time);
+    const tNext = ci + 1 < cams.length ? n(cams[ci + 1].t ?? cams[ci + 1].time) : P.duration;
     const on = c.on || c.target_character || c.follow || null;
     const ch = on ? byId.get(String(on).toLowerCase()) : null;
     let pose = null;
@@ -190,9 +270,14 @@ export function compileScript(src, api) {
       pose = api.shotPose(P, String(c.shot || c.angle || 'wide').toLowerCase(), ch, t);
     }
     if (!pose) continue;
+    let track = c.track || c.mode === 'track';
+    if (!track && ch && c.track !== false && c.mode !== 'fixed' && !c.pos && !c.position) {
+      const s0 = api.charPosIn(P, ch, t);
+      for (let k = 1; k <= 8 && !track; k++) { const sk = api.charPosIn(P, ch, t + (tNext - t) * k / 8); if (Math.hypot(sk.x - s0.x, sk.z - s0.z) > 1.2) track = true; }
+    }
     const ease = c.move === 'smooth' || c.smooth ? 'smooth' : c.move === 'cut' || c.cut ? 'step' : on !== prevOn ? 'step' : 'smooth';
-    P.camera.keys.push({ t: Math.round(t * P.fps) / P.fps, p: pose.p, tg: pose.tg, fov: n(c.fov, pose.fov), roll: n(c.roll ?? c.tilt), shake: clamp(n(c.shake), 0, 1), follow: ch && c.follow !== false ? ch.id : null, mode: c.track || c.mode === 'track' ? 'track' : 'fixed', ease: P.camera.keys.length ? ease : 'smooth' });
-    if (ch && (c.track || c.mode === 'track')) { const k = P.camera.keys[P.camera.keys.length - 1]; const st = api.charPosIn(P, ch, t); k.p = [k.p[0] - st.x, k.p[1] - st.y, k.p[2] - st.z]; }
+    P.camera.keys.push({ t: Math.round(t * P.fps) / P.fps, p: pose.p, tg: pose.tg, fov: n(c.fov, pose.fov), roll: n(c.roll ?? c.tilt), shake: clamp(n(c.shake), 0, 1), follow: ch && c.follow !== false ? ch.id : null, mode: track ? 'track' : 'fixed', ease: P.camera.keys.length ? ease : 'smooth' });
+    if (ch && track) { const k = P.camera.keys[P.camera.keys.length - 1]; const st = api.charPosIn(P, ch, t); k.p = [k.p[0] - st.x, k.p[1] - st.y, k.p[2] - st.z]; }
     prevOn = on;
   }
   if (!P.camera.keys.length && P.characters.length) {
@@ -251,7 +336,7 @@ export function buildPrompt(ctx, idea) {
   const sample = (list, k) => (list.length > k ? list.slice(0, k).join(', ') + ` … (+${list.length - k} more)` : list.join(', '));
   return [
     'You write scene scripts for Blockcut Studio, a Minecraft animation video maker.',
-    'Reply with ONE valid JSON object only. No markdown fences, no explanation.',
+    'Reply with ONE valid JSON object inside a single ```json code block so it can be copied with one tap. No other text before or after it.',
     '',
     'STORY / VIDEO IDEA:',
     idea || '(describe the video here)',
@@ -267,14 +352,17 @@ export function buildPrompt(ctx, idea) {
     'shots: ' + ctx.shots.join(', '),
     'mobs: ' + ctx.mobs.join(', '),
     'skins: ' + ctx.skins.join(', '),
-    'library characters: ' + (ctx.characters.length ? ctx.characters.map(c => `"${c.name}"`).join(', ') : 'none'),
-    'builds: ' + ctx.builds.join(', '),
+    'library characters (use "character": "<exact name>"): ' + (ctx.characters.length ? ctx.characters.map(c => `"${c.name}"`).join(', ') : 'none'),
+    'builds (id: footprint, keep characters, props and paths outside them): ' + (ctx.buildSizes || ctx.builds).join(', '),
     'world templates: ' + ctx.worlds.join(', '),
     'items: ' + sample(ctx.items, 160),
     'blocks: ' + sample(ctx.blocks, 200),
     'sounds: ' + sample(ctx.sounds, 220),
     '',
-    'Keep the camera interesting: cut between shots, use close-ups (face) for reactions, wide shots for action. Keep characters inside -25..25.',
+    'LAYOUT RULES: a build placed at [x,z] covers its footprint around that point. Leave at least 3 blocks between builds, characters, props and walk targets. Builds must not overlap. Keep everything inside -25..25.',
+    'Characters walk around builds automatically, and the camera never goes inside blocks, but plan open ground for the action.',
+    'For a custom or library character always use "character": "<exact name from the list>" instead of "skin".',
+    'Keep the camera interesting: cut between shots, use close-ups (face) for reactions, wide shots for action.',
   ].join('\n');
 }
 

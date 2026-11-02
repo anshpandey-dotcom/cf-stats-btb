@@ -1186,6 +1186,43 @@ function camEnd(k, t) {
   return { p, tg };
 }
 
+const solidId = id => id && !/@(cross|carpet|liquid)$/.test(id);
+export function worldObstacles(world) {
+  const out = new Set();
+  const all = [...(world.trees ? treeBlocks(world.seed, world.size) : []), ...world.blocks];
+  for (const [x, y, z, id] of all) if (y >= 0 && y <= 1 && solidId(id)) out.add(x + ',' + z);
+  return out;
+}
+
+const camDir = new THREE.Vector3(), camTry = new THREE.Vector3();
+function rayHit(tg, pos) {
+  camDir.copy(pos).sub(tg);
+  const dist = camDir.length();
+  if (dist < 0.6) return Infinity;
+  camDir.divideScalar(dist);
+  for (let d = 0.5; d < dist + 0.3; d += 0.15) {
+    const x = Math.floor(tg.x + camDir.x * d), y = Math.floor(tg.y + camDir.y * d), z = Math.floor(tg.z + camDir.z * d);
+    if (solidId(cellMap.get(x + ',' + y + ',' + z))) return d;
+  }
+  return Infinity;
+}
+const CAM_TRIES = [];
+for (const lift of [0, 2, 4.5]) for (const a of [0, 35, -35, 70, -70, 110, -110, 180]) CAM_TRIES.push([a * DEG, lift]);
+function unblockCamera(cam, tg) {
+  const ground = S.project.world.ground && S.project.world.ground !== 'none';
+  if (ground && cam.position.y < 0.3) cam.position.y = 0.3;
+  const first = rayHit(tg, cam.position);
+  if (first === Infinity) return;
+  const off = cam.position.clone().sub(tg);
+  for (const [a, lift] of CAM_TRIES) {
+    if (!a && !lift) continue;
+    camTry.set(off.x * Math.cos(a) + off.z * Math.sin(a), off.y + lift, -off.x * Math.sin(a) + off.z * Math.cos(a)).add(tg);
+    if (rayHit(tg, camTry) === Infinity) { cam.position.copy(camTry); return; }
+  }
+  camDir.copy(off).normalize();
+  cam.position.copy(tg).addScaledVector(camDir, Math.max(1.2, first - 0.35));
+}
+
 export function evalShot(t, cam = shotCam) {
   const keys = S.project.camera.keys;
   if (!keys.length) return false;
@@ -1193,6 +1230,7 @@ export function evalShot(t, cam = shotCam) {
   const A = camEnd(a, t), B = camEnd(b, t);
   cam.position.lerpVectors(A.p, B.p, u);
   const tg = A.tg.lerp(B.tg, u);
+  unblockCamera(cam, tg);
   lastShotTarget.copy(tg);
   cam.up.set(0, 1, 0);
   cam.lookAt(tg);
