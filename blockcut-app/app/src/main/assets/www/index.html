@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e1210">
+<title>Blockcut Studio</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js", "three/addons/controls/": "./lib/" } }
+</script>
+</head>
+<body>
+
+<section class="screen" id="home">
+  <header class="hhead">
+    <div class="brand"><i></i>Blockcut Studio</div>
+    <button class="ib" id="hAbout" aria-label="About"></button>
+  </header>
+  <button class="newcard" id="hNew"><span></span><div>New project<small>Start a Minecraft video from a template</small></div></button>
+  <nav class="htabs" id="htabs"></nav>
+  <div class="hbody" id="hbody"></div>
+</section>
+
+<section class="screen editor" id="editor" hidden>
+  <header class="ehead">
+    <button class="ib" id="eBack" aria-label="Back to projects"></button>
+    <div class="title" id="eTitle"></div>
+    <button class="ib" id="eUndo" aria-label="Undo"></button>
+    <button class="ib" id="eRedo" aria-label="Redo"></button>
+    <button class="ib ai-btn" id="eAI" aria-label="AI script"></button>
+    <button class="pill" id="eExport"></button>
+  </header>
+  <div class="editor-main">
+    <div class="stage" id="stage">
+      <div class="vp" id="vp">
+        <canvas id="gl"></canvas>
+        <canvas id="ov"></canvas>
+        <div class="guides" id="guides" hidden></div>
+      </div>
+      <div class="vtools" id="vtools"></div>
+      <div class="vright" id="vright"></div>
+      <div class="vbadge" id="vbadge"></div>
+      <div class="hud" id="hud" hidden></div>
+    </div>
+    <div class="transport" id="transport"></div>
+    <div class="tlwrap" id="tlwrap"><canvas id="tl"></canvas></div>
+    <div class="side">
+      <nav class="toolbar" id="toolbar"></nav>
+      <div class="sheet" id="sheet" hidden>
+        <div class="sheethead"><b id="sheetTitle"></b><span id="sheetActions" class="row"></span><button class="ib sm" id="sheetClose" aria-label="Close panel"></button></div>
+        <div class="sheetbody" id="sheetBody"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="modal" hidden><div class="mcard" id="mcard"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="lib/zip.min.js"></script>
+<script src="lib/mp4-muxer.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
