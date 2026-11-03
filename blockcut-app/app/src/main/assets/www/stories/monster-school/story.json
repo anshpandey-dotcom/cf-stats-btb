@@ -1,0 +1,1219 @@
+{
+ "blockcut": 1,
+ "title": "Monster School: Build Challenge",
+ "desc": "30 second short. Drop your resource pack zip for your own textures, or just tap Make video.",
+ "duration": 30,
+ "aspect": "9:16",
+ "captions": false,
+ "world": {
+  "template": "flat",
+  "ground": "grass",
+  "size": 48,
+  "trees": false,
+  "fill": [
+   [
+    -10,
+    0,
+    -8,
+    10,
+    0,
+    -8,
+    "stonebrick"
+   ],
+   [
+    -10,
+    1,
+    -8,
+    10,
+    4,
+    -8,
+    "planks_birch"
+   ],
+   [
+    -10,
+    0,
+    9,
+    10,
+    0,
+    9,
+    "stonebrick"
+   ],
+   [
+    -10,
+    1,
+    9,
+    10,
+    4,
+    9,
+    "planks_birch"
+   ],
+   [
+    -10,
+    0,
+    -8,
+    -10,
+    0,
+    9,
+    "stonebrick"
+   ],
+   [
+    -10,
+    1,
+    -8,
+    -10,
+    4,
+    9,
+    "planks_birch"
+   ],
+   [
+    10,
+    0,
+    -8,
+    10,
+    0,
+    9,
+    "stonebrick"
+   ],
+   [
+    10,
+    1,
+    -8,
+    10,
+    4,
+    9,
+    "planks_birch"
+   ],
+   [
+    -10,
+    0,
+    -8,
+    -10,
+    4,
+    -8,
+    "log_oak"
+   ],
+   [
+    10,
+    0,
+    -8,
+    10,
+    4,
+    -8,
+    "log_oak"
+   ],
+   [
+    -10,
+    0,
+    9,
+    -10,
+    4,
+    9,
+    "log_oak"
+   ],
+   [
+    10,
+    0,
+    9,
+    10,
+    4,
+    9,
+    "log_oak"
+   ],
+   [
+    -10,
+    2,
+    -4,
+    -10,
+    3,
+    -1,
+    "glass"
+   ],
+   [
+    -10,
+    2,
+    3,
+    -10,
+    3,
+    6,
+    "glass"
+   ],
+   [
+    10,
+    2,
+    -4,
+    10,
+    3,
+    -1,
+    "glass"
+   ],
+   [
+    10,
+    2,
+    3,
+    10,
+    3,
+    6,
+    "glass"
+   ],
+   [
+    -9,
+    0,
+    -7,
+    9,
+    0,
+    8,
+    "planks_spruce@carpet"
+   ],
+   [
+    -5,
+    1,
+    -8,
+    5,
+    1,
+    -8,
+    "planks_big_oak"
+   ],
+   [
+    -5,
+    4,
+    -8,
+    5,
+    4,
+    -8,
+    "planks_big_oak"
+   ],
+   [
+    -5,
+    2,
+    -7,
+    5,
+    3,
+    -7,
+    "concrete_black"
+   ],
+   [
+    -9,
+    0,
+    -7,
+    -8,
+    2,
+    -7,
+    "bookshelf"
+   ],
+   [
+    8,
+    0,
+    -7,
+    9,
+    2,
+    -7,
+    "bookshelf"
+   ],
+   [
+    -6,
+    0,
+    2,
+    -6,
+    0,
+    2,
+    "planks_oak@slab"
+   ],
+   [
+    -2,
+    0,
+    2,
+    -2,
+    0,
+    2,
+    "planks_oak@slab"
+   ],
+   [
+    2,
+    0,
+    2,
+    2,
+    0,
+    2,
+    "planks_oak@slab"
+   ],
+   [
+    6,
+    0,
+    2,
+    6,
+    0,
+    2,
+    "planks_oak@slab"
+   ],
+   [
+    0,
+    0,
+    5,
+    0,
+    0,
+    5,
+    "planks_oak@slab"
+   ],
+   [
+    -8,
+    0,
+    -4,
+    -7,
+    0,
+    -4,
+    "planks_big_oak"
+   ],
+   [
+    -9,
+    4,
+    -7,
+    -9,
+    4,
+    -7,
+    "glowstone"
+   ],
+   [
+    9,
+    4,
+    -7,
+    9,
+    4,
+    -7,
+    "glowstone"
+   ],
+   [
+    -9,
+    4,
+    8,
+    -9,
+    4,
+    8,
+    "glowstone"
+   ],
+   [
+    9,
+    4,
+    8,
+    9,
+    4,
+    8,
+    "glowstone"
+   ]
+  ],
+  "builds": [
+   {
+    "build": "oak_tree",
+    "at": [
+     -16,
+     -13
+    ]
+   },
+   {
+    "build": "birch_tree",
+    "at": [
+     15,
+     -12
+    ]
+   },
+   {
+    "build": "oak_tree",
+    "at": [
+     16,
+     14
+    ]
+   },
+   {
+    "build": "spruce_tree",
+    "at": [
+     -15,
+     15
+    ]
+   },
+   {
+    "build": "oak_tree",
+    "at": [
+     -3,
+     -17
+    ]
+   },
+   {
+    "build": "birch_tree",
+    "at": [
+     4,
+     17
+    ]
+   }
+  ]
+ },
+ "sky": [
+  {
+   "t": 0,
+   "hour": 11,
+   "weather": "clear"
+  }
+ ],
+ "characters": [
+  {
+   "id": "sir",
+   "name": "Sir",
+   "skin_url": "sir.png",
+   "item": "stick",
+   "at": [
+    -7.5,
+    -6.5
+   ],
+   "facing": 20,
+   "actions": [
+    {
+     "t": 0.4,
+     "walk_to": [
+      -7,
+      -5.5
+     ],
+     "dur": 1.2
+    },
+    {
+     "t": 1.7,
+     "turn_to": 25,
+     "dur": 0.3
+    },
+    {
+     "t": 2.1,
+     "say": "",
+     "voice": "mob/villager/idle2",
+     "dur": 1.0
+    },
+    {
+     "t": 2.2,
+     "move": "point",
+     "dur": 2.0
+    },
+    {
+     "t": 3.1,
+     "say": "",
+     "voice": "mob/villager/haggle3",
+     "dur": 1.1
+    },
+    {
+     "t": 8.2,
+     "move": "clap",
+     "dur": 1.3
+    },
+    {
+     "t": 8.3,
+     "say": "",
+     "voice": "mob/villager/yes1",
+     "dur": 0.8
+    },
+    {
+     "t": 8.2,
+     "face": "happy",
+     "dur": 1.5
+    },
+    {
+     "t": 12.9,
+     "move": "facepalm",
+     "dur": 1.6
+    },
+    {
+     "t": 13.0,
+     "say": "",
+     "voice": "mob/villager/no2",
+     "dur": 0.9
+    },
+    {
+     "t": 17.5,
+     "move": "nod",
+     "dur": 1.2
+    },
+    {
+     "t": 17.6,
+     "say": "",
+     "voice": "mob/villager/yes3",
+     "dur": 0.8
+    },
+    {
+     "t": 21.0,
+     "face": "shock",
+     "dur": 1.7
+    },
+    {
+     "t": 21.0,
+     "move": "scared",
+     "dur": 1.6
+    },
+    {
+     "t": 22.7,
+     "move": "lie",
+     "dur": 2.6
+    },
+    {
+     "t": 25.6,
+     "face": "angry",
+     "dur": 4.4
+    },
+    {
+     "t": 26.2,
+     "move": "facepalm",
+     "dur": 2.0
+    },
+    {
+     "t": 26.3,
+     "say": "",
+     "voice": "mob/villager/no2",
+     "dur": 0.9
+    },
+    {
+     "t": 27.4,
+     "say": "",
+     "voice": "mob/villager/haggle3",
+     "dur": 1.1
+    }
+   ]
+  },
+  {
+   "id": "piggy",
+   "name": "Piggy",
+   "skin_url": "piggy.png",
+   "at": [
+    -6,
+    4
+   ],
+   "facing": 180,
+   "actions": [
+    {
+     "t": 0.3,
+     "move": "nod",
+     "dur": 1.2
+    },
+    {
+     "t": 4.5,
+     "walk_to": [
+      -4.5,
+      1.0
+     ],
+     "dur": 1.4
+    },
+    {
+     "t": 5.9,
+     "turn_to": 200,
+     "dur": 0.2
+    },
+    {
+     "t": 6.0,
+     "move": "punch",
+     "dur": 1.8
+    },
+    {
+     "t": 6.2,
+     "sound": "random/smithing_table1"
+    },
+    {
+     "t": 6.8,
+     "sound": "random/smithing_table2"
+    },
+    {
+     "t": 7.4,
+     "sound": "random/smithing_table3"
+    },
+    {
+     "t": 8.0,
+     "move": "celebrate",
+     "dur": 1.4
+    },
+    {
+     "t": 8.0,
+     "face": "happy",
+     "dur": 1.5
+    },
+    {
+     "t": 8.1,
+     "say": "",
+     "voice": "mob/pig/say2",
+     "dur": 0.7
+    },
+    {
+     "t": 9.5,
+     "walk_to": [
+      -6,
+      4
+     ],
+     "dur": 1.4
+    },
+    {
+     "t": 10.9,
+     "turn_to": 180,
+     "dur": 0.3
+    },
+    {
+     "t": 21.5,
+     "face": "shock",
+     "dur": 1.2
+    },
+    {
+     "t": 22.7,
+     "move": "lie",
+     "dur": 3.0
+    },
+    {
+     "t": 25.8,
+     "face": "dizzy",
+     "dur": 2.5
+    },
+    {
+     "t": 28.5,
+     "move": "nod",
+     "dur": 1.2
+    }
+   ]
+  },
+  {
+   "id": "zombie",
+   "name": "Zombie",
+   "skin": "zombie/zombie",
+   "at": [
+    -2,
+    4
+   ],
+   "facing": 180,
+   "actions": [
+    {
+     "t": 0,
+     "move": "zombie",
+     "dur": 4.5
+    },
+    {
+     "t": 9.5,
+     "walk_to": [
+      0,
+      1.2
+     ],
+     "dur": 1.8
+    },
+    {
+     "t": 9.6,
+     "say": "",
+     "voice": "mob/zombie/say1",
+     "dur": 1.0
+    },
+    {
+     "t": 9.5,
+     "move": "zombie",
+     "dur": 1.8
+    },
+    {
+     "t": 11.4,
+     "move": "punch",
+     "dur": 1.1
+    },
+    {
+     "t": 11.5,
+     "sound": "dig/wood1"
+    },
+    {
+     "t": 12.6,
+     "face": "dizzy",
+     "dur": 1.8
+    },
+    {
+     "t": 12.8,
+     "say": "",
+     "voice": "mob/zombie/say3",
+     "dur": 0.9
+    },
+    {
+     "t": 12.6,
+     "move": "shake",
+     "dur": 1.2
+    },
+    {
+     "t": 14.2,
+     "walk_to": [
+      -2,
+      4
+     ],
+     "dur": 1.5
+    },
+    {
+     "t": 15.7,
+     "turn_to": 180,
+     "dur": 0.3
+    },
+    {
+     "t": 21.5,
+     "face": "shock",
+     "dur": 1.2
+    },
+    {
+     "t": 22.7,
+     "move": "lie",
+     "dur": 3.5
+    },
+    {
+     "t": 26.2,
+     "move": "flail",
+     "dur": 1.8
+    },
+    {
+     "t": 26.3,
+     "say": "",
+     "voice": "mob/zombie/hurt1",
+     "dur": 0.8
+    }
+   ]
+  },
+  {
+   "id": "skeleton",
+   "name": "Skeleton",
+   "skin": "skeleton/skeleton",
+   "body": "thin",
+   "item": "bow_standby",
+   "at": [
+    2,
+    4
+   ],
+   "facing": 180,
+   "actions": [
+    {
+     "t": 0.5,
+     "move": "look",
+     "dur": 3
+    },
+    {
+     "t": 14.5,
+     "walk_to": [
+      4.5,
+      0.8
+     ],
+     "dur": 1.4
+    },
+    {
+     "t": 15.9,
+     "turn_to": 170,
+     "dur": 0.2
+    },
+    {
+     "t": 16.0,
+     "move": "attack",
+     "dur": 1.3
+    },
+    {
+     "t": 16.1,
+     "sound": "random/bow"
+    },
+    {
+     "t": 16.5,
+     "sound": "random/bowhit1"
+    },
+    {
+     "t": 16.9,
+     "sound": "random/bowhit3"
+    },
+    {
+     "t": 17.4,
+     "say": "",
+     "voice": "mob/skeleton/say1",
+     "dur": 0.8
+    },
+    {
+     "t": 17.4,
+     "face": "happy",
+     "dur": 1.2
+    },
+    {
+     "t": 18.4,
+     "walk_to": [
+      2,
+      4
+     ],
+     "dur": 1.3
+    },
+    {
+     "t": 19.7,
+     "turn_to": 180,
+     "dur": 0.3
+    },
+    {
+     "t": 22.0,
+     "face": "shock",
+     "dur": 0.8
+    },
+    {
+     "t": 22.7,
+     "move": "lie",
+     "dur": 3.0
+    },
+    {
+     "t": 25.8,
+     "move": "shiver",
+     "dur": 2.4
+    },
+    {
+     "t": 26.0,
+     "say": "",
+     "voice": "mob/skeleton/say3",
+     "dur": 0.8
+    }
+   ]
+  },
+  {
+   "id": "creeper",
+   "name": "Creeper",
+   "mob": "creeper",
+   "at": [
+    6,
+    4
+   ],
+   "facing": 180,
+   "actions": [
+    {
+     "t": 18.8,
+     "walk_to": [
+      0,
+      1.5
+     ],
+     "dur": 2.0
+    },
+    {
+     "t": 20.6,
+     "say": "",
+     "voice": "mob/creeper/say1",
+     "dur": 0.6
+    },
+    {
+     "t": 20.8,
+     "move": "shiver",
+     "dur": 1.8
+    },
+    {
+     "t": 20.8,
+     "sound": "random/fuse"
+    },
+    {
+     "t": 22.6,
+     "teleport": [
+      0,
+      -30,
+      1.5
+     ]
+    }
+   ]
+  },
+  {
+   "id": "foxy",
+   "name": "Foxy",
+   "skin_url": "foxy.png",
+   "at": [
+    0,
+    7
+   ],
+   "facing": 180,
+   "actions": [
+    {
+     "t": 0.2,
+     "move": "look",
+     "dur": 2.5
+    },
+    {
+     "t": 6.0,
+     "move": "clap",
+     "dur": 1.5
+    },
+    {
+     "t": 13.0,
+     "face": "laugh",
+     "dur": 1.6
+    },
+    {
+     "t": 21.2,
+     "face": "shock",
+     "dur": 1.5
+    },
+    {
+     "t": 22.7,
+     "move": "scared",
+     "dur": 2.6
+    },
+    {
+     "t": 25.3,
+     "face": "laugh",
+     "dur": 4.7
+    },
+    {
+     "t": 25.5,
+     "move": "clap",
+     "dur": 2.4
+    },
+    {
+     "t": 28.0,
+     "move": "dance",
+     "dur": 2.0
+    }
+   ]
+  }
+ ],
+ "props": [
+  {
+   "build": "well",
+   "at": [
+    -5,
+    -2
+   ],
+   "actions": [
+    {
+     "t": 6.0,
+     "fx": "grow",
+     "dur": 2.0
+    },
+    {
+     "t": 22.6,
+     "fx": "explode",
+     "dur": 2.2
+    }
+   ]
+  },
+  {
+   "build": "lamp",
+   "at": [
+    0,
+    -2
+   ],
+   "actions": [
+    {
+     "t": 11.4,
+     "fx": "grow",
+     "dur": 1.0
+    },
+    {
+     "t": 12.5,
+     "fx": "shrink",
+     "dur": 0.5
+    }
+   ]
+  },
+  {
+   "build": "spruce_tree",
+   "at": [
+    5,
+    -3
+   ],
+   "actions": [
+    {
+     "t": 16.0,
+     "fx": "grow",
+     "dur": 1.6
+    },
+    {
+     "t": 22.65,
+     "fx": "explode",
+     "dur": 2.2
+    }
+   ]
+  },
+  {
+   "build": "house",
+   "at": [
+    0,
+    -3
+   ],
+   "actions": [
+    {
+     "t": 20.8,
+     "fx": "grow",
+     "dur": 1.7
+    },
+    {
+     "t": 22.6,
+     "fx": "explode",
+     "dur": 2.4
+    }
+   ]
+  }
+ ],
+ "camera": [
+  {
+   "t": 0,
+   "pos": [
+    5.5,
+    3.4,
+    -6.3
+   ],
+   "target": [
+    -1,
+    1.2,
+    4
+   ],
+   "fov": 68,
+   "cut": true
+  },
+  {
+   "t": 2.0,
+   "shot": "face",
+   "on": "sir",
+   "cut": true
+  },
+  {
+   "t": 4.5,
+   "shot": "front",
+   "on": "piggy",
+   "cut": true
+  },
+  {
+   "t": 6.0,
+   "pos": [
+    -1.2,
+    3.0,
+    4.2
+   ],
+   "target": [
+    -5,
+    1.3,
+    -2
+   ],
+   "fov": 55,
+   "cut": true
+  },
+  {
+   "t": 8.0,
+   "shot": "face",
+   "on": "piggy",
+   "cut": true
+  },
+  {
+   "t": 9.5,
+   "shot": "front",
+   "on": "zombie",
+   "cut": true
+  },
+  {
+   "t": 11.3,
+   "pos": [
+    3,
+    2.6,
+    3.6
+   ],
+   "target": [
+    0,
+    1.2,
+    -1.5
+   ],
+   "fov": 55,
+   "cut": true
+  },
+  {
+   "t": 12.6,
+   "shot": "face",
+   "on": "zombie",
+   "cut": true
+  },
+  {
+   "t": 13.2,
+   "shot": "face",
+   "on": "sir",
+   "cut": true
+  },
+  {
+   "t": 14.5,
+   "shot": "side",
+   "on": "skeleton",
+   "cut": true
+  },
+  {
+   "t": 16.0,
+   "pos": [
+    0.5,
+    3.0,
+    4.2
+   ],
+   "target": [
+    5,
+    2,
+    -3
+   ],
+   "fov": 55,
+   "cut": true
+  },
+  {
+   "t": 17.5,
+   "shot": "face",
+   "on": "sir",
+   "cut": true
+  },
+  {
+   "t": 18.8,
+   "shot": "low",
+   "on": "creeper",
+   "cut": true
+  },
+  {
+   "t": 20.8,
+   "pos": [
+    -3.5,
+    2.4,
+    4.5
+   ],
+   "target": [
+    0,
+    1.4,
+    -1
+   ],
+   "fov": 55,
+   "cut": true
+  },
+  {
+   "t": 21.0,
+   "shot": "face",
+   "on": "sir",
+   "shake": 0.5,
+   "cut": true
+  },
+  {
+   "t": 21.5,
+   "shot": "face",
+   "on": "piggy",
+   "shake": 0.5,
+   "cut": true
+  },
+  {
+   "t": 22.0,
+   "shot": "face",
+   "on": "skeleton",
+   "shake": 0.6,
+   "cut": true
+  },
+  {
+   "t": 22.4,
+   "pos": [
+    0,
+    4.2,
+    8.3
+   ],
+   "target": [
+    0,
+    1.2,
+    -2
+   ],
+   "fov": 72,
+   "shake": 1.0,
+   "cut": true
+  },
+  {
+   "t": 24.0,
+   "pos": [
+    0,
+    4.2,
+    8.3
+   ],
+   "target": [
+    0,
+    1.0,
+    -1
+   ],
+   "fov": 68,
+   "shake": 0.15,
+   "cut": true
+  },
+  {
+   "t": 25.4,
+   "shot": "face",
+   "on": "foxy",
+   "cut": true
+  },
+  {
+   "t": 26.3,
+   "shot": "face",
+   "on": "sir",
+   "cut": true
+  },
+  {
+   "t": 28.0,
+   "pos": [
+    0,
+    8.5,
+    8.0
+   ],
+   "target": [
+    0,
+    0,
+    -1
+   ],
+   "fov": 70,
+   "cut": true
+  }
+ ],
+ "sounds": [
+  {
+   "t": 0.0,
+   "sound": "note/bell",
+   "vol": 0.9
+  },
+  {
+   "t": 0.3,
+   "sound": "note/bell",
+   "vol": 0.9,
+   "pitch": 1.25
+  },
+  {
+   "t": 0.6,
+   "sound": "note/bell",
+   "vol": 0.9,
+   "pitch": 1.5
+  },
+  {
+   "t": 4.4,
+   "sound": "random/click"
+  },
+  {
+   "t": 8.0,
+   "sound": "random/levelup",
+   "vol": 0.8
+  },
+  {
+   "t": 12.5,
+   "sound": "random/glass2"
+  },
+  {
+   "t": 12.7,
+   "sound": "random/fizz",
+   "vol": 0.6
+  },
+  {
+   "t": 17.3,
+   "sound": "random/orb",
+   "vol": 0.8
+  },
+  {
+   "t": 21.0,
+   "sound": "note/didgeridoo",
+   "vol": 0.7,
+   "pitch": 0.7
+  },
+  {
+   "t": 22.6,
+   "sound": "random/explode1",
+   "vol": 1.0
+  },
+  {
+   "t": 22.75,
+   "sound": "random/explode3",
+   "vol": 0.8
+  },
+  {
+   "t": 25.4,
+   "sound": "random/pop",
+   "vol": 0.7
+  },
+  {
+   "t": 29.0,
+   "sound": "note/bell",
+   "vol": 0.9
+  },
+  {
+   "t": 29.3,
+   "sound": "note/bell",
+   "vol": 0.9,
+   "pitch": 0.8
+  }
+ ],
+ "texts": []
+}

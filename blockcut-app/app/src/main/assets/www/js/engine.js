@@ -1057,6 +1057,7 @@ class PropObj {
     this.lastFx = '';
   }
   apply(st, t) {
+    this.st = st;
     this.root.visible = st.visible && st.scale > 0.001;
     this.root.position.set(st.x, st.y, st.z);
     this.root.rotation.y = (st.yaw + st.spin) * DEG;
@@ -1195,6 +1196,21 @@ export function worldObstacles(world) {
 }
 
 const camDir = new THREE.Vector3(), camTry = new THREE.Vector3();
+let propCells = new Set();
+const pv = new THREE.Vector3();
+function collectPropCells() {
+  propCells = new Set();
+  props.forEach(o => {
+    if (!o.cells || !o.root.visible || !o.st || o.st.grow < 0.5 || o.st.explode > 0) return;
+    o.root.updateMatrixWorld();
+    const m = o.inner.matrixWorld;
+    for (const c of o.cells) {
+      if (!solidId(c[3])) continue;
+      pv.set(c[0] + 0.5, c[1] + 0.5, c[2] + 0.5).applyMatrix4(m);
+      propCells.add(Math.floor(pv.x) + ',' + Math.floor(pv.y) + ',' + Math.floor(pv.z));
+    }
+  });
+}
 function rayHit(tg, pos) {
   camDir.copy(pos).sub(tg);
   const dist = camDir.length();
@@ -1202,7 +1218,8 @@ function rayHit(tg, pos) {
   camDir.divideScalar(dist);
   for (let d = 0.5; d < dist + 0.3; d += 0.15) {
     const x = Math.floor(tg.x + camDir.x * d), y = Math.floor(tg.y + camDir.y * d), z = Math.floor(tg.z + camDir.z * d);
-    if (solidId(cellMap.get(x + ',' + y + ',' + z))) return d;
+    const k = x + ',' + y + ',' + z;
+    if (solidId(cellMap.get(k)) || propCells.has(k)) return d;
   }
   return Infinity;
 }
@@ -1211,6 +1228,7 @@ for (const lift of [0, 2, 4.5]) for (const a of [0, 35, -35, 70, -70, 110, -110,
 function unblockCamera(cam, tg) {
   const ground = S.project.world.ground && S.project.world.ground !== 'none';
   if (ground && cam.position.y < 0.3) cam.position.y = 0.3;
+  collectPropCells();
   const first = rayHit(tg, cam.position);
   if (first === Infinity) return;
   const off = cam.position.clone().sub(tg);

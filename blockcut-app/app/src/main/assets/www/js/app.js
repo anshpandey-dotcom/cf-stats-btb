@@ -3,7 +3,7 @@ import {
   S, POSE, NUM, zeroPose, MOVES, FACES, SHOTS, snapT, keyAt, sortKeys, fmt, segment, baseState, charState, charPosIn, propState, invalidate, envBase,
   reloadTextures, skinTex, refreshCustomBlocks, blockList, blockIcon, blockFaces, engineInit, buildWorld, syncRigs, syncProps, selChar, selProp,
   evalShot, shotPose, applyQuickShot, keyCamera, setView, setGizmo, outSize, frame, activeCam, afterFrame, setFly, resize, cancelCorner, Audio,
-  setPlaying, drawTexts, snapshot, renderVideo, getCams, animClipDur, itemTexture, propBlocks, worldObstacles,
+  setPlaying, drawTexts, snapshot, renderVideo, getCams, animClipDur, itemTexture, propBlocks, worldObstacles, pending,
 } from './engine.js';
 import { MOBS } from './geo.js';
 import { readMcworld, writeMcstructure, blockTexture } from './mcworld.js';
@@ -1806,6 +1806,87 @@ window.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) window.__pause(); });
 
+async function quietImport(f, set) {
+  const low = (f.name || '').toLowerCase();
+  if (low.endsWith('.mcworld')) {
+    const res = await readMcworld(f, { radius: 40, depth: 10 }, (p, m) => set(`${f.name}: ${m}`, p));
+    if (!res.blocks.length) return {};
+    const w = { ground: 'none', size: 88, trees: false, seed: 1, blocks: res.blocks };
+    Library.upsert('worlds', { id: 'w_' + uid(), name: res.name, world: w, at: Date.now(), imported: true });
+    return { world: w };
+  }
+  if (low.endsWith('.png')) { if (!(await checkSkin(f))) await addSkin(titleCase(f.name.replace(/\.png$/i, '')), f, null); return {}; }
+  if (low.endsWith('.json')) return {};
+  await importArchive(f, (p, s) => set(`${f.name} · ${s.done} / ${s.total || '…'} files · ${s.tex} textures`, p));
+  Assets.name = f.name;
+  await Store.put('kv', 'packName', f.name).catch(() => {});
+  return {};
+}
+
+function dropZone(onFiles, label, sub) {
+  const z = h('button', { class: 'drop' }, h('span', { class: 'em', text: '📦' }), h('b', { text: label }), h('small', { text: sub }));
+  z.addEventListener('click', async () => { const fl = await pickFile('*/*', true); if (fl && fl.length) onFiles([...fl]); });
+  z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('on'); });
+  z.addEventListener('dragleave', () => z.classList.remove('on'));
+  z.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); z.classList.remove('on'); onFiles([...e.dataTransfer.files]); });
+  return z;
+}
+
+async function storyFlow(id) {
+  let story;
+  try {
+    const r = await fetch(`stories/${encodeURIComponent(id)}/story.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error();
+    story = await r.json();
+  } catch { toast('Story not found: ' + id, 5000); return; }
+  const files = [];
+  modal(close => {
+    const list = h('div', { class: 'list' });
+    const show = () => { list.hidden = !files.length; list.replaceChildren(...files.map((f, i) => h('div', { class: 'li' }, h('span', { text: f.name }), h('small', { text: (f.size / 1048576).toFixed(1) + ' MB' }), h('button', { class: 'ib sm', 'aria-label': 'Remove', onclick: () => { files.splice(i, 1); show(); } }, icon('close'))))); };
+    show();
+    return [
+      h('h2', { text: '🎬 ' + (story.title || id) }),
+      h('p', { text: story.desc || 'Add your files and the video builds itself.' }),
+      dropZone(fl => { files.push(...fl); show(); }, 'Drop your zip here', 'Resource pack, skins, .mcaddon or .mcworld · optional'),
+      list,
+      h('div', { class: 'row' }, pill('Make video', () => { close(); buildStory(id, story, files, true); }, '', 'play'), pill('Just open', () => { close(); buildStory(id, story, files, false); }, 'ghost', 'edit')),
+    ];
+  });
+}
+
+async function buildStory(id, story, files, render) {
+  const pr = progress('Getting everything ready');
+  try {
+    let world = null;
+    for (const f of files) { const r = await quietImport(f, (m, p) => pr.set(m, p)); if (r.world) world = r.world; }
+    if (files.length) reloadLib();
+    pr.set('Loading characters…', 0.95);
+    const src = JSON.parse(JSON.stringify(story));
+    for (const c of src.characters || []) {
+      if (!c.skin_url) continue;
+      const tag = id + '/' + c.skin_url;
+      let L = Library.data.characters.find(x => x.storySkin === tag);
+      if (!L) {
+        const blob = await (await fetch(`stories/${encodeURIComponent(id)}/${c.skin_url}`)).blob();
+        L = await addSkin(c.name || c.id, blob, c.slim ?? null);
+        L.storySkin = tag;
+        Library.save();
+      }
+      c.character = L.id;
+    }
+    const r = compileScript(src, scriptApi());
+    const P = normalize(r.project);
+    if (world && story.use_dropped_world) P.world = world;
+    P.props.forEach(propBlocksFor);
+    pr.close();
+    await openProject(P);
+    if (render) { await wait(1200); await pending(); doRender(); }
+  } catch (e) {
+    pr.close();
+    toast('Could not build the story: ' + (e?.message || e), 6000);
+  }
+}
+
 async function boot() {
   $('#hAbout').replaceChildren(icon('info'));
   $('#hAbout').onclick = () => modal(close => [h('h2', {}, 'Blockcut Studio', h('button', { class: 'ib sm', 'aria-label': 'Close', onclick: close }, icon('close'))), h('p', { text: 'Version 1.0.2 · FleetMc Studio' }), h('p', { text: 'Minecraft animation editor for phones. Projects, characters, worlds and packs are saved on this device.' }), h('p', { text: 'Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.' })]);
@@ -1834,6 +1915,10 @@ async function boot() {
   engineInit($('#gl'));
   readColors();
   renderHome();
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => { e.preventDefault(); const f = [...(e.dataTransfer?.files || [])]; if (f.length && $('#modal').hidden) f.forEach(x => importArchiveFlow(x, () => renderHome())); });
+  const story = new URLSearchParams(location.search).get('story');
+  if (story) { Store.put('kv', 'onboarded', true).catch(() => {}); storyFlow(story); return; }
   const seen = await Store.get('kv', 'onboarded').catch(() => true);
   if (!seen) { Store.put('kv', 'onboarded', true).catch(() => {}); onboarding(); }
 }
