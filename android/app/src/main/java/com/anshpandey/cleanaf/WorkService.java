@@ -34,6 +34,7 @@ public final class WorkService extends Service {
     public static final String ACTION_CANCEL = "com.anshpandey.cleanaf.CANCEL";
     public static final String EXTRA_FORMAT = "format";
     public static final String EXTRA_NAME = "name";
+    public static final String EXTRA_URI = "uri";
 
     private static final int ID_WORK = 1;
     private static final int ID_DONE = 2;
@@ -51,7 +52,7 @@ public final class WorkService extends Service {
         if (j.busy()) return;
         j.fileName = Probe.displayName(context, uri);
         j.update(Jobs.State.CLEANING, context.getString(R.string.cleaning), 0, true);
-        context.startForegroundService(new Intent(context, WorkService.class).setAction(ACTION_CLEAN).setData(uri));
+        context.startForegroundService(new Intent(context, WorkService.class).setAction(ACTION_CLEAN).putExtra(EXTRA_URI, uri.toString()));
     }
 
     public static void export(Context context, Exporter.Format format, String name) {
@@ -83,8 +84,9 @@ public final class WorkService extends Service {
             if (running == 0) finish();
             return START_NOT_STICKY;
         }
-        if (ACTION_CLEAN.equals(action) && intent.getData() != null) {
-            Uri uri = intent.getData();
+        String source = intent == null ? null : intent.getStringExtra(EXTRA_URI);
+        if (ACTION_CLEAN.equals(action) && source != null) {
+            Uri uri = Uri.parse(source);
             running++;
             executor.execute(() -> runClean(uri));
         } else if (ACTION_EXPORT.equals(action)) {
@@ -259,7 +261,7 @@ public final class WorkService extends Service {
 
     private void notifyDone(String title, String text, Uri open) {
         PendingIntent pi = openApp();
-        if (open != null) {
+        if (open != null && "content".equals(open.getScheme())) {
             Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(open, getContentResolver().getType(open))
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             pi = PendingIntent.getActivity(this, 2, view, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
