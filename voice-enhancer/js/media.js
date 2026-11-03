@@ -118,7 +118,34 @@ export async function exportVideo(file, channels, range, onProgress, onStatus) {
   }
 }
 
-export function download(blob, name) {
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function saveNative(bridge, blob, name) {
+  const id = bridge.begin(name, blob.type || "application/octet-stream");
+  if (id < 0) throw new Error("Could not create the file in Downloads.");
+  const step = 3 * 1024 * 1024;
+  try {
+    for (let pos = 0; pos < blob.size; pos += step) {
+      if (!bridge.append(id, await blobToBase64(blob.slice(pos, pos + step)))) throw new Error("Writing the file failed.");
+    }
+  } catch (err) {
+    bridge.abort(id);
+    throw err;
+  }
+  const where = bridge.finish(id);
+  if (!where) throw new Error("Saving the file failed.");
+  return where;
+}
+
+export async function download(blob, name) {
+  if (window.VoiceCleanAndroid) return saveNative(window.VoiceCleanAndroid, blob, name);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -127,4 +154,5 @@ export function download(blob, name) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return name;
 }

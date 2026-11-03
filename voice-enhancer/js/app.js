@@ -432,8 +432,8 @@ async function runExport() {
     } else {
       blob = await exportAudio(tracks, state.format, onProgress, onStatus);
     }
-    download(blob, `${baseName()}-${suffix}.${ext}`);
-    toast(`Saved ${baseName()}-${suffix}.${ext} (${(blob.size / 1048576).toFixed(1)} MB)`, 4500);
+    const where = await download(blob, `${baseName()}-${suffix}.${ext}`);
+    toast(`Saved ${where} (${(blob.size / 1048576).toFixed(1)} MB)`, 5000);
   } catch (err) {
     console.error(err);
     toast(`Export failed: ${err.message}`, 6000);
@@ -635,3 +635,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 $("video").addEventListener("click", () => player.toggle());
+
+window.voiceCleanOpen = async (url, name, type) => {
+  try {
+    const blob = await (await fetch(url)).blob();
+    resetSource();
+    await loadFile(new File([blob], name, { type: type || blob.type }));
+  } catch {
+    toast("Could not open the shared file.", 5000);
+  }
+};

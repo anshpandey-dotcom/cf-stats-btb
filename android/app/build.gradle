@@ -1,0 +1,69 @@
+plugins {
+    id "com.android.application"
+}
+
+def keystoreFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystoreFile.exists()) {
+    keystoreFile.withInputStream { keystoreProps.load(it) }
+}
+
+def webAssets = layout.buildDirectory.dir("generated/webassets").get().asFile
+
+tasks.register("copyWebApp", Copy) {
+    from(rootProject.file("../voice-enhancer"))
+    into(new File(webAssets, "www"))
+    exclude("sw.js", "README.md")
+}
+
+android {
+    namespace "com.voiceclean.studio"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.voiceclean.studio"
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreFile.exists()) {
+                storeFile rootProject.file(keystoreProps["storeFile"])
+                storePassword keystoreProps["storePassword"]
+                keyAlias keystoreProps["keyAlias"]
+                keyPassword keystoreProps["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig keystoreFile.exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir(webAssets)
+        }
+    }
+
+    androidResources {
+        noCompress += ["wasm", "onnx"]
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("copyWebApp")
+}
