@@ -52,14 +52,30 @@ public final class WorkService extends Service {
         if (j.busy()) return;
         j.fileName = Probe.displayName(context, uri);
         j.update(Jobs.State.CLEANING, context.getString(R.string.cleaning), 0, true);
-        context.startForegroundService(new Intent(context, WorkService.class).setAction(ACTION_CLEAN).putExtra(EXTRA_URI, uri.toString()));
+        launch(context, new Intent(context, WorkService.class).setAction(ACTION_CLEAN).putExtra(EXTRA_URI, uri.toString()));
+    }
+
+    private static void launch(Context context, Intent intent) {
+        try {
+            context.startForegroundService(intent);
+        } catch (RuntimeException e) {
+            App.report(context, e);
+            try {
+                context.startService(intent);
+            } catch (RuntimeException e2) {
+                App.report(context, e2);
+                Jobs j = Jobs.get();
+                j.message = "Couldn't start processing: " + e2.getMessage();
+                j.update(j.session != null ? Jobs.State.READY : Jobs.State.FAILED, "", 0, true);
+            }
+        }
     }
 
     public static void export(Context context, Exporter.Format format, String name) {
         Jobs j = Jobs.get();
         if (j.busy() || j.session == null) return;
         j.update(Jobs.State.EXPORTING, "Saving", 0, true);
-        context.startForegroundService(new Intent(context, WorkService.class)
+        launch(context, new Intent(context, WorkService.class)
                 .setAction(ACTION_EXPORT)
                 .putExtra(EXTRA_FORMAT, format.name())
                 .putExtra(EXTRA_NAME, name));
@@ -104,7 +120,11 @@ public final class WorkService extends Service {
         int type = 0;
         if (Build.VERSION.SDK_INT >= 35) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING;
         else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
-        ServiceCompat.startForeground(this, ID_WORK, n, type);
+        try {
+            ServiceCompat.startForeground(this, ID_WORK, n, type);
+        } catch (RuntimeException e) {
+            App.report(this, e);
+        }
     }
 
     private void runClean(Uri uri) {
@@ -160,6 +180,7 @@ public final class WorkService extends Service {
             jobs.session = null;
             report(Jobs.State.IDLE, "", 0, true);
         } catch (Throwable e) {
+            App.report(this, e);
             Exporter.deleteTree(dir);
             jobs.session = null;
             jobs.message = friendly(e);
@@ -191,6 +212,7 @@ public final class WorkService extends Service {
             jobs.message = null;
             report(Jobs.State.READY, "", 0, true);
         } catch (Throwable e) {
+            App.report(this, e);
             jobs.message = "Save failed: " + friendly(e);
             report(Jobs.State.READY, "", 0, true);
             notifyDone("Couldn't save", friendly(e), null);

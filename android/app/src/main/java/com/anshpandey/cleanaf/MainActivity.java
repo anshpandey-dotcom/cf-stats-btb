@@ -148,6 +148,30 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             }
         });
         handleShare(getIntent());
+        showLastCrash();
+    }
+
+    private void showLastCrash() {
+        File f = App.crashFile(this);
+        if (!f.exists()) return;
+        String text;
+        try {
+            text = new String(java.nio.file.Files.readAllBytes(f.toPath()));
+        } catch (Exception e) {
+            text = String.valueOf(e);
+        }
+        f.delete();
+        String report = text;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("Something went wrong")
+                .setMessage("Copy this report and send it to Ansh so it can be fixed.\n\n" + (report.length() > 1500 ? report.substring(0, 1500) + "…" : report))
+                .setPositiveButton("Copy report", (d, w) -> {
+                    android.content.ClipboardManager cm = getSystemService(android.content.ClipboardManager.class);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("CleanAF crash", report));
+                    toast("Report copied");
+                })
+                .setNegativeButton(R.string.close, null)
+                .show();
     }
 
     @Override
@@ -185,6 +209,17 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
     }
 
     private void startClean(Uri uri) {
+        try {
+            beginClean(uri);
+        } catch (RuntimeException e) {
+            App.report(this, e);
+            jobs.state = Jobs.State.IDLE;
+            render();
+            showLastCrash();
+        }
+    }
+
+    private void beginClean(Uri uri) {
         if (jobs.busy()) {
             toast("Please wait for the current file to finish.");
             return;
@@ -221,6 +256,7 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             jobs.state = Jobs.State.IDLE;
             show(recordOpen ? Page.RECORD : Page.HOME);
             if (msg != null) snack(msg);
+            showLastCrash();
             return;
         }
         Jobs.Session s = jobs.session;
