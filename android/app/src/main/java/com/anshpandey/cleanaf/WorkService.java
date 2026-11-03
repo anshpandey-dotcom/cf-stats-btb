@@ -71,6 +71,7 @@ public final class WorkService extends Service {
         PowerManager pm = getSystemService(PowerManager.class);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CleanAF:work");
         wakeLock.setReferenceCounted(false);
+        startInForeground(progressNotification());
     }
 
     @Override
