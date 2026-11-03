@@ -19,6 +19,12 @@ public final class Engine {
     private static final int SR = DeepFilter.SAMPLE_RATE;
     private static final int HOP = DeepFilter.HOP;
     private static final int PEAK_BLOCK = SR / 10;
+    private static final float SNR_THRESHOLD = -3f;
+    private static final float LEVEL_RANGE = 44f;
+    private static final float HANGOVER = 0.3f;
+    private static final float PREROLL = 0.08f;
+    private static final float FLOOR_DB = -45f;
+    private static final float RELEASE = 0.2f;
 
     public interface Source {
         int read(float[] buffer) throws IOException;
@@ -36,27 +42,50 @@ public final class Engine {
         }
     }
 
-    public static final class Result {
+    public static final class Options {
+        public boolean dereverb;
+        public boolean studio;
+
+        public Options(boolean dereverb, boolean studio) {
+            this.dereverb = dereverb;
+            this.studio = studio;
+        }
+    }
+
+    public static final class Analysis {
+        public File stage;
+        public File original;
         public long samples;
         public float inputLufs;
-        public float outputLufs;
         public float[] inputPeaks;
+        float[] levels;
+        float[] lsnr;
+    }
+
+    public static final class Rendered {
+        public float outputLufs;
         public float[] outputPeaks;
     }
 
     private Engine() {
     }
 
-    public static Result run(DeepFilter model, Source source, long expectedSamples, File workDir, File outWav, Listener listener)
+    public static Analysis analyze(DeepFilter model, Source source, long expectedSamples, File workDir, Listener listener)
             throws IOException, OrtException {
-        File stage = new File(workDir, "stage.f32");
-        Result result = new Result();
+        return analyze(model, source, expectedSamples, workDir, listener, false);
+    }
+
+    public static Analysis analyze(DeepFilter model, Source source, long expectedSamples, File workDir, Listener listener,
+                                   boolean dereverb) throws IOException, OrtException {
+        Analysis a = new Analysis();
+        a.stage = new File(workDir, dereverb ? "stage_echo.f32" : "stage.f32");
+        a.original = new File(workDir, dereverb ? "original_echo.wav" : "original.wav");
         FloatList levels = new FloatList();
         FloatList lsnrs = new FloatList();
         Loudness inputLoudness = new Loudness();
         PeakTracker inputPeaks = new PeakTracker();
-        long[] read = {0};
-        try (FloatWriter writer = new FloatWriter(stage)) {
+        long read = 0;
+        try (FloatWriter writer = new FloatWriter(a.stage); WavWriter original = new WavWriter(a.original, SR, 1)) {
             DeepFilter.Stream stream = model.stream((samples, length, lsnr) -> {
                 writer.write(samples, length);
                 double sum = 0;
@@ -64,6 +93,13 @@ public final class Engine {
                 levels.add((float) (10 * Math.log10(sum / Math.max(1, length) + 1e-12)));
                 lsnrs.add(lsnr);
             });
+            Dereverb front = dereverb ? new Dereverb((samples, length) -> {
+                try {
+                    stream.push(samples, 0, length);
+                } catch (OrtException e) {
+                    throw new IOException(e);
+                }
+            }) : null;
             float[] buf = new float[PEAK_BLOCK];
             int n;
             while ((n = source.read(buf)) >= 0) {
@@ -71,62 +107,104 @@ public final class Engine {
                 if (n == 0) continue;
                 inputLoudness.add(buf, n);
                 inputPeaks.add(buf, n);
-                stream.push(buf, 0, n);
-                read[0] += n;
-                double expected = Math.max(expectedSamples, read[0] + 1);
-                listener.progress("clean", Math.min(0.99, read[0] / expected) * 0.9);
+                if (!dereverb) original.write(buf, n);
+                if (front != null) front.push(buf, n);
+                else stream.push(buf, 0, n);
+                read += n;
+                double expected = Math.max(expectedSamples, read + 1);
+                listener.progress("clean", Math.min(0.99, read / expected));
             }
+            if (front != null) front.finish();
             stream.finish();
         }
-        result.samples = read[0];
-        result.inputLufs = inputLoudness.integrated();
-        result.inputPeaks = inputPeaks.peaks();
-        boolean[] mask = speechMask(levels.toArray(), lsnrs.toArray());
+        if (dereverb) a.original.delete();
+        a.samples = read;
+        a.inputLufs = inputLoudness.integrated();
+        a.inputPeaks = inputPeaks.peaks();
+        a.levels = levels.toArray();
+        a.lsnr = lsnrs.toArray();
+        return a;
+    }
 
-        listener.progress("level", 0.92);
-        Loudness gatedLoudness = new Loudness();
-        Gate gate = new Gate(mask);
-        try (FloatReader reader = new FloatReader(stage)) {
-            float[] buf = new float[PEAK_BLOCK];
-            int n;
-            while ((n = reader.read(buf)) > 0) {
-                if (listener.cancelled()) throw new CancelledException();
-                gate.apply(buf, n);
-                gatedLoudness.add(buf, n);
+    public static Rendered render(Analysis a, Options options, File workDir, File outWav, Listener listener) throws IOException {
+        boolean[] mask = speechMask(a.levels, a.lsnr);
+        File pass1 = new File(workDir, "render1.f32");
+        File pass2 = new File(workDir, "render2.f32");
+        long total = Math.max(1, a.samples);
+        try {
+            Loudness loud1 = new Loudness();
+            Gate gate = new Gate(mask);
+            long[] done = {0};
+            try (FloatReader reader = new FloatReader(a.stage); FloatWriter writer = new FloatWriter(pass1)) {
+                Dereverb.Output sink = (samples, length) -> {
+                    gate.apply(samples, length);
+                    loud1.add(samples, length);
+                    writer.write(samples, length);
+                };
+                Dereverb dereverb = options.dereverb ? new Dereverb(sink) : null;
+                float[] buf = new float[PEAK_BLOCK];
+                int n;
+                while ((n = reader.read(buf)) > 0) {
+                    if (listener.cancelled()) throw new CancelledException();
+                    if (dereverb != null) dereverb.push(buf, n);
+                    else sink.accept(buf, n);
+                    done[0] += n;
+                    listener.progress(options.dereverb ? "echo" : "level", (options.studio ? 0.6 : 0.85) * done[0] / total);
+                }
+                if (dereverb != null) dereverb.finish();
             }
-        }
-        float lufs = gatedLoudness.integrated();
-        float gainDb = lufs <= -69f ? 0f : Math.min(24f, TARGET_LUFS - lufs);
-        float gain = (float) Math.pow(10, gainDb / 20);
-
-        listener.progress("finish", 0.95);
-        Loudness outLoudness = new Loudness();
-        PeakTracker outPeaks = new PeakTracker();
-        gate = new Gate(mask);
-        Limiter limiter = new Limiter((float) Math.pow(10, -1.0 / 20));
-        try (FloatReader reader = new FloatReader(stage); WavWriter wav = new WavWriter(outWav, SR, 1)) {
-            float[] buf = new float[PEAK_BLOCK];
-            float[] out = new float[PEAK_BLOCK];
-            long total = Math.max(1, result.samples);
-            long done = 0;
-            int n;
-            while ((n = reader.read(buf)) > 0) {
-                if (listener.cancelled()) throw new CancelledException();
-                gate.apply(buf, n);
-                for (int i = 0; i < n; i++) buf[i] *= gain;
-                int m = limiter.process(buf, n, out);
+            File source = pass1;
+            float lufs = loud1.integrated();
+            if (options.studio) {
+                Loudness loud2 = new Loudness();
+                Studio studio = new Studio();
+                float pre = (float) Math.pow(10, (lufs <= -69f ? 0f : Math.min(30f, -20f - lufs)) / 20);
+                done[0] = 0;
+                try (FloatReader reader = new FloatReader(pass1); FloatWriter writer = new FloatWriter(pass2)) {
+                    float[] buf = new float[PEAK_BLOCK];
+                    int n;
+                    while ((n = reader.read(buf)) > 0) {
+                        if (listener.cancelled()) throw new CancelledException();
+                        for (int i = 0; i < n; i++) buf[i] *= pre;
+                        studio.process(buf, n);
+                        loud2.add(buf, n);
+                        writer.write(buf, n);
+                        done[0] += n;
+                        listener.progress("studio", 0.6 + 0.25 * done[0] / total);
+                    }
+                }
+                source = pass2;
+                lufs = loud2.integrated();
+            }
+            float gainDb = lufs <= -69f ? 0f : Math.min(24f, TARGET_LUFS - lufs);
+            float gain = (float) Math.pow(10, gainDb / 20);
+            Rendered r = new Rendered();
+            Loudness outLoudness = new Loudness();
+            PeakTracker outPeaks = new PeakTracker();
+            Limiter limiter = new Limiter((float) Math.pow(10, -1.0 / 20));
+            done[0] = 0;
+            try (FloatReader reader = new FloatReader(source); WavWriter wav = new WavWriter(outWav, SR, 1)) {
+                float[] buf = new float[PEAK_BLOCK];
+                float[] out = new float[PEAK_BLOCK];
+                int n;
+                while ((n = reader.read(buf)) > 0) {
+                    if (listener.cancelled()) throw new CancelledException();
+                    for (int i = 0; i < n; i++) buf[i] *= gain;
+                    int m = limiter.process(buf, n, out);
+                    write(wav, outLoudness, outPeaks, out, m);
+                    done[0] += n;
+                    listener.progress("finish", 0.85 + 0.15 * done[0] / total);
+                }
+                int m = limiter.flush(out);
                 write(wav, outLoudness, outPeaks, out, m);
-                done += n;
-                listener.progress("finish", 0.95 + 0.05 * done / total);
             }
-            int m = limiter.flush(out);
-            write(wav, outLoudness, outPeaks, out, m);
+            r.outputLufs = outLoudness.integrated();
+            r.outputPeaks = outPeaks.peaks();
+            return r;
         } finally {
-            stage.delete();
+            pass1.delete();
+            pass2.delete();
         }
-        result.outputLufs = outLoudness.integrated();
-        result.outputPeaks = outPeaks.peaks();
-        return result;
     }
 
     private static void write(WavWriter wav, Loudness loud, PeakTracker peaks, float[] out, int n) throws IOException {
@@ -143,10 +221,10 @@ public final class Engine {
         float[] sorted = Arrays.copyOf(level, frames);
         Arrays.sort(sorted);
         float loud = sorted[Math.min(frames - 1, (int) (frames * 0.95))];
-        int hang = Math.round(0.22f * SR / HOP);
-        int pre = Math.round(0.06f * SR / HOP);
+        int hang = Math.round(HANGOVER * SR / HOP);
+        int pre = Math.round(PREROLL * SR / HOP);
         for (int f = 0; f < frames; f++) {
-            if (lsnr[f] > -2f && level[f] > loud - 42f) {
+            if (lsnr[f] > SNR_THRESHOLD && level[f] > loud - LEVEL_RANGE) {
                 for (int k = Math.max(0, f - pre); k <= Math.min(frames - 1, f + hang); k++) mask[k] = true;
             }
         }
@@ -155,9 +233,9 @@ public final class Engine {
 
     static final class Gate {
         private final boolean[] mask;
-        private final float floor = (float) Math.pow(10, -50.0 / 20);
+        private final float floor = (float) Math.pow(10, FLOOR_DB / 20);
         private final float up = (float) (1 - Math.exp(-1 / (0.008 * SR)));
-        private final float down = (float) (1 - Math.exp(-1 / (0.15 * SR)));
+        private final float down = (float) (1 - Math.exp(-1 / (RELEASE * SR)));
         private long index;
         private float g;
 

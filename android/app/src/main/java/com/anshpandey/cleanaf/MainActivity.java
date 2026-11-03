@@ -52,6 +52,8 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
     private boolean recordOpen;
     private ComparePlayer player;
     private Jobs.Session playerSession;
+    private File playerMaster;
+    private boolean syncingChips;
     private Uri pendingCapture;
     private Runnable afterAudioPermission;
     private Runnable afterStoragePermission;
@@ -134,6 +136,16 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             Jobs.Session s = jobs.session;
             if (s != null) ((WaveformView) findViewById(R.id.waveform)).setPeaks(enhanced ? s.outputPeaks : s.inputPeaks);
         });
+        android.widget.CompoundButton.OnCheckedChangeListener applyOptions = (b, checked) -> {
+            if (syncingChips) return;
+            boolean echo = ((Chip) findViewById(R.id.echoChip)).isChecked();
+            boolean studio = ((Chip) findViewById(R.id.studioChip)).isChecked();
+            Jobs.Session cur = jobs.session;
+            if (cur == null || (cur.echo == echo && cur.studio == studio)) return;
+            WorkService.render(this, echo, studio);
+        };
+        ((Chip) findViewById(R.id.echoChip)).setOnCheckedChangeListener(applyOptions);
+        ((Chip) findViewById(R.id.studioChip)).setOnCheckedChangeListener(applyOptions);
         ((WaveformView) findViewById(R.id.waveform)).setListener(f -> {
             if (player != null) player.seek(f);
         });
@@ -260,16 +272,27 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             return;
         }
         Jobs.Session s = jobs.session;
-        if ((st == Jobs.State.READY || st == Jobs.State.EXPORTING) && s != null) {
+        if ((st == Jobs.State.READY || st == Jobs.State.EXPORTING || st == Jobs.State.RENDERING) && s != null) {
             show(Page.RESULT);
             bindResult(s);
             View row = findViewById(R.id.exportRow);
-            boolean exporting = st == Jobs.State.EXPORTING;
+            boolean exporting = st != Jobs.State.READY;
             row.setVisibility(exporting ? View.VISIBLE : View.GONE);
             findViewById(R.id.saveButton).setEnabled(!exporting);
+            Chip echo = findViewById(R.id.echoChip);
+            Chip studio = findViewById(R.id.studioChip);
+            echo.setEnabled(!exporting);
+            studio.setEnabled(!exporting);
+            syncingChips = true;
+            if (st != Jobs.State.RENDERING) {
+                echo.setChecked(s.echo);
+                studio.setChecked(s.studio);
+            }
+            syncingChips = false;
             if (exporting) {
                 ((LinearProgressIndicator) findViewById(R.id.exportBar)).setProgressCompat((int) (jobs.progress * 1000), true);
-                ((TextView) findViewById(R.id.exportText)).setText(String.format(Locale.US, "Saving · %d%%", Math.round(jobs.progress * 100)));
+                String label = st == Jobs.State.EXPORTING ? "Saving" : jobs.stage;
+                ((TextView) findViewById(R.id.exportText)).setText(String.format(Locale.US, "%s · %d%%", label, Math.round(jobs.progress * 100)));
             }
             String msg = jobs.message;
             if (msg != null && !exporting) {
@@ -290,28 +313,35 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
     }
 
     private void bindResult(Jobs.Session s) {
-        if (playerSession == s && player != null) return;
+        if (playerSession == s && player != null && s.master.equals(playerMaster)) return;
+        boolean rebinding = playerSession == s && player != null;
+        float resumeAt = rebinding && player.durationMs() > 0 ? (float) player.positionMs() / player.durationMs() : 0f;
+        boolean resumePlay = rebinding && player.playing();
+        boolean enhancedView = !rebinding || ((MaterialButtonToggleGroup) findViewById(R.id.compareGroup)).getCheckedButtonId() == R.id.showEnhanced;
         releasePlayer();
         playerSession = s;
+        playerMaster = s.master;
         ((TextView) findViewById(R.id.resultTitle)).setText(s.name);
         View video = findViewById(R.id.videoView);
         video.setVisibility(s.video ? View.VISIBLE : View.GONE);
         findViewById(R.id.audioArt).setVisibility(s.video ? View.GONE : View.VISIBLE);
         MaterialButtonToggleGroup group = findViewById(R.id.compareGroup);
-        group.check(R.id.showEnhanced);
+        group.check(enhancedView ? R.id.showEnhanced : R.id.showOriginal);
         WaveformView wave = findViewById(R.id.waveform);
-        wave.setPeaks(s.outputPeaks);
-        wave.setPosition(0);
+        wave.setPeaks(enhancedView ? s.outputPeaks : s.inputPeaks);
+        wave.setPosition(resumeAt);
         MaterialButton play = findViewById(R.id.playButton);
         TextView time = findViewById(R.id.resultTime);
         try {
-            player = new ComparePlayer(this, s.source, s.master, s.inputLufs, s.outputLufs,
-                    s.video ? (android.view.TextureView) video : null, (pos, dur, playing) -> {
+            player = new ComparePlayer(this, s.original, s.master, s.inputLufs, s.outputLufs,
+                    s.video ? s.source : null, s.video ? (android.view.TextureView) video : null, (pos, dur, playing) -> {
                 wave.setPosition(dur > 0 ? (float) pos / dur : 0);
                 time.setText(fmt(pos) + " / " + fmt(dur));
                 play.setIconResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
             });
-            player.setEnhanced(true);
+            player.setEnhanced(enhancedView);
+            if (resumeAt > 0) player.seek(resumeAt);
+            if (resumePlay) player.play();
         } catch (Exception e) {
             player = null;
             snack("Preview is not available for this file.");
@@ -322,10 +352,11 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
         if (player != null) player.release();
         player = null;
         playerSession = null;
+        playerMaster = null;
     }
 
     private void leaveResult() {
-        if (jobs.state == Jobs.State.EXPORTING) {
+        if (jobs.state == Jobs.State.EXPORTING || jobs.state == Jobs.State.RENDERING) {
             moveTaskToBack(true);
             return;
         }

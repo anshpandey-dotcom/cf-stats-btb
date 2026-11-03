@@ -17,6 +17,7 @@ import androidx.core.app.ServiceCompat;
 
 import com.anshpandey.cleanaf.engine.DeepFilter;
 import com.anshpandey.cleanaf.engine.Engine;
+import com.anshpandey.cleanaf.engine.WavSource;
 import com.anshpandey.cleanaf.media.AudioDecoder;
 import com.anshpandey.cleanaf.media.Exporter;
 import com.anshpandey.cleanaf.media.Probe;
@@ -32,6 +33,9 @@ public final class WorkService extends Service {
     public static final String ACTION_CLEAN = "com.anshpandey.cleanaf.CLEAN";
     public static final String ACTION_EXPORT = "com.anshpandey.cleanaf.EXPORT";
     public static final String ACTION_CANCEL = "com.anshpandey.cleanaf.CANCEL";
+    public static final String ACTION_RENDER = "com.anshpandey.cleanaf.RENDER";
+    public static final String EXTRA_ECHO = "echo";
+    public static final String EXTRA_STUDIO = "studio";
     public static final String EXTRA_FORMAT = "format";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_URI = "uri";
@@ -81,6 +85,16 @@ public final class WorkService extends Service {
                 .putExtra(EXTRA_NAME, name));
     }
 
+    public static void render(Context context, boolean echo, boolean studio) {
+        Jobs j = Jobs.get();
+        if (j.busy() || j.session == null) return;
+        j.update(Jobs.State.RENDERING, echo && j.session.echoFree == null ? "Removing echo" : "Applying", 0, true);
+        launch(context, new Intent(context, WorkService.class)
+                .setAction(ACTION_RENDER)
+                .putExtra(EXTRA_ECHO, echo)
+                .putExtra(EXTRA_STUDIO, studio));
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -105,6 +119,11 @@ public final class WorkService extends Service {
             Uri uri = Uri.parse(source);
             running++;
             executor.execute(() -> runClean(uri));
+        } else if (ACTION_RENDER.equals(action)) {
+            boolean echo = intent.getBooleanExtra(EXTRA_ECHO, false);
+            boolean studio = intent.getBooleanExtra(EXTRA_STUDIO, false);
+            running++;
+            executor.execute(() -> runRender(echo, studio));
         } else if (ACTION_EXPORT.equals(action)) {
             Exporter.Format format = Exporter.Format.valueOf(intent.getStringExtra(EXTRA_FORMAT));
             String name = intent.getStringExtra(EXTRA_NAME);
@@ -138,26 +157,17 @@ public final class WorkService extends Service {
             jobs.fileName = probe.name;
             report(Jobs.State.CLEANING, getString(R.string.cleaning), 0.0, true);
             DeepFilter df = model();
-            File master = new File(dir, "clean.wav");
-            Engine.Result result;
+            File master = new File(dir, "clean-" + System.nanoTime() + ".wav");
+            Engine.Analysis analysis;
+            Engine.Rendered rendered;
             long audioOffset;
             try (AudioDecoder decoder = new AudioDecoder(this, uri)) {
                 long expected = probe.durationUs * DeepFilter.SAMPLE_RATE / 1_000_000L;
-                result = Engine.run(df, decoder, expected, dir, master, new Engine.Listener() {
-                    @Override
-                    public void progress(String stage, double fraction) {
-                        String text = "clean".equals(stage) ? getString(R.string.cleaning) : "level".equals(stage) ? "Balancing volume" : "Finishing";
-                        report(Jobs.State.CLEANING, text, fraction, false);
-                    }
-
-                    @Override
-                    public boolean cancelled() {
-                        return jobs.cancel.get();
-                    }
-                });
+                analysis = Engine.analyze(df, decoder, expected, dir, listener(Jobs.State.CLEANING, getString(R.string.cleaning), 0, 0.92));
                 audioOffset = decoder.firstPtsUs();
             }
-            if (result.samples < DeepFilter.SAMPLE_RATE / 5) throw new IOException("The audio is too short.");
+            rendered = Engine.render(analysis, new Engine.Options(false, false), dir, master, listener(Jobs.State.CLEANING, "Finishing", 0.92, 1));
+            if (analysis.samples < DeepFilter.SAMPLE_RATE / 5) throw new IOException("The audio is too short.");
             Jobs.Session s = new Jobs.Session();
             s.source = uri;
             s.name = probe.name;
@@ -167,10 +177,12 @@ public final class WorkService extends Service {
             s.durationUs = probe.durationUs;
             s.audioOffsetUs = audioOffset;
             s.master = master;
-            s.inputLufs = result.inputLufs;
-            s.outputLufs = result.outputLufs;
-            s.inputPeaks = result.inputPeaks;
-            s.outputPeaks = result.outputPeaks;
+            s.original = analysis.original;
+            s.plain = analysis;
+            s.inputLufs = analysis.inputLufs;
+            s.outputLufs = rendered.outputLufs;
+            s.inputPeaks = analysis.inputPeaks;
+            s.outputPeaks = rendered.outputPeaks;
             jobs.session = s;
             jobs.message = null;
             report(Jobs.State.READY, "", 1, true);
@@ -186,6 +198,62 @@ public final class WorkService extends Service {
             jobs.message = friendly(e);
             report(Jobs.State.FAILED, "", 0, true);
             notifyDone("Couldn't clean this file", jobs.message, null);
+        } finally {
+            done();
+        }
+    }
+
+    private Engine.Listener listener(Jobs.State state, String text, double from, double to) {
+        return new Engine.Listener() {
+            @Override
+            public void progress(String stage, double fraction) {
+                report(state, text, from + (to - from) * fraction, false);
+            }
+
+            @Override
+            public boolean cancelled() {
+                return jobs.cancel.get();
+            }
+        };
+    }
+
+    private void runRender(boolean echo, boolean studio) {
+        wakeLock.acquire(6 * 60 * 60 * 1000L);
+        jobs.cancel.set(false);
+        Jobs.Session s = jobs.session;
+        try {
+            if (s == null) throw new IOException("Nothing to update.");
+            File dir = s.master.getParentFile();
+            Engine.Analysis analysis = s.plain;
+            double split = 0;
+            if (echo) {
+                if (s.echoFree == null) {
+                    split = 0.9;
+                    DeepFilter df = model();
+                    try (WavSource src = new WavSource(s.original)) {
+                        s.echoFree = Engine.analyze(df, src, s.plain.samples, dir, listener(Jobs.State.RENDERING, "Removing echo", 0, split), true);
+                    }
+                }
+                analysis = s.echoFree;
+            }
+            File master = new File(dir, "clean-" + System.nanoTime() + ".wav");
+            Engine.Rendered r = Engine.render(analysis, new Engine.Options(false, studio), dir, master,
+                    listener(Jobs.State.RENDERING, studio ? "Applying studio sound" : "Applying", split, 1));
+            File old = s.master;
+            s.master = master;
+            s.outputLufs = r.outputLufs;
+            s.outputPeaks = r.outputPeaks;
+            s.echo = echo;
+            s.studio = studio;
+            jobs.session = s;
+            if (old != null && !old.equals(master)) old.delete();
+            report(Jobs.State.READY, "", 1, true);
+        } catch (Engine.CancelledException e) {
+            report(Jobs.State.READY, "", 0, true);
+        } catch (Throwable e) {
+            App.report(this, e);
+            jobs.message = "Couldn't apply: " + friendly(e);
+            report(Jobs.State.READY, "", 0, true);
         } finally {
             done();
         }

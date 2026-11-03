@@ -21,4 +21,6 @@
     <string name="play">Play</string>
     <string name="channel_work">Processing</string>
     <string name="channel_done">Finished</string>
+    <string name="reduce_echo">Reduce echo</string>
+    <string name="studio_mic">Studio mic</string>
 </resources>

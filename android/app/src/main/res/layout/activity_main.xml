@@ -306,11 +306,48 @@
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/echoChip"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:checkable="true"
+                android:gravity="center"
+                android:text="@string/reduce_echo"
+                android:textAlignment="center"
+                app:chipIcon="@drawable/ic_echo"
+                app:chipIconVisible="true"
+                app:chipMinHeight="48dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/studioChip"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:checkable="true"
+                android:gravity="center"
+                android:text="@string/studio_mic"
+                android:textAlignment="center"
+                app:chipIcon="@drawable/ic_mic"
+                app:chipIconVisible="true"
+                app:chipMinHeight="48dp" />
+        </LinearLayout>
+
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/compareGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="10dp"
             app:checkedButton="@+id/showEnhanced"
             app:selectionRequired="true"
             app:singleSelection="true">

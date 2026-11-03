@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class Jobs {
-    public enum State {IDLE, CLEANING, READY, EXPORTING, FAILED}
+    public enum State {IDLE, CLEANING, READY, RENDERING, EXPORTING, FAILED}
 
     public static final class Session {
         public Uri source;
@@ -20,6 +20,11 @@ public final class Jobs {
         public long durationUs;
         public long audioOffsetUs;
         public File master;
+        public File original;
+        public com.anshpandey.cleanaf.engine.Engine.Analysis plain;
+        public com.anshpandey.cleanaf.engine.Engine.Analysis echoFree;
+        public boolean echo;
+        public boolean studio;
         public float inputLufs;
         public float outputLufs;
         public float[] inputPeaks;
@@ -74,6 +79,6 @@ public final class Jobs {
     }
 
     public boolean busy() {
-        return state == State.CLEANING || state == State.EXPORTING;
+        return state == State.CLEANING || state == State.RENDERING || state == State.EXPORTING;
     }
 }
