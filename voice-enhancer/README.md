@@ -1,23 +1,38 @@
-# VoiceClean Studio
+# VoiceClean
 
-AI noise removal and voice enhancement for audio and video. It works like a studio "enhance speech" tool, but everything runs on the user's own device. Nothing is uploaded.
+On-device AI noise removal for voice recordings and videos. Record or pick a file, and it is cleaned automatically. Nothing is uploaded.
+
+## How it works
+
+1. **DeepFilterNet3** (48 kHz full-band) removes background noise from the speech.
+2. A **speech gate** uses the model's own local-SNR estimate to push the leftover noise between words down by 50 dB.
+3. **Loudness normalization** to -18 LUFS with a -1 dBFS peak limiter. This is static gain only, with no compressor, so the residual noise is never pumped up.
+
+When you compare, Original is played at the same loudness as Enhanced, so you hear the noise difference rather than a volume difference.
+
+## Measured quality
+
+The benchmark has 39 clips: VoiceBank+DEMAND real recordings, plus 12 ESC-50 noise types and babble at 0 dB and 5 dB SNR.
+
+| | Noisy input | v1.0 chain | Current |
+| --- | --- | --- | --- |
+| DNSMOS OVRL | 2.17 | 2.90 | 3.02 |
+| DNSMOS BAK | 2.38 | 3.81 | 4.00 |
+| Noise in pauses | -3 dB | -32 dB | -63 dB |
+| SI-SDR | 3.1 dB | — | 13.5 dB |
+
+Processing runs at about 0.1× real time on a desktop CPU, so 10 minutes of audio takes about 1 minute.
+
+Background speech (other people talking) is the hardest case. It is reduced, but not fully removed.
 
 ## Features
 
-- **AI noise removal** with DeepFilterNet3, full-band 48 kHz. Removes fans, AC, traffic, keyboard, hum, crowd and room noise.
-- **Studio voice polish**: voice EQ, compression and loudness normalization to -16 LUFS, with a -1 dBFS limiter.
-- **Live A/B check**: switch between Normal and Enhanced while audio or video is playing. Press `E` to toggle.
-- **Auto Magic**: one click enhances the voice, trims silent edges and shortens long pauses. For video, the length is kept so lips stay in sync.
-- **Recording**: record from the microphone or camera with browser processing turned off, then enhance.
-- **Basic editing**: keep selection (trim), delete selection, mute, fade in/out, louder/softer, shorten pauses, undo.
-- **Export**
-  - Audio: MP3 320 kbps or WAV 24-bit, 48 kHz.
-  - Video: MP4 with the original video stream copied untouched (same quality) and the enhanced audio as AAC 320 kbps. MP3 and WAV audio-only exports are also available.
-- Installable PWA that works offline after the first load.
+- Record audio or video, or choose any audio or video file
+- One-tap enhance, then compare Original and Enhanced live while playing
+- Save as MP3 320 kbps or WAV 24-bit
+- Video is saved as MP4 with the original video stream copied untouched
 
 ## Run locally
-
-Any static file server works. The app must be served over `http://localhost` or HTTPS.
 
 ```bash
 cd voice-enhancer
@@ -26,26 +41,8 @@ python3 -m http.server 8080
 
 Then open <http://localhost:8080>.
 
-## Deploy
-
-Upload the folder to any static host, such as GitHub Pages, Netlify, Vercel or Cloudflare Pages. The service worker adds the cross-origin isolation headers itself, so multi-threaded processing turns on automatically, even on hosts that don't let you set headers.
-
-## Size
-
-| Part | Size |
-| --- | --- |
-| AI model (DeepFilterNet3 ONNX) | 8.6 MB |
-| ONNX Runtime Web | 12 MB |
-| FFmpeg (loaded only for MP3/MP4 export or unusual formats) | 32 MB |
-
-## Performance
-
-Noise removal runs about 4–7× faster than real time on a laptop, so 10 minutes of audio takes roughly 1.5–2.5 minutes. Phones are slower.
-
-On the DeepFilterNet sample clip, the engine raises SI-SDR from 6.0 dB to 20.0 dB.
-
 ## Licenses
 
-- DeepFilterNet3 model: MIT / Apache-2.0 (`models/LICENSE-DeepFilterNet`)
+- DeepFilterNet3 model: MIT / Apache-2.0
 - ONNX Runtime Web: MIT
 - ffmpeg.wasm: MIT wrapper. The FFmpeg core build is GPL-2.0-or-later.

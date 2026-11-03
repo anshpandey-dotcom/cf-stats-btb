@@ -1,4 +1,4 @@
-const CACHE = "voiceclean-v1";
+const CACHE = "voiceclean-v2";
 const SHELL = [
   "./",
   "index.html",
@@ -6,9 +6,11 @@ const SHELL = [
   "js/boot.js",
   "js/app.js",
   "js/audio.js",
+  "js/cleanup.js",
   "js/denoiser.js",
   "js/fft.js",
   "js/media.js",
+  "js/pipeline.js",
   "js/player.js",
   "js/recorder.js",
   "js/waveform.js",

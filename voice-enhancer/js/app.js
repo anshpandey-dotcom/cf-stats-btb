@@ -1,71 +1,41 @@
-import {
-  SAMPLE_RATE,
-  durationOf,
-  mixdown,
-  nearlyMono,
-  polish,
-  findSilences,
-  sliceChannels,
-  removeRanges,
-  shapeRange,
-  shortenPauses,
-} from "./audio.js";
+import { SAMPLE_RATE, durationOf, measureLufs } from "./audio.js";
 import { decodeFile, exportAudio, exportVideo, download } from "./media.js";
 import { Player } from "./player.js";
 import { Waveform } from "./waveform.js";
 import { Recorder } from "./recorder.js";
 
 const $ = (id) => document.getElementById(id);
-const STRENGTH = { light: 0.5, balanced: 0.75, full: 1 };
+const RING = 2 * Math.PI * 52;
 
 const state = {
   file: null,
   isVideo: false,
   original: null,
-  denoised: null,
   enhanced: null,
-  range: null,
-  history: [],
-  strength: "full",
-  polish: true,
-  format: null,
   busy: false,
-  selection: null,
-  enhancedWith: null,
   videoUrl: null,
+  recordKind: "audio",
 };
 
 const player = new Player();
 const recorder = new Recorder();
-let worker = null;
-let workerJob = null;
-
-const wave = new Waveform($("wave"), {
-  onSeek: (t) => {
-    player.seek(t);
-    wave.setTime(t);
-  },
-  onSelect: (sel) => {
-    state.selection = sel;
-    updateEditUi();
-  },
+const wave = new Waveform($("wave"), (t) => {
+  player.seek(t);
+  wave.setTime(t);
 });
+let worker = null;
+let job = null;
 
 function fmt(t) {
-  if (!isFinite(t)) t = 0;
-  const m = Math.floor(t / 60);
+  if (!isFinite(t) || t < 0) t = 0;
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
   const s = Math.floor(t % 60);
-  const h = Math.floor(m / 60);
-  const mm = h ? String(m % 60).padStart(2, "0") : String(m);
-  return `${h ? h + ":" : ""}${mm}:${String(s).padStart(2, "0")}`;
-}
-
-function fmtPrecise(t) {
-  return `${fmt(t)}.${String(Math.floor((t % 1) * 10))}`;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 let toastTimer = 0;
-function toast(msg, ms = 3200) {
+function toast(msg, ms = 3000) {
   const el = $("toast");
   el.textContent = msg;
   el.hidden = false;
@@ -73,115 +43,106 @@ function toast(msg, ms = 3200) {
   toastTimer = setTimeout(() => (el.hidden = true), ms);
 }
 
-function setBadge(text, ok = false) {
-  const b = $("engineBadge");
-  b.textContent = text;
-  b.classList.toggle("ok", ok);
+const screens = ["home", "record", "studio"];
+function show(name, push = true) {
+  for (const s of screens) $(s).hidden = s !== name;
+  if (push && name !== "home") history.pushState({ screen: name }, "");
+}
+
+window.addEventListener("popstate", () => {
+  if (state.busy) {
+    history.pushState({ screen: "studio" }, "");
+    cancelEngine();
+    return;
+  }
+  if (!$("sheet").hidden) {
+    closeSheet();
+    history.pushState({ screen: "studio" }, "");
+    return;
+  }
+  if (!$("record").hidden) closeRecorder();
+  player.pause();
+  show("home", false);
+});
+
+function goHome() {
+  if (history.state && history.state.screen) history.back();
+  else {
+    player.pause();
+    show("home", false);
+  }
 }
 
 function getWorker() {
-  if (!worker) {
-    worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-    worker.onmessage = ({ data }) => {
-      if (data.type === "loading") {
-        setBadge(`Downloading AI model ${Math.round(data.progress * 100)}%`);
-        if (workerJob) workerJob.status(`Downloading AI model… ${Math.round(data.progress * 100)}%`, data.progress * 0.1);
-      } else if (data.type === "ready") {
-        setBadge(data.threads > 1 ? `AI engine ready · ${data.threads} threads` : "AI engine ready", true);
-      } else if (data.type === "progress") {
-        workerJob?.progress(data.progress);
-      } else if (data.type === "done") {
-        workerJob?.resolve(data);
-      } else if (data.type === "cancelled") {
-        workerJob?.reject(new Error("cancelled"));
-      } else if (data.type === "error") {
-        if (workerJob) workerJob.reject(new Error(data.message));
-        else setBadge("AI engine failed to load");
-      }
-    };
-    worker.onerror = (e) => {
-      setBadge("AI engine failed to load");
-      workerJob?.reject(new Error(e.message || "Worker crashed"));
-    };
-    worker.postMessage({ type: "load" });
-  }
+  if (worker) return worker;
+  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  worker.onmessage = ({ data }) => {
+    if (data.type === "loading") job?.onLoading(data.progress);
+    else if (data.type === "progress") job?.onProgress(data.progress);
+    else if (data.type === "done") job?.resolve(data.channels);
+    else if (data.type === "cancelled") job?.reject(new Error("cancelled"));
+    else if (data.type === "error") job?.reject(new Error(data.message));
+  };
+  worker.onerror = (e) => job?.reject(new Error(e.message || "Engine crashed"));
+  worker.postMessage({ type: "load" });
   return worker;
 }
 
-function denoise(channels, strength, onStatus, onProgress) {
+function cancelEngine() {
+  if (job && worker) worker.postMessage({ type: "cancel" });
+}
+
+function runEngine(channels, onLoading, onProgress) {
   return new Promise((resolve, reject) => {
-    workerJob = {
-      resolve: (d) => {
-        workerJob = null;
-        resolve(d);
-      },
-      reject: (e) => {
-        workerJob = null;
-        reject(e);
-      },
-      progress: onProgress,
-      status: onStatus,
+    const done = (fn) => (v) => {
+      job = null;
+      fn(v);
     };
-    getWorker().postMessage(
-      { type: "process", channels, strength },
-      channels.map((c) => c.buffer)
-    );
+    job = { resolve: done(resolve), reject: done(reject), onLoading, onProgress };
+    getWorker().postMessage({ type: "enhance", channels }, channels.map((c) => c.buffer));
   });
 }
 
-function showProgress(text, p = 0, cancellable = false) {
-  $("progress").hidden = false;
-  $("progressText").textContent = text;
-  $("progressBar").style.width = `${Math.round(p * 100)}%`;
-  $("cancelBtn").hidden = !cancellable;
-}
-
-function hideProgress() {
-  $("progress").hidden = true;
-}
-
-function setBusy(b) {
-  state.busy = b;
-  document.querySelectorAll("#studio .btn, #pickBtn, #recAudioBtn, #recVideoBtn, #newFileBtn").forEach((el) => {
-    if (el.id === "cancelBtn" || el.id === "playBtn") return;
-    el.disabled = b;
-  });
-  if (!b) {
-    updateEditUi();
-    $("undoBtn").disabled = !state.history.length;
+function setBusy(on, label = "", pct = 0) {
+  state.busy = on;
+  $("busy").hidden = !on;
+  $("enhanceBtn").disabled = on;
+  $("saveBtn").disabled = on;
+  if (on) {
+    $("busyLabel").textContent = label;
+    $("busyPct").textContent = `${Math.round(pct * 100)}%`;
+    $("ringMeter").style.strokeDashoffset = String(RING * (1 - pct));
   }
-}
-
-function refreshTracks() {
-  const dur = durationOf(state.original);
-  player.setTracks(state.original, state.enhanced);
-  wave.setTracks(state.original, state.enhanced, dur);
-  $("abEnhanced").disabled = !state.enhanced;
-  if (state.isVideo) player.setVideo($("video"), state.range.start);
-  setMode(state.enhanced ? player.mode : "original");
-  updateTime();
-  updateEditUi();
-  updateExportUi();
 }
 
 function setMode(mode) {
   if (mode === "enhanced" && !state.enhanced) mode = "original";
   player.setMode(mode);
   wave.setMode(mode);
-  document.querySelectorAll(".ab-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+  document.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+}
+
+function refresh() {
+  let gain = 1;
+  if (state.enhanced) {
+    const diff = measureLufs(state.enhanced) - measureLufs(state.original);
+    gain = Math.pow(10, Math.max(-12, Math.min(18, diff)) / 20);
+  }
+  player.setTracks(state.original, state.enhanced, gain);
+  wave.setTracks(state.original, state.enhanced);
+  if (state.isVideo) player.setVideo($("video"), 0);
+  else player.setVideo(null);
+  document.querySelector('.seg-btn[data-mode="enhanced"]').disabled = !state.enhanced;
+  $("enhanceBtn").hidden = !!state.enhanced;
+  $("saveBtn").hidden = !state.enhanced;
+  updateTime();
 }
 
 function updateTime() {
   const t = player.currentTime;
-  $("timeLabel").textContent = `${fmt(t)} / ${fmt(player.duration)}`;
   wave.setTime(t);
-}
-
-function updatePlayIcon() {
-  $("playIcon").innerHTML = player.playing
-    ? '<path fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>'
-    : '<path fill="currentColor" d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.9-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14Z"/>';
-  $("playBtn").setAttribute("aria-label", player.playing ? "Pause" : "Play");
+  const dur = player.duration;
+  $("fileMeta").textContent = `${fmt(t)} / ${fmt(dur)}`;
 }
 
 function tick() {
@@ -189,317 +150,11 @@ function tick() {
     updateTime();
     player.syncVideo();
   }
-  updatePlayIcon();
+  $("playUse").setAttribute("href", player.playing ? "#i-pause" : "#i-play");
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 player.onEnded = updateTime;
-
-function updateEditUi() {
-  const sel = state.selection;
-  $("selLabel").textContent = sel ? `${fmtPrecise(sel[0])} – ${fmtPrecise(sel[1])} (${(sel[1] - sel[0]).toFixed(1)}s)` : "No selection";
-  document.querySelectorAll("[data-edit]").forEach((b) => {
-    const op = b.dataset.edit;
-    let enabled = !state.busy && (b.hasAttribute("data-always") || !!sel);
-    if (state.isVideo && (op === "delete" || op === "pauses")) enabled = false;
-    b.disabled = !enabled;
-  });
-  $("undoBtn").disabled = state.busy || !state.history.length;
-  $("editHint").textContent = state.isVideo
-    ? "Video mode: Keep selection trims the video. Deleting the middle and shortening pauses are audio-only so picture and sound stay in sync."
-    : "";
-}
-
-function updateExportUi() {
-  const formats = state.isVideo
-    ? [
-        ["mp4", "MP4 video"],
-        ["mp3", "MP3 audio"],
-        ["wav", "WAV"],
-      ]
-    : [
-        ["mp3", "MP3 320k"],
-        ["wav", "WAV 24-bit"],
-      ];
-  if (!formats.some(([v]) => v === state.format)) state.format = formats[0][0];
-  const seg = $("formatSeg");
-  seg.innerHTML = "";
-  for (const [value, label] of formats) {
-    const b = document.createElement("button");
-    b.textContent = label;
-    b.dataset.value = value;
-    b.classList.toggle("active", value === state.format);
-    b.onclick = () => {
-      state.format = value;
-      updateExportUi();
-    };
-    seg.appendChild(b);
-  }
-  const which = state.enhanced ? "enhanced" : "original (not enhanced yet)";
-  const notes = {
-    mp4: "Original video stream is kept untouched. Only the audio is replaced with the enhanced track (AAC 320 kbps, 48 kHz).",
-    mp3: "MP3 at 320 kbps, 48 kHz.",
-    wav: "Lossless 24-bit WAV, 48 kHz.",
-  };
-  $("exportHint").textContent = `Exports the ${which} audio. ${notes[state.format]}`;
-}
-
-function pushHistory() {
-  state.history.push({
-    original: state.original,
-    denoised: state.denoised,
-    enhanced: state.enhanced,
-    enhancedWith: state.enhancedWith,
-    range: { ...state.range },
-  });
-  if (state.history.length > 15) state.history.shift();
-}
-
-function undo() {
-  const prev = state.history.pop();
-  if (!prev) return;
-  Object.assign(state, prev);
-  state.selection = null;
-  wave.clearSelection();
-  refreshTracks();
-}
-
-function editAll(fn) {
-  state.original = fn(state.original);
-  if (state.denoised) state.denoised = fn(state.denoised);
-  if (state.enhanced) state.enhanced = fn(state.enhanced);
-}
-
-function applyEdit(op) {
-  const sel = state.selection;
-  const dur = durationOf(state.original);
-  if (op === "selectall") {
-    state.selection = [0, dur];
-    wave.selection = state.selection;
-    wave.draw();
-    updateEditUi();
-    return;
-  }
-  if (op === "pauses") {
-    const s = findSilences(state.enhanced || state.original);
-    const ranges = [];
-    if (s.leading > 0.05) ranges.push([0, s.leading]);
-    if (s.trailing < dur - 0.05) ranges.push([s.trailing, dur]);
-    const shortened = s.pauses.filter(([a, b]) => b - a > 0.45).map(([a, b]) => [a + 0.225, b - 0.225]);
-    ranges.push(...shortened);
-    const removed = ranges.reduce((t, [a, b]) => t + (b - a), 0);
-    if (removed < 0.05) return toast("No long pauses found.");
-    pushHistory();
-    editAll((c) => removeRanges(c, ranges));
-    finishEdit(`Removed ${removed.toFixed(1)}s of silence.`);
-    return;
-  }
-  if (!sel) return;
-  const [a, b] = sel;
-  pushHistory();
-  if (op === "trim") {
-    editAll((c) => sliceChannels(c, a, b));
-    if (state.isVideo) {
-      const start = state.range.start;
-      state.range = { ...state.range, start: start + a, end: start + b };
-    }
-    player.seek(0);
-    finishEdit("Trimmed to selection.");
-  } else if (op === "delete") {
-    editAll((c) => removeRanges(c, [[a, b]]));
-    finishEdit("Selection deleted.");
-  } else if (op === "mute") {
-    editAll((c) => shapeRange(c, a, b, () => 0));
-    finishEdit("Selection muted.", true);
-  } else if (op === "fadein") {
-    editAll((c) => shapeRange(c, a, b, (x) => x * x));
-    finishEdit("Fade in applied.", true);
-  } else if (op === "fadeout") {
-    editAll((c) => shapeRange(c, a, b, (x) => (1 - x) * (1 - x)));
-    finishEdit("Fade out applied.", true);
-  } else if (op === "louder" || op === "softer") {
-    const g = Math.pow(10, (op === "louder" ? 3 : -3) / 20);
-    editAll((c) => shapeRange(c, a, b, () => g));
-    finishEdit(op === "louder" ? "Selection is 3 dB louder." : "Selection is 3 dB softer.", true);
-  }
-}
-
-function finishEdit(msg, keepSelection = false) {
-  if (!keepSelection) {
-    state.selection = null;
-    wave.clearSelection();
-  }
-  refreshTracks();
-  toast(msg);
-}
-
-async function runEnhance({ auto = false } = {}) {
-  if (state.busy || !state.original) return;
-  setBusy(true);
-  player.pause();
-  const strengthKey = auto ? "full" : state.strength;
-  const usePolish = auto ? true : state.polish;
-  try {
-    const key = strengthKey;
-    let denoised = state.denoised;
-    if (!denoised || state.enhancedWith !== key) {
-      const mono = nearlyMono(state.original);
-      const input = mono ? [new Float32Array(mixdown(state.original))] : state.original.map((c) => new Float32Array(c));
-      showProgress("Starting AI engine…", 0, true);
-      const t0 = performance.now();
-      const res = await denoise(
-        input,
-        STRENGTH[strengthKey],
-        (text, p) => showProgress(text, p, true),
-        (p) => {
-          const elapsed = (performance.now() - t0) / 1000;
-          const eta = p > 0.02 ? Math.max(0, (elapsed / p) * (1 - p)) : null;
-          showProgress(`Removing noise… ${Math.round(p * 100)}%${eta !== null ? ` · ${Math.ceil(eta)}s left` : ""}`, 0.1 + p * 0.8, true);
-        }
-      );
-      denoised = mono ? state.original.map(() => new Float32Array(res.channels[0])) : res.channels;
-      state.denoised = denoised;
-      state.enhancedWith = key;
-    }
-    showProgress(usePolish ? "Polishing voice…" : "Finishing…", 0.92);
-    await new Promise((r) => setTimeout(r, 30));
-    state.enhanced = usePolish ? await polish(denoised) : denoised.map((c) => new Float32Array(c));
-    if (auto) {
-      $("polishToggle").checked = true;
-      state.polish = true;
-      setStrength("full");
-    }
-    let message = "Enhanced. Switch between Normal and Enhanced while it plays.";
-    if (auto && !state.isVideo) {
-      showProgress("Cleaning up silences…", 0.97);
-      const dur = durationOf(state.original);
-      const s = findSilences(state.enhanced);
-      const ranges = [];
-      if (s.leading > 0.05) ranges.push([0, s.leading]);
-      if (s.trailing < dur - 0.05) ranges.push([s.trailing, dur]);
-      ranges.push(...shortenPauses(state.enhanced, s.pauses).ranges);
-      const removed = ranges.reduce((t, [a, b]) => t + (b - a), 0);
-      if (removed > 0.05) {
-        pushHistory();
-        editAll((c) => removeRanges(c, ranges));
-        message = `Auto Magic done: noise removed, voice polished, ${removed.toFixed(1)}s of dead air cut.`;
-      } else {
-        message = "Auto Magic done: noise removed and voice polished.";
-      }
-    } else if (auto) {
-      message = "Auto Magic done: noise removed and voice polished.";
-    }
-    state.selection = null;
-    wave.clearSelection();
-    refreshTracks();
-    setMode("enhanced");
-    toast(message, 4500);
-  } catch (err) {
-    if (err.message === "cancelled") toast("Cancelled.");
-    else {
-      console.error(err);
-      toast(`Enhancement failed: ${err.message}`, 6000);
-    }
-  } finally {
-    hideProgress();
-    setBusy(false);
-  }
-}
-
-function setStrength(v) {
-  state.strength = v;
-  document.querySelectorAll("#strengthSeg button").forEach((b) => b.classList.toggle("active", b.dataset.value === v));
-}
-
-function baseName() {
-  return (state.file?.name || "audio").replace(/\.[^.]+$/, "");
-}
-
-async function runExport() {
-  if (state.busy || !state.original) return;
-  const tracks = state.enhanced || state.original;
-  const suffix = state.enhanced ? "enhanced" : "edited";
-  setBusy(true);
-  player.pause();
-  try {
-    showProgress("Preparing export…", 0.02);
-    const onStatus = (t) => showProgress(t, 0.05);
-    const onProgress = (p) => showProgress(`Exporting… ${Math.round(p * 100)}%`, 0.05 + p * 0.95);
-    let blob;
-    let ext = state.format;
-    if (state.format === "mp4") {
-      blob = await exportVideo(state.file, tracks, state.range, onProgress, onStatus);
-    } else {
-      blob = await exportAudio(tracks, state.format, onProgress, onStatus);
-    }
-    const where = await download(blob, `${baseName()}-${suffix}.${ext}`);
-    toast(`Saved ${where} (${(blob.size / 1048576).toFixed(1)} MB)`, 5000);
-  } catch (err) {
-    console.error(err);
-    toast(`Export failed: ${err.message}`, 6000);
-  } finally {
-    hideProgress();
-    setBusy(false);
-  }
-}
-
-async function loadFile(file) {
-  if (!file || state.busy) return;
-  player.pause();
-  $("studio").hidden = false;
-  setBusy(true);
-  showProgress("Reading file…", 0.05);
-  try {
-    getWorker();
-    const isVideo = await hasPicture(file);
-    const channels = await decodeFile(file, (t) => showProgress(t, 0.3));
-    if (!channels.length || channels[0].length < SAMPLE_RATE * 0.2) throw new Error("The audio is empty or too short.");
-    if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
-    state.videoUrl = null;
-    Object.assign(state, {
-      file,
-      isVideo,
-      original: channels,
-      denoised: null,
-      enhanced: null,
-      enhancedWith: null,
-      history: [],
-      selection: null,
-      format: null,
-      range: { start: 0, end: durationOf(channels), full: durationOf(channels) },
-    });
-    const video = $("video");
-    if (isVideo) {
-      state.videoUrl = URL.createObjectURL(file);
-      video.src = state.videoUrl;
-      video.hidden = false;
-    } else {
-      video.removeAttribute("src");
-      video.load();
-      video.hidden = true;
-      player.setVideo(null);
-    }
-    $("drop").hidden = true;
-    $("recorder").hidden = true;
-    $("fileInfo").hidden = false;
-    $("fileName").textContent = file.name;
-    $("fileMeta").textContent = `${isVideo ? "Video" : "Audio"} · ${fmt(durationOf(channels))} · ${channels.length === 1 ? "mono" : "stereo"} · ${(file.size / 1048576).toFixed(1)} MB`;
-    $("autoHint").textContent = isVideo
-      ? "Auto Magic removes noise and polishes the voice. Video length stays the same so lips stay in sync."
-      : "Auto Magic removes noise, polishes the voice, trims silent edges and shortens long pauses in one go.";
-    wave.clearSelection();
-    player.seek(0);
-    refreshTracks();
-    setMode("original");
-  } catch (err) {
-    console.error(err);
-    toast(err.message || "Could not open this file.", 6000);
-    if (!state.original) $("studio").hidden = true;
-  } finally {
-    hideProgress();
-    setBusy(false);
-  }
-}
 
 function hasPicture(file) {
   const looksVideo = file.type ? file.type.startsWith("video/") : /\.(mp4|mov|mkv|webm|m4v|avi|3gp)$/i.test(file.name);
@@ -522,125 +177,251 @@ function hasPicture(file) {
   });
 }
 
-function resetSource() {
+async function openFile(file, push = true) {
+  if (!file || state.busy) return;
   player.pause();
-  $("drop").hidden = false;
-  $("fileInfo").hidden = true;
-  $("recorder").hidden = true;
-  $("fileInput").value = "";
-}
-
-let recTimer = 0;
-async function openRecorder(kind) {
+  getWorker();
+  $("fileName").textContent = file.name;
+  $("fileMeta").textContent = "";
+  state.enhanced = null;
+  state.original = null;
+  wave.setTracks(null, null);
+  $("enhanceBtn").hidden = false;
+  $("saveBtn").hidden = true;
+  show("studio", push);
+  setBusy(true, "Opening", 0.05);
   try {
-    const stream = await recorder.open(kind);
-    $("drop").hidden = true;
-    $("fileInfo").hidden = true;
-    $("recorder").hidden = false;
-    const preview = $("recPreview");
-    preview.hidden = kind !== "video";
-    if (kind === "video") preview.srcObject = stream;
-    $("recStartBtn").disabled = false;
-    $("recStopBtn").disabled = true;
-    $("recTime").textContent = "0:00";
-    const loop = () => {
-      if (!recorder.meter) return;
-      $("recMeter").style.width = `${Math.min(100, recorder.meter.level() * 140)}%`;
-      if (recorder.recorder) $("recTime").textContent = fmt((performance.now() - recorder.startedAt) / 1000);
-      recTimer = requestAnimationFrame(loop);
-    };
-    loop();
+    const isVideo = await hasPicture(file);
+    const channels = await decodeFile(file, (t) => setBusy(true, t, 0.3));
+    if (!channels.length || channels[0].length < SAMPLE_RATE * 0.2) throw new Error("This file has no usable audio.");
+    const video = $("video");
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
+    state.videoUrl = isVideo ? URL.createObjectURL(file) : null;
+    Object.assign(state, { file, isVideo, original: channels, enhanced: null });
+    video.hidden = !isVideo;
+    $("art").hidden = isVideo;
+    if (isVideo) video.src = state.videoUrl;
+    player.seek(0);
+    refresh();
+    setMode("original");
+    setBusy(false);
+    enhance();
   } catch (err) {
-    toast(kind === "video" ? "Camera or microphone access was blocked." : "Microphone access was blocked.", 5000);
+    console.error(err);
+    setBusy(false);
+    toast(err.message || "Could not open this file.", 5000);
+    goHome();
   }
 }
 
-function closeRecorder() {
-  cancelAnimationFrame(recTimer);
-  recorder.close();
-  $("recPreview").srcObject = null;
-  $("recDot").classList.remove("live");
-  $("recorder").hidden = true;
-  if (state.original) $("fileInfo").hidden = false;
-  else $("drop").hidden = false;
+async function enhance() {
+  if (state.busy || !state.original) return;
+  player.pause();
+  const t0 = performance.now();
+  setBusy(true, "Preparing AI", 0);
+  try {
+    const input = state.original.map((c) => new Float32Array(c));
+    state.enhanced = await runEngine(
+      input,
+      (p) => setBusy(true, `Loading AI model ${Math.round(p * 100)}%`, 0),
+      (p) => {
+        const elapsed = (performance.now() - t0) / 1000;
+        const left = p > 0.03 ? Math.ceil((elapsed / p) * (1 - p)) : null;
+        setBusy(true, left !== null && left > 2 ? `Removing noise · ${fmt(left)} left` : "Removing noise", p);
+      }
+    );
+    refresh();
+    setMode("enhanced");
+    setBusy(false);
+    player.seek(0);
+    player.play();
+    toast("Noise removed. Tap Original to compare.");
+  } catch (err) {
+    setBusy(false);
+    if (err.message === "cancelled") {
+      toast("Stopped.");
+    } else {
+      console.error(err);
+      toast(`Enhance failed: ${err.message}`, 6000);
+    }
+  }
 }
 
-$("pickBtn").onclick = () => $("fileInput").click();
-$("fileInput").onchange = (e) => loadFile(e.target.files[0]);
-$("newFileBtn").onclick = resetSource;
-$("recAudioBtn").onclick = () => openRecorder("audio");
-$("recVideoBtn").onclick = () => openRecorder("video");
-$("recStartBtn").onclick = () => {
-  recorder.start();
-  $("recDot").classList.add("live");
-  $("recStartBtn").disabled = true;
-  $("recStopBtn").disabled = false;
-};
-$("recStopBtn").onclick = async () => {
-  $("recStopBtn").disabled = true;
-  cancelAnimationFrame(recTimer);
+function baseName() {
+  return (state.file?.name || "voice").replace(/\.[^.]+$/, "");
+}
+
+function openSheet() {
+  if (!state.enhanced || state.busy) return;
+  player.pause();
+  const opts = state.isVideo
+    ? [
+        ["mp4", "i-video", "Video", "MP4 · original picture, clean audio"],
+        ["mp3", "i-music", "Audio only", "MP3 · 320 kbps"],
+      ]
+    : [
+        ["mp3", "i-music", "MP3", "320 kbps · best for sharing"],
+        ["wav", "i-wave", "WAV", "Lossless 24-bit · for editing"],
+      ];
+  const box = $("sheetOptions");
+  box.innerHTML = "";
+  for (const [fmtKey, icon, title, sub] of opts) {
+    const b = document.createElement("button");
+    b.className = "option";
+    b.innerHTML = `<span class="badge"><svg class="ic"><use href="#${icon}"/></svg></span><span><strong>${title}</strong><small>${sub}</small></span>`;
+    b.onclick = () => {
+      closeSheet();
+      save(fmtKey);
+    };
+    box.appendChild(b);
+  }
+  $("sheet").hidden = false;
+  $("sheetBackdrop").hidden = false;
+}
+
+function closeSheet() {
+  $("sheet").hidden = true;
+  $("sheetBackdrop").hidden = true;
+}
+
+async function save(format) {
+  setBusy(true, "Saving", 0.02);
+  try {
+    const onStatus = () => setBusy(true, "Saving", 0.05);
+    const onProgress = (p) => setBusy(true, "Saving", 0.05 + p * 0.95);
+    const blob =
+      format === "mp4"
+        ? await exportVideo(state.file, state.enhanced, null, onProgress, onStatus)
+        : await exportAudio(state.enhanced, format, onProgress, onStatus);
+    const where = await download(blob, `${baseName()}-clean.${format}`);
+    setBusy(false);
+    toast(`Saved · ${where}`, 4500);
+  } catch (err) {
+    console.error(err);
+    setBusy(false);
+    toast(`Save failed: ${err.message}`, 6000);
+  }
+}
+
+let meterFrame = 0;
+let recording = false;
+
+async function openRecorder() {
+  show("record");
+  await switchRecordKind(state.recordKind);
+}
+
+async function switchRecordKind(kind) {
+  state.recordKind = kind;
+  document.querySelectorAll(".mode").forEach((m) => m.classList.toggle("active", m.dataset.kind === kind));
+  cancelAnimationFrame(meterFrame);
+  recorder.close();
+  $("recTitle").textContent = kind === "video" ? "Record video" : "Record audio";
+  $("recTime").textContent = "0:00";
+  try {
+    const stream = await recorder.open(kind);
+    const preview = $("recPreview");
+    preview.hidden = kind !== "video";
+    $("level").hidden = kind === "video";
+    if (kind === "video") preview.srcObject = stream;
+    else preview.srcObject = null;
+    meter();
+  } catch {
+    toast(kind === "video" ? "Allow camera and microphone to record." : "Allow microphone access to record.", 5000);
+  }
+}
+
+function meter() {
+  if (!recorder.meter) return;
+  const lvl = Math.min(1, recorder.meter.level() * 2.2);
+  const ring = $("levelRing");
+  ring.style.transform = `scale(${1 + lvl * 0.35})`;
+  ring.style.opacity = String(0.2 + lvl * 0.8);
+  if (recording) $("recTime").textContent = fmt((performance.now() - recorder.startedAt) / 1000);
+  meterFrame = requestAnimationFrame(meter);
+}
+
+async function toggleRecording() {
+  if (!recorder.stream) return switchRecordKind(state.recordKind);
+  if (!recording) {
+    recorder.start();
+    recording = true;
+    $("shutter").classList.add("on");
+    $("modes").classList.add("locked");
+    $("level").classList.add("live");
+    return;
+  }
+  recording = false;
+  $("shutter").classList.remove("on");
+  $("modes").classList.remove("locked");
+  $("level").classList.remove("live");
+  cancelAnimationFrame(meterFrame);
   const file = await recorder.stop();
   $("recPreview").srcObject = null;
-  $("recDot").classList.remove("live");
-  $("recorder").hidden = true;
-  if (file && file.size) loadFile(file);
-  else closeRecorder();
-};
-$("recCancelBtn").onclick = closeRecorder;
+  if (file && file.size) {
+    history.replaceState({ screen: "studio" }, "");
+    openFile(file, false);
+  } else goHome();
+}
 
-const drop = $("drop");
-["dragenter", "dragover"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => {
-    e.preventDefault();
-    drop.classList.add("over");
-  })
-);
-["dragleave", "drop"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => {
-    e.preventDefault();
-    drop.classList.remove("over");
-  })
-);
-drop.addEventListener("drop", (e) => loadFile(e.dataTransfer.files[0]));
+function closeRecorder() {
+  recording = false;
+  cancelAnimationFrame(meterFrame);
+  recorder.close();
+  $("recPreview").srcObject = null;
+  $("shutter").classList.remove("on");
+  $("modes").classList.remove("locked");
+  $("level").classList.remove("live");
+}
+
+$("recordBtn").onclick = openRecorder;
+$("pickBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  openFile(f);
+};
+$("recClose").onclick = () => {
+  closeRecorder();
+  goHome();
+};
+$("shutter").onclick = toggleRecording;
+document.querySelectorAll(".mode").forEach((m) => (m.onclick = () => !recording && switchRecordKind(m.dataset.kind)));
+$("studioBack").onclick = () => {
+  if (!state.busy) goHome();
+  else if (job) cancelEngine();
+};
+$("playBtn").onclick = () => state.original && player.toggle();
+document.querySelectorAll(".seg-btn").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+$("enhanceBtn").onclick = enhance;
+$("saveBtn").onclick = openSheet;
+$("sheetBackdrop").onclick = closeSheet;
+$("video").addEventListener("click", () => player.toggle());
+
 document.addEventListener("dragover", (e) => e.preventDefault());
 document.addEventListener("drop", (e) => {
   e.preventDefault();
-  if (!drop.contains(e.target) && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  const f = e.dataTransfer.files[0];
+  if (f) openFile(f);
 });
 
-$("playBtn").onclick = () => player.toggle();
-document.querySelectorAll(".ab-btn").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
-document.querySelectorAll("#strengthSeg button").forEach((b) => (b.onclick = () => setStrength(b.dataset.value)));
-$("polishToggle").onchange = (e) => {
-  state.polish = e.target.checked;
-};
-$("enhanceBtn").onclick = () => runEnhance();
-$("autoBtn").onclick = () => runEnhance({ auto: true });
-$("cancelBtn").onclick = () => worker?.postMessage({ type: "cancel" });
-document.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => applyEdit(b.dataset.edit)));
-$("undoBtn").onclick = undo;
-$("exportBtn").onclick = runExport;
-
 document.addEventListener("keydown", (e) => {
-  if (e.target.closest("input, textarea, select") || !state.original) return;
+  if (!state.original || $("studio").hidden) return;
   if (e.code === "Space") {
     e.preventDefault();
     player.toggle();
   } else if (e.key === "e" || e.key === "E") {
     setMode(player.mode === "enhanced" ? "original" : "enhanced");
-  } else if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-    e.preventDefault();
-    if (!state.busy) undo();
   }
 });
-
-$("video").addEventListener("click", () => player.toggle());
 
 window.voiceCleanOpen = async (url, name, type) => {
   try {
     const blob = await (await fetch(url)).blob();
-    resetSource();
-    await loadFile(new File([blob], name, { type: type || blob.type }));
+    await openFile(new File([blob], name, { type: type || blob.type }));
   } catch {
     toast("Could not open the shared file.", 5000);
   }

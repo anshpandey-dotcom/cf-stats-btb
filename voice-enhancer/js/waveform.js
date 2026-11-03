@@ -1,57 +1,29 @@
 import { peaks, mixdown } from "./audio.js";
 
 export class Waveform {
-  constructor(canvas, { onSeek, onSelect }) {
+  constructor(canvas, onSeek) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.onSeek = onSeek;
-    this.onSelect = onSelect;
-    this.tracks = { original: null, enhanced: null };
+    this.tracks = {};
     this.cache = {};
     this.mode = "original";
     this.duration = 0;
     this.time = 0;
-    this.selection = null;
-    this.drag = null;
-    this.bind();
-    new ResizeObserver(() => this.resize()).observe(canvas);
-  }
-
-  bind() {
-    const c = this.canvas;
-    const toTime = (e) => {
-      const r = c.getBoundingClientRect();
-      return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.duration;
-    };
-    c.addEventListener("pointerdown", (e) => {
+    const seek = (e) => {
       if (!this.duration) return;
-      c.setPointerCapture(e.pointerId);
-      this.drag = { x: e.clientX, t: toTime(e), moved: false };
-    });
-    c.addEventListener("pointermove", (e) => {
-      if (!this.drag) return;
-      if (Math.abs(e.clientX - this.drag.x) > 4) this.drag.moved = true;
-      if (this.drag.moved) {
-        const t = toTime(e);
-        this.selection = [Math.min(t, this.drag.t), Math.max(t, this.drag.t)];
-        this.draw();
-        this.onSelect?.(this.selection);
-      }
-    });
-    const end = (e) => {
-      if (!this.drag) return;
-      if (!this.drag.moved) {
-        this.selection = null;
-        this.onSelect?.(null);
-        this.onSeek?.(toTime(e));
-      }
-      this.drag = null;
-      this.draw();
+      const r = canvas.getBoundingClientRect();
+      this.onSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.duration);
     };
-    c.addEventListener("pointerup", end);
-    c.addEventListener("pointercancel", () => {
-      this.drag = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      this.dragging = true;
+      seek(e);
     });
+    canvas.addEventListener("pointermove", (e) => this.dragging && seek(e));
+    canvas.addEventListener("pointerup", () => (this.dragging = false));
+    canvas.addEventListener("pointercancel", () => (this.dragging = false));
+    new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
   resize() {
@@ -66,11 +38,10 @@ export class Waveform {
     }
   }
 
-  setTracks(original, enhanced, duration) {
-    this.tracks = { original: original ? mixdown(original) : null, enhanced: enhanced ? mixdown(enhanced) : null };
+  setTracks(original, enhanced) {
+    this.tracks = { original: original && mixdown(original), enhanced: enhanced && mixdown(enhanced) };
+    this.duration = original ? original[0].length / 48000 : 0;
     this.cache = {};
-    this.duration = duration;
-    if (this.selection && this.selection[1] > duration) this.selection = null;
     this.draw();
   }
 
@@ -84,19 +55,20 @@ export class Waveform {
     this.draw();
   }
 
-  clearSelection() {
-    this.selection = null;
-    this.draw();
-  }
-
-  peaksFor(key) {
-    const w = this.canvas.width;
-    if (!this.cache[key] && this.tracks[key]) this.cache[key] = peaks(this.tracks[key], w);
-    return this.cache[key];
-  }
-
-  css(name) {
-    return getComputedStyle(this.canvas).getPropertyValue(name).trim();
+  bars(key) {
+    if (this.cache[key] || !this.tracks[key]) return this.cache[key];
+    const dpr = window.devicePixelRatio || 1;
+    const count = Math.max(1, Math.floor(this.canvas.width / (5 * dpr)));
+    const p = peaks(this.tracks[key], count);
+    const out = new Float32Array(count);
+    let max = 1e-6;
+    for (let i = 0; i < count; i++) {
+      out[i] = Math.max(Math.abs(p[i * 2]), Math.abs(p[i * 2 + 1]));
+      max = Math.max(max, out[i]);
+    }
+    for (let i = 0; i < count; i++) out[i] = Math.pow(out[i] / max, 0.7);
+    this.cache[key] = out;
+    return out;
   }
 
   draw() {
@@ -104,38 +76,27 @@ export class Waveform {
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-    const mid = h / 2;
-    const dpr = window.devicePixelRatio || 1;
-    ctx.fillStyle = this.css("--wave-grid");
-    ctx.fillRect(0, mid - 0.5 * dpr, w, dpr);
     if (!this.duration) return;
-    const layer = (key, color) => {
-      const p = this.peaksFor(key);
-      if (!p) return;
-      ctx.fillStyle = color;
-      for (let x = 0; x < w; x++) {
-        const mn = p[x * 2];
-        const mx = p[x * 2 + 1];
-        const y1 = mid - mx * mid * 0.95;
-        const y2 = mid - mn * mid * 0.95;
-        ctx.fillRect(x, y1, 1, Math.max(dpr, y2 - y1));
-      }
-    };
-    const active = this.mode === "enhanced" && this.tracks.enhanced ? "enhanced" : "original";
-    const other = active === "enhanced" ? "original" : "enhanced";
-    layer(other, this.css("--wave-ghost"));
-    layer(active, this.css(active === "enhanced" ? "--wave-enhanced" : "--wave-original"));
-    if (this.selection) {
-      const a = (this.selection[0] / this.duration) * w;
-      const b = (this.selection[1] / this.duration) * w;
-      ctx.fillStyle = this.css("--wave-select");
-      ctx.fillRect(a, 0, b - a, h);
-      ctx.fillStyle = this.css("--accent");
-      ctx.fillRect(a, 0, dpr, h);
-      ctx.fillRect(b - dpr, 0, dpr, h);
+    const key = this.mode === "enhanced" && this.tracks.enhanced ? "enhanced" : "original";
+    const b = this.bars(key);
+    if (!b) return;
+    const dpr = window.devicePixelRatio || 1;
+    const step = w / b.length;
+    const bw = Math.max(dpr, step * 0.55);
+    const played = (this.time / this.duration) * w;
+    const css = getComputedStyle(canvas);
+    const base = css.getPropertyValue(key === "enhanced" ? "--wave-enhanced" : "--wave-original").trim();
+    const done = css.getPropertyValue("--wave-played").trim();
+    for (let i = 0; i < b.length; i++) {
+      const x = i * step + (step - bw) / 2;
+      const bh = Math.max(2 * dpr, b[i] * h * 0.92);
+      ctx.fillStyle = x < played ? done : base;
+      const y = (h - bh) / 2;
+      const r = Math.min(bw / 2, bh / 2);
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, r);
+      else ctx.rect(x, y, bw, bh);
+      ctx.fill();
     }
-    const x = (this.time / this.duration) * w;
-    ctx.fillStyle = this.css("--playhead");
-    ctx.fillRect(x - dpr, 0, 2 * dpr, h);
   }
 }

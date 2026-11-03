@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>VoiceClean Studio</title>
-<meta name="description" content="Studio-grade AI noise removal and voice enhancement for audio and video. Runs fully on your device.">
-<meta name="theme-color" content="#0d1016">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VoiceClean</title>
+<meta name="description" content="Remove background noise from any voice recording or video. Runs fully on your device.">
+<meta name="theme-color" content="#08090d">
+<meta name="color-scheme" content="dark">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -13,137 +14,117 @@
 <script src="js/boot.js"></script>
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <img src="icons/icon-192.png" alt="" width="34" height="34">
-    <div>
-      <h1>VoiceClean Studio</h1>
-      <p>AI noise removal · runs on your device</p>
-    </div>
-  </div>
-  <span class="badge" id="engineBadge">AI engine idle</span>
-</header>
 
-<main>
-  <section class="card" id="sourceCard">
-    <div class="drop" id="drop">
-      <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M12 21a1 1 0 0 1-1-1v-9.59l-3.3 3.3a1 1 0 1 1-1.4-1.42l5-5a1 1 0 0 1 1.4 0l5 5a1 1 0 1 1-1.4 1.42L13 10.41V20a1 1 0 0 1-1 1ZM4 3h16a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2Z"/></svg>
-      <h2>Drop audio or video here</h2>
-      <p>MP3, WAV, M4A, OGG, FLAC, MP4, MOV, MKV, WEBM</p>
-      <div class="row center">
-        <button class="btn primary" id="pickBtn">Choose file</button>
-        <button class="btn" id="recAudioBtn">Record audio</button>
-        <button class="btn" id="recVideoBtn">Record video</button>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6l2 2.2h7.4A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5M4.5 17.5v1A2 2 0 0 0 6.5 20.5h11a2 2 0 0 0 2-2v-1"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12h1.5M7 8v8M10.5 5v14M14 9v6M17.5 7v10M21 12h-.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <section class="screen" id="home">
+    <div class="home-top">
+      <img src="icons/icon-192.png" alt="" width="28" height="28" class="logo">
+      <span class="wordmark">VoiceClean</span>
+    </div>
+    <div class="hero">
+      <div class="orb" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
+      <h1>Studio-clean voice</h1>
+      <p>Removes fans, traffic, wind, hum and room noise from any recording or video.</p>
+    </div>
+    <div class="actions">
+      <button class="action primary" id="recordBtn">
+        <svg class="ic"><use href="#i-mic"/></svg>
+        <span>Record</span>
+      </button>
+      <button class="action" id="pickBtn">
+        <svg class="ic"><use href="#i-folder"/></svg>
+        <span>Choose file</span>
+      </button>
       <input type="file" id="fileInput" accept="audio/*,video/*,.mkv,.flac,.m4a,.opus" hidden>
     </div>
+    <p class="private">Everything stays on your device</p>
+  </section>
 
-    <div class="recorder" id="recorder" hidden>
+  <section class="screen" id="record" hidden>
+    <header class="bar">
+      <button class="icon-btn" id="recClose" aria-label="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+      <span class="bar-title" id="recTitle">Record</span>
+      <span class="icon-btn ghost"></span>
+    </header>
+    <div class="rec-stage">
       <video id="recPreview" playsinline muted autoplay hidden></video>
-      <div class="rec-row">
-        <span class="rec-dot" id="recDot"></span>
-        <span class="rec-time" id="recTime">0:00</span>
-        <div class="meter"><div id="recMeter"></div></div>
-      </div>
-      <div class="row center">
-        <button class="btn primary" id="recStartBtn">Start recording</button>
-        <button class="btn" id="recStopBtn" disabled>Stop &amp; use</button>
-        <button class="btn ghost" id="recCancelBtn">Cancel</button>
-      </div>
+      <div class="level" id="level" aria-hidden="true"><div id="levelRing"></div><svg class="ic big"><use href="#i-mic"/></svg></div>
+      <div class="rec-time" id="recTime">0:00</div>
     </div>
-
-    <div class="fileinfo" id="fileInfo" hidden>
-      <div>
-        <strong id="fileName"></strong>
-        <span id="fileMeta"></span>
+    <div class="rec-controls">
+      <div class="modes" id="modes">
+        <button class="mode active" data-kind="audio" aria-label="Audio"><svg class="ic"><use href="#i-mic"/></svg></button>
+        <button class="mode" data-kind="video" aria-label="Video"><svg class="ic"><use href="#i-video"/></svg></button>
       </div>
-      <button class="btn ghost small" id="newFileBtn">New file</button>
+      <button class="shutter" id="shutter" aria-label="Start recording"><span></span></button>
+      <span class="modes-spacer"></span>
     </div>
   </section>
 
-  <div id="studio" hidden>
-    <section class="card">
-      <video id="video" playsinline hidden></video>
-      <canvas id="wave" class="wave" aria-label="Waveform. Drag to select, tap to seek."></canvas>
-      <div class="transport">
-        <button class="btn round" id="playBtn" aria-label="Play">
-          <svg id="playIcon" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.9-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14Z"/></svg>
-        </button>
-        <span class="time" id="timeLabel">0:00 / 0:00</span>
-        <div class="ab" role="tablist" aria-label="Listen to">
-          <button role="tab" class="ab-btn active" data-mode="original" id="abOriginal">Normal</button>
-          <button role="tab" class="ab-btn" data-mode="enhanced" id="abEnhanced" disabled>Enhanced</button>
-        </div>
-      </div>
-      <p class="hint">Tap the waveform to seek, drag to select. Space plays or pauses, <kbd>E</kbd> switches Normal / Enhanced live.</p>
-    </section>
+  <section class="screen" id="studio" hidden>
+    <header class="bar">
+      <button class="icon-btn" id="studioBack" aria-label="Back"><svg class="ic"><use href="#i-back"/></svg></button>
+      <span class="bar-title" id="fileName"></span>
+      <span class="icon-btn ghost"></span>
+    </header>
 
-    <section class="card">
-      <h3>Enhance</h3>
-      <div class="field">
-        <label>Noise removal strength</label>
-        <div class="seg" id="strengthSeg">
-          <button data-value="light">Light</button>
-          <button data-value="balanced">Balanced</button>
-          <button data-value="full" class="active">Full</button>
+    <div class="stage">
+      <div class="media" id="media">
+        <video id="video" playsinline hidden></video>
+        <div class="art" id="art"><svg class="ic big"><use href="#i-music"/></svg></div>
+        <div class="busy" id="busy" hidden>
+          <svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="meter" id="ringMeter"/></svg>
+          <div class="busy-text"><strong id="busyPct">0%</strong><span id="busyLabel">Removing noise</span></div>
         </div>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="polishToggle" checked>
-        <span class="slider"></span>
-        <span>Studio voice polish <small>EQ, compression, -16 LUFS loudness</small></span>
-      </label>
+      <canvas id="wave" class="wave"></canvas>
+      <div class="meta" id="fileMeta"></div>
+    </div>
+
+    <div class="controls">
+      <div class="compare" id="compare">
+        <button class="seg-btn active" data-mode="original">Original</button>
+        <button class="seg-btn" data-mode="enhanced" disabled><svg class="ic sm"><use href="#i-spark"/></svg>Enhanced</button>
+      </div>
       <div class="row">
-        <button class="btn primary big" id="enhanceBtn">Enhance</button>
-        <button class="btn magic big" id="autoBtn">Auto Magic</button>
+        <button class="play" id="playBtn" aria-label="Play"><svg class="ic"><use href="#i-play" id="playUse"/></svg></button>
+        <button class="cta" id="enhanceBtn"><svg class="ic"><use href="#i-spark"/></svg><span>Enhance</span></button>
+        <button class="cta save" id="saveBtn" hidden><svg class="ic"><use href="#i-save"/></svg><span>Save</span></button>
       </div>
-      <p class="hint" id="autoHint">Auto Magic removes noise, polishes the voice, trims silent edges and shortens long pauses in one go.</p>
-      <div class="progress" id="progress" hidden>
-        <div class="bar"><div id="progressBar"></div></div>
-        <div class="row between">
-          <span id="progressText">Working…</span>
-          <button class="btn ghost small" id="cancelBtn">Cancel</button>
-        </div>
-      </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="card">
-      <div class="row between">
-        <h3>Edit</h3>
-        <span class="sel" id="selLabel">No selection</span>
-      </div>
-      <div class="tools">
-        <button class="btn" data-edit="trim" disabled>Keep selection</button>
-        <button class="btn" data-edit="delete" disabled>Delete selection</button>
-        <button class="btn" data-edit="mute" disabled>Mute</button>
-        <button class="btn" data-edit="fadein" disabled>Fade in</button>
-        <button class="btn" data-edit="fadeout" disabled>Fade out</button>
-        <button class="btn" data-edit="louder" disabled>Louder +3 dB</button>
-        <button class="btn" data-edit="softer" disabled>Softer −3 dB</button>
-        <button class="btn" data-edit="pauses" data-always>Shorten pauses</button>
-        <button class="btn" data-edit="selectall" data-always>Select all</button>
-        <button class="btn" id="undoBtn" disabled>Undo</button>
-      </div>
-      <p class="hint" id="editHint"></p>
-    </section>
+</div>
 
-    <section class="card">
-      <h3>Export</h3>
-      <div class="seg" id="formatSeg"></div>
-      <div class="row">
-        <button class="btn primary big" id="exportBtn">Export</button>
-      </div>
-      <p class="hint" id="exportHint"></p>
-    </section>
-  </div>
-</main>
+<div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-label="Save as">
+  <div class="grabber"></div>
+  <h2>Save as</h2>
+  <div id="sheetOptions"></div>
+</div>
 
 <div class="toast" id="toast" role="status" hidden></div>
-
-<footer>
-  <p>Everything is processed locally in your browser. Nothing is uploaded.</p>
-  <p>Noise removal by DeepFilterNet3 · Video by FFmpeg</p>
-</footer>
 
 <script type="module" src="js/app.js"></script>
 </body>

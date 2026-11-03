@@ -12,6 +12,7 @@ export class Player {
     this.video = null;
     this.videoOffset = 0;
     this.onEnded = null;
+    this.originalGain = 1;
   }
 
   ensureContext() {
@@ -40,7 +41,8 @@ export class Player {
     return buf;
   }
 
-  setTracks(original, enhanced) {
+  setTracks(original, enhanced, originalGain = 1) {
+    this.originalGain = originalGain;
     const was = this.playing;
     const pos = this.currentTime;
     this.stopSources();
@@ -81,7 +83,7 @@ export class Player {
     const t = this.ctx.currentTime;
     for (const key of ["original", "enhanced"]) {
       const g = this.gains[key].gain;
-      const target = key === this.mode ? 1 : 0;
+      const target = key === this.mode ? (key === "original" ? this.originalGain : 1) : 0;
       g.cancelScheduledValues(t);
       if (instant) {
         g.setValueAtTime(target, t);
