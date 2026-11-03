@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VoiceClean Studio</title>
+<meta name="description" content="Studio-grade AI noise removal and voice enhancement for audio and video. Runs fully on your device.">
+<meta name="theme-color" content="#0d1016">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/boot.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img src="icons/icon-192.png" alt="" width="34" height="34">
+    <div>
+      <h1>VoiceClean Studio</h1>
+      <p>AI noise removal · runs on your device</p>
+    </div>
+  </div>
+  <span class="badge" id="engineBadge">AI engine idle</span>
+</header>
+
+<main>
+  <section class="card" id="sourceCard">
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M12 21a1 1 0 0 1-1-1v-9.59l-3.3 3.3a1 1 0 1 1-1.4-1.42l5-5a1 1 0 0 1 1.4 0l5 5a1 1 0 1 1-1.4 1.42L13 10.41V20a1 1 0 0 1-1 1ZM4 3h16a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2Z"/></svg>
+      <h2>Drop audio or video here</h2>
+      <p>MP3, WAV, M4A, OGG, FLAC, MP4, MOV, MKV, WEBM</p>
+      <div class="row center">
+        <button class="btn primary" id="pickBtn">Choose file</button>
+        <button class="btn" id="recAudioBtn">Record audio</button>
+        <button class="btn" id="recVideoBtn">Record video</button>
+      </div>
+      <input type="file" id="fileInput" accept="audio/*,video/*,.mkv,.flac,.m4a,.opus" hidden>
+    </div>
+
+    <div class="recorder" id="recorder" hidden>
+      <video id="recPreview" playsinline muted autoplay hidden></video>
+      <div class="rec-row">
+        <span class="rec-dot" id="recDot"></span>
+        <span class="rec-time" id="recTime">0:00</span>
+        <div class="meter"><div id="recMeter"></div></div>
+      </div>
+      <div class="row center">
+        <button class="btn primary" id="recStartBtn">Start recording</button>
+        <button class="btn" id="recStopBtn" disabled>Stop &amp; use</button>
+        <button class="btn ghost" id="recCancelBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="fileinfo" id="fileInfo" hidden>
+      <div>
+        <strong id="fileName"></strong>
+        <span id="fileMeta"></span>
+      </div>
+      <button class="btn ghost small" id="newFileBtn">New file</button>
+    </div>
+  </section>
+
+  <div id="studio" hidden>
+    <section class="card">
+      <video id="video" playsinline hidden></video>
+      <canvas id="wave" class="wave" aria-label="Waveform. Drag to select, tap to seek."></canvas>
+      <div class="transport">
+        <button class="btn round" id="playBtn" aria-label="Play">
+          <svg id="playIcon" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.9-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14Z"/></svg>
+        </button>
+        <span class="time" id="timeLabel">0:00 / 0:00</span>
+        <div class="ab" role="tablist" aria-label="Listen to">
+          <button role="tab" class="ab-btn active" data-mode="original" id="abOriginal">Normal</button>
+          <button role="tab" class="ab-btn" data-mode="enhanced" id="abEnhanced" disabled>Enhanced</button>
+        </div>
+      </div>
+      <p class="hint">Tap the waveform to seek, drag to select. Space plays or pauses, <kbd>E</kbd> switches Normal / Enhanced live.</p>
+    </section>
+
+    <section class="card">
+      <h3>Enhance</h3>
+      <div class="field">
+        <label>Noise removal strength</label>
+        <div class="seg" id="strengthSeg">
+          <button data-value="light">Light</button>
+          <button data-value="balanced">Balanced</button>
+          <button data-value="full" class="active">Full</button>
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="polishToggle" checked>
+        <span class="slider"></span>
+        <span>Studio voice polish <small>EQ, compression, -16 LUFS loudness</small></span>
+      </label>
+      <div class="row">
+        <button class="btn primary big" id="enhanceBtn">Enhance</button>
+        <button class="btn magic big" id="autoBtn">Auto Magic</button>
+      </div>
+      <p class="hint" id="autoHint">Auto Magic removes noise, polishes the voice, trims silent edges and shortens long pauses in one go.</p>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><div id="progressBar"></div></div>
+        <div class="row between">
+          <span id="progressText">Working…</span>
+          <button class="btn ghost small" id="cancelBtn">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h3>Edit</h3>
+        <span class="sel" id="selLabel">No selection</span>
+      </div>
+      <div class="tools">
+        <button class="btn" data-edit="trim" disabled>Keep selection</button>
+        <button class="btn" data-edit="delete" disabled>Delete selection</button>
+        <button class="btn" data-edit="mute" disabled>Mute</button>
+        <button class="btn" data-edit="fadein" disabled>Fade in</button>
+        <button class="btn" data-edit="fadeout" disabled>Fade out</button>
+        <button class="btn" data-edit="louder" disabled>Louder +3 dB</button>
+        <button class="btn" data-edit="softer" disabled>Softer −3 dB</button>
+        <button class="btn" data-edit="pauses" data-always>Shorten pauses</button>
+        <button class="btn" data-edit="selectall" data-always>Select all</button>
+        <button class="btn" id="undoBtn" disabled>Undo</button>
+      </div>
+      <p class="hint" id="editHint"></p>
+    </section>
+
+    <section class="card">
+      <h3>Export</h3>
+      <div class="seg" id="formatSeg"></div>
+      <div class="row">
+        <button class="btn primary big" id="exportBtn">Export</button>
+      </div>
+      <p class="hint" id="exportHint"></p>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<footer>
+  <p>Everything is processed locally in your browser. Nothing is uploaded.</p>
+  <p>Noise removal by DeepFilterNet3 · Video by FFmpeg</p>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
