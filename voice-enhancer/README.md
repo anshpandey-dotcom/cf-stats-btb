@@ -1,4 +1,4 @@
-# VoiceClean
+# CleanAF (web)
 
 On-device AI noise removal for voice recordings and videos. Record or pick a file, and it is cleaned automatically. Nothing is uploaded.
 

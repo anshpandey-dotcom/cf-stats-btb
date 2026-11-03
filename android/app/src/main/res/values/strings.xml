@@ -1,4 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VoiceClean</string>
+    <string name="app_name">CleanAF</string>
+    <string name="tagline">Remove background noise from any voice recording or video.</string>
+    <string name="record">Record</string>
+    <string name="choose_file">Choose file</string>
+    <string name="made_by">Made by Ansh</string>
+    <string name="tap_to_record">Tap to start recording</string>
+    <string name="recording">Recording</string>
+    <string name="record_video">Record video instead</string>
+    <string name="cleaning">Cleaning audio</string>
+    <string name="leave_hint">You can leave the app. We\'ll notify you when it\'s done.</string>
+    <string name="cancel">Cancel</string>
+    <string name="original">Original</string>
+    <string name="enhanced">Enhanced</string>
+    <string name="save">Save</string>
+    <string name="save_title">Save as</string>
+    <string name="file_name">File name</string>
+    <string name="back">Back</string>
+    <string name="close">Close</string>
+    <string name="play">Play</string>
+    <string name="channel_work">Processing</string>
+    <string name="channel_done">Finished</string>
 </resources>

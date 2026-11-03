@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CleanAF" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#B9C3FF</item>
+        <item name="colorOnPrimary">#11257A</item>
+        <item name="colorPrimaryContainer">#2B3F9F</item>
+        <item name="colorOnPrimaryContainer">#DDE1FF</item>
+        <item name="colorSecondaryContainer">#2C2F38</item>
+        <item name="colorOnSecondaryContainer">#E1E2EC</item>
+        <item name="android:colorBackground">#121318</item>
+        <item name="colorSurface">#121318</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29" xmlns:tools="http://schemas.android.com/tools">false</item>
+    </style>
+</resources>

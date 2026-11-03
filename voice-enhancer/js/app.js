@@ -417,12 +417,3 @@ document.addEventListener("keydown", (e) => {
     setMode(player.mode === "enhanced" ? "original" : "enhanced");
   }
 });
-
-window.voiceCleanOpen = async (url, name, type) => {
-  try {
-    const blob = await (await fetch(url)).blob();
-    await openFile(new File([blob], name, { type: type || blob.type }));
-  } catch {
-    toast("Could not open the shared file.", 5000);
-  }
-};

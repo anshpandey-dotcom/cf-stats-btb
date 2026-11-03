@@ -8,24 +8,34 @@ if (keystoreFile.exists()) {
     keystoreFile.withInputStream { keystoreProps.load(it) }
 }
 
-def webAssets = layout.buildDirectory.dir("generated/webassets").get().asFile
+def modelAssets = layout.buildDirectory.dir("generated/modelassets").get().asFile
 
-tasks.register("copyWebApp", Copy) {
-    from(rootProject.file("../voice-enhancer"))
-    into(new File(webAssets, "www"))
-    exclude("sw.js", "README.md")
+tasks.register("copyModels", Copy) {
+    from(rootProject.file("../voice-enhancer/models")) {
+        include "*.onnx"
+    }
+    into(new File(modelAssets, "models"))
 }
 
 android {
-    namespace "com.voiceclean.studio"
+    namespace "com.anshpandey.cleanaf"
     compileSdk 36
 
     defaultConfig {
-        applicationId "com.voiceclean.studio"
+        applicationId "com.anshpandey.cleanaf"
         minSdk 26
         targetSdk 36
-        versionCode 2
-        versionName "1.1.0"
+        versionCode 1
+        versionName "2.0.0"
+    }
+
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a", "x86_64"
+            universalApk true
+        }
     }
 
     signingConfigs {
@@ -50,12 +60,18 @@ android {
 
     sourceSets {
         main {
-            assets.srcDir(webAssets)
+            assets.srcDir(modelAssets)
         }
     }
 
     androidResources {
-        noCompress += ["wasm", "onnx"]
+        noCompress += ["onnx"]
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging false
+        }
     }
 
     compileOptions {
@@ -64,6 +80,15 @@ android {
     }
 }
 
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.7.1"
+    implementation "androidx.core:core:1.16.0"
+    implementation "androidx.activity:activity:1.10.1"
+    implementation "com.google.android.material:material:1.13.0"
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.23.2"
+    implementation "de.sciss:jump3r:1.0.5"
+}
+
 tasks.named("preBuild") {
-    dependsOn("copyWebApp")
+    dependsOn("copyModels")
 }

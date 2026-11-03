@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
-        <item name="android:colorAccent">@color/icon_start</item>
+    <style name="Theme.CleanAF" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#3F5BD9</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#DDE1FF</item>
+        <item name="colorOnPrimaryContainer">#001257</item>
+        <item name="colorSecondaryContainer">#E1E2EC</item>
+        <item name="colorOnSecondaryContainer">#191B23</item>
+        <item name="android:colorBackground">#FBF8FD</item>
+        <item name="colorSurface">#FBF8FD</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29" xmlns:tools="http://schemas.android.com/tools">false</item>
     </style>
 </resources>

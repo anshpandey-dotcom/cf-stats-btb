@@ -1,4 +1,4 @@
-const CACHE = "voiceclean-v2";
+const CACHE = "cleanaf-v3";
 const SHELL = [
   "./",
   "index.html",

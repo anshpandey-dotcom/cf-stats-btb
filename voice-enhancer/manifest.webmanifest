@@ -1,6 +1,6 @@
 {
-  "name": "VoiceClean Studio",
-  "short_name": "VoiceClean",
+  "name": "CleanAF",
+  "short_name": "CleanAF",
   "description": "AI noise removal and voice enhancement for audio and video, fully on-device.",
   "start_url": "./",
   "scope": "./",

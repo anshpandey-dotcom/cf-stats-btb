@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0D1016</color>
-    <color name="icon_start">#2F6BFF</color>
-    <color name="icon_end">#19C2A0</color>
+    <color name="brand">#4C6FFF</color>
+    <color name="record_red">#E5484D</color>
+    <color name="logo_bg">#15181F</color>
 </resources>

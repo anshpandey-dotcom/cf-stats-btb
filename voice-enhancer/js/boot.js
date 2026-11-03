@@ -1,5 +1,5 @@
 (function () {
-  if (window.VoiceCleanAndroid || !("serviceWorker" in navigator) || !window.isSecureContext) return;
+  if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
   navigator.serviceWorker.register("sw.js").then(function (reg) {
     if (window.crossOriginIsolated) return;
     var reload = function () {

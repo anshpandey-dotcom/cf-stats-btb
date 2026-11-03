@@ -1,16 +1,21 @@
-# VoiceClean Studio for Android
+# CleanAF for Android
 
-A native Android shell around the `voice-enhancer` web app. The whole app (AI model, ONNX Runtime and FFmpeg) is bundled inside the APK and runs offline.
+A native Android app that removes background noise from voice recordings and videos, entirely on the device.
 
-- Package: `com.voiceclean.studio`
+- Package: `com.anshpandey.cleanaf`
 - Min Android 8.0 (API 26), target API 36
-- Exports are saved to `Downloads/VoiceClean/`
-- Share audio or video from any app to VoiceClean to open it directly
-- Microphone and camera permissions are requested only when you start recording
+- Made by Ansh
+
+## How it works
+
+- **Engine:** DeepFilterNet3 running on ONNX Runtime for Android, followed by a speech-gated residual cleanup and loudness normalization to -18 LUFS with a peak limiter.
+- **Large files:** audio is decoded and processed as a stream. Intermediate audio goes to disk, so memory use stays flat even for hour-long files.
+- **Background work:** cleaning and saving run in a foreground service with a progress notification. You can leave the app, or cancel from the notification.
+- **Saving:** MP3 (320 kbps), M4A (AAC 256 kbps) or WAV. Videos are saved as MP4 with the original video stream copied untouched; VP8/VP9 sources are saved as WebM.
+
+Files are saved to `Music/CleanAF` or `Movies/CleanAF`.
 
 ## Build
-
-Requirements: JDK 17+ and the Android SDK (platform 36, build-tools 36).
 
 ```bash
 cd android
@@ -18,17 +23,12 @@ echo "sdk.dir=/path/to/android-sdk" > local.properties
 ./gradlew assembleRelease
 ```
 
-The APK is written to `app/build/outputs/apk/release/app-release.apk`. The web app is copied from `../voice-enhancer` on every build, so web changes are picked up automatically.
+Builds produce per-ABI APKs plus a universal APK in `app/build/outputs/apk/release/`. The models are copied from `../voice-enhancer/models` at build time.
 
-## Signing
+Release signing reads `keystore.properties` (git-ignored). Without it, the build falls back to the debug key.
 
-Release builds are signed with the key described in `keystore.properties`:
+## Licenses
 
-```
-storeFile=voiceclean-release.jks
-storePassword=...
-keyAlias=voiceclean
-keyPassword=...
-```
-
-Both files are git-ignored. Keep them safe: updates to an installed app must be signed with the same key. Without `keystore.properties`, the release build falls back to the debug key.
+- DeepFilterNet3 model: MIT / Apache-2.0
+- ONNX Runtime: MIT
+- jump3r (MP3 encoder): LGPL-2.1

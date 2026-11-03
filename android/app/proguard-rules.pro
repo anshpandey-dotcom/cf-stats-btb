@@ -1,3 +1,4 @@
--keepclassmembers class com.voiceclean.studio.FileBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
+-keep class ai.onnxruntime.** { *; }
+-keep class de.sciss.jump3r.** { *; }
+-dontwarn javax.sound.**
+-dontwarn de.sciss.jump3r.**
