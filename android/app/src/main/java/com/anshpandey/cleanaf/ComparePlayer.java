@@ -37,6 +37,8 @@ public final class ComparePlayer {
     private final Thread writer;
     private MediaPlayer video;
     private Surface surface;
+    private TextureView videoView;
+    private volatile boolean released;
     private boolean videoReady;
     private float videoSpeed = 1f;
     private volatile boolean running = true;
@@ -76,6 +78,7 @@ public final class ComparePlayer {
     }
 
     private void openVideo(Context context, Uri source, TextureView view) throws IOException {
+        videoView = view;
         video = new MediaPlayer();
         video.setDataSource(context, source);
         video.setVolume(0f, 0f);
@@ -99,7 +102,12 @@ public final class ComparePlayer {
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
-                if (video != null) video.setSurface(null);
+                if (!released && video != null) {
+                    try {
+                        video.setSurface(null);
+                    } catch (IllegalStateException ignored) {
+                    }
+                }
                 if (surface != null) surface.release();
                 surface = null;
                 return true;
@@ -113,10 +121,13 @@ public final class ComparePlayer {
     }
 
     private void attach(SurfaceTexture st) {
-        if (video == null) return;
+        if (released || video == null) return;
         if (surface != null) surface.release();
         surface = new Surface(st);
-        video.setSurface(surface);
+        try {
+            video.setSurface(surface);
+        } catch (IllegalStateException ignored) {
+        }
     }
 
     private static void fit(TextureView v, int w, int h) {
@@ -283,8 +294,10 @@ public final class ComparePlayer {
     }
 
     public void release() {
+        released = true;
         running = false;
         playing = false;
+        if (videoView != null) videoView.setSurfaceTextureListener(null);
         handler.removeCallbacks(tick);
         synchronized (lock) {
             lock.notifyAll();
@@ -295,7 +308,9 @@ public final class ComparePlayer {
         }
         track.release();
         if (video != null) video.release();
+        video = null;
         if (surface != null) surface.release();
+        surface = null;
         try {
             original.close();
             enhanced.close();
