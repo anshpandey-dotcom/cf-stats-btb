@@ -19,7 +19,7 @@ public final class App extends Application {
         super.onCreate();
         Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
-            write(this, "Crash on thread " + thread.getName(), error);
+            write(crashFile(this), "Crash on thread " + thread.getName(), error);
             if (previous != null) previous.uncaughtException(thread, error);
         });
         DynamicColors.applyToActivitiesIfAvailable(this);
@@ -32,11 +32,13 @@ public final class App extends Application {
     }
 
     public static void report(android.content.Context context, Throwable error) {
-        write(context, "Handled error", error);
+        File log = errorLog(context);
+        if (log.length() > 64 * 1024) log.delete();
+        write(log, "Handled error", error);
     }
 
-    private static synchronized void write(android.content.Context context, String title, Throwable error) {
-        try (PrintWriter w = new PrintWriter(new FileWriter(crashFile(context), true))) {
+    private static synchronized void write(File file, String title, Throwable error) {
+        try (PrintWriter w = new PrintWriter(new FileWriter(file, true))) {
             w.println("CleanAF " + BuildConfig.VERSION_NAME + " · Android " + android.os.Build.VERSION.RELEASE + " · " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
             w.println(title);
             error.printStackTrace(w);
@@ -47,5 +49,9 @@ public final class App extends Application {
 
     public static File crashFile(android.content.Context context) {
         return new File(context.getFilesDir(), "last_crash.txt");
+    }
+
+    public static File errorLog(android.content.Context context) {
+        return new File(context.getFilesDir(), "errors.log");
     }
 }

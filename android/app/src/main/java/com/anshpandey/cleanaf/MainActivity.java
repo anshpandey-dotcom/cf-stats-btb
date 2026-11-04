@@ -56,6 +56,7 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
     private boolean syncingChips;
     private Uri pendingCapture;
     private Runnable afterAudioPermission;
+    private Runnable afterNotifyPermission;
     private Runnable afterStoragePermission;
 
     private final ActivityResultLauncher<String[]> pickFile = registerForActivityResult(
@@ -78,10 +79,11 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
                 }
             });
 
-    private final ActivityResultLauncher<String> audioPermission = registerForActivityResult(
-            new ActivityResultContracts.RequestPermission(), granted -> {
+    private final ActivityResultLauncher<String[]> audioPermission = registerForActivityResult(
+            new ActivityResultContracts.RequestMultiplePermissions(), result -> {
                 Runnable r = afterAudioPermission;
                 afterAudioPermission = null;
+                boolean granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
                 if (granted && r != null) r.run();
                 else if (!granted) toast("Microphone permission is needed to record.");
             });
@@ -95,6 +97,9 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
 
     private final ActivityResultLauncher<String> notifyPermission = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(), granted -> {
+                Runnable r = afterNotifyPermission;
+                afterNotifyPermission = null;
+                if (r != null) r.run();
             });
 
     @Override
@@ -117,7 +122,7 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
         pageWork = findViewById(R.id.pageWork);
         pageResult = findViewById(R.id.pageResult);
 
-        findViewById(R.id.chooseButton).setOnClickListener(v -> pickFile.launch(new String[]{"audio/*", "video/*"}));
+        findViewById(R.id.chooseButton).setOnClickListener(v -> withNotifyPermission(() -> pickFile.launch(new String[]{"audio/*", "video/*"})));
         findViewById(R.id.recordButton).setOnClickListener(v -> withAudioPermission(this::openRecorder));
         findViewById(R.id.recordClose).setOnClickListener(v -> closeRecorder());
         findViewById(R.id.shutter).setOnClickListener(v -> toggleRecording());
@@ -161,6 +166,29 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
         });
         handleShare(getIntent());
         showLastCrash();
+    }
+
+    private void showFailure(String msg) {
+        File log = App.errorLog(this);
+        String details;
+        try {
+            details = log.exists() ? new String(java.nio.file.Files.readAllBytes(log.toPath())) : "";
+        } catch (Exception e) {
+            details = "";
+        }
+        String report = details;
+        com.google.android.material.dialog.MaterialAlertDialogBuilder dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("Couldn't clean this file")
+                .setMessage(msg == null ? "Something went wrong." : msg)
+                .setNegativeButton(R.string.close, null);
+        if (!report.isEmpty()) {
+            dialog.setPositiveButton("Copy report", (d, w) -> {
+                android.content.ClipboardManager cm = getSystemService(android.content.ClipboardManager.class);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("CleanAF report", report));
+                toast("Report copied");
+            });
+        }
+        dialog.show();
     }
 
     private void showLastCrash() {
@@ -237,9 +265,6 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             return;
         }
         releasePlayer();
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
-        }
         WorkService.clean(this, uri);
     }
 
@@ -267,8 +292,7 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
             jobs.message = null;
             jobs.state = Jobs.State.IDLE;
             show(recordOpen ? Page.RECORD : Page.HOME);
-            if (msg != null) snack(msg);
-            showLastCrash();
+            showFailure(msg);
             return;
         }
         Jobs.Session s = jobs.session;
@@ -368,13 +392,37 @@ public final class MainActivity extends AppCompatActivity implements Jobs.Listen
         show(Page.HOME);
     }
 
-    private void withAudioPermission(Runnable r) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+    private boolean needsNotifyPermission() {
+        return Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && !getPreferences(MODE_PRIVATE).getBoolean("askedNotify", false);
+    }
+
+    private void withNotifyPermission(Runnable r) {
+        if (!needsNotifyPermission()) {
             r.run();
-        } else {
-            afterAudioPermission = r;
-            audioPermission.launch(Manifest.permission.RECORD_AUDIO);
+            return;
         }
+        getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotify", true).apply();
+        afterNotifyPermission = r;
+        notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+    }
+
+    private void withAudioPermission(Runnable r) {
+        boolean mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        boolean notify = needsNotifyPermission();
+        if (mic && !notify) {
+            r.run();
+            return;
+        }
+        java.util.List<String> ask = new java.util.ArrayList<>();
+        if (!mic) ask.add(Manifest.permission.RECORD_AUDIO);
+        if (notify) {
+            ask.add(Manifest.permission.POST_NOTIFICATIONS);
+            getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotify", true).apply();
+        }
+        afterAudioPermission = r;
+        audioPermission.launch(ask.toArray(new String[0]));
     }
 
     private void openRecorder() {
