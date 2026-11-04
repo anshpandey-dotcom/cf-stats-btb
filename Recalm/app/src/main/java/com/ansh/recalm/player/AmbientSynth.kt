@@ -215,7 +215,7 @@ class AmbientSynth {
                 val target = targetVolume * fade
                 var i = 0
                 while (i < buffer.size) {
-                    gain += (target - gain) * 0.00005f
+                    gain += (target * 0.45f - gain) * 0.00005f
                     frame(buffer, i)
                     buffer[i] = (buffer[i] * gain).coerceIn(-1f, 1f)
                     buffer[i + 1] = (buffer[i + 1] * gain).coerceIn(-1f, 1f)

@@ -10,7 +10,7 @@ data class Preferences(
     val voiceId: String = VoiceCatalog.DEFAULT_VOICE,
     val speed: Float = 0.9f,
     val musicId: String = "none",
-    val musicVolume: Float = 0.35f,
+    val musicVolume: Float = 0.3f,
     val skipQuestions: Boolean = true,
     val skipActivities: Boolean = false,
     val skipCaptions: Boolean = true,

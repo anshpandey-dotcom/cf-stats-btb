@@ -17,7 +17,12 @@ object BlockKind {
 data class Block(val text: String, val kind: Int = BlockKind.BODY)
 
 @Serializable
-data class Page(val blocks: List<Block>, val source: Int = -1, val ocr: Boolean = false)
+data class WordBox(val b: Int, val s: Int, val e: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+
+@Serializable
+data class Page(val blocks: List<Block>, val source: Int = -1, val ocr: Boolean = false, val words: List<WordBox> = emptyList())
+
+class RawWord(val text: String, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
 
 @Serializable
 data class Book(

@@ -1,5 +1,7 @@
 package com.ansh.recalm
 
+import com.ansh.recalm.data.Block
+import com.ansh.recalm.data.RawWord
 import com.ansh.recalm.data.Sentences
 import com.ansh.recalm.importer.TextCleaner
 import com.ansh.recalm.tts.EnglishG2p
@@ -70,6 +72,30 @@ class EngineTest {
         val exercise = TextCleaner.buildPages(listOf("1.2 Light\nLight travels fast.\n\nEXERCISES\n\n1. What is light?\n\n2. Define reflection."))
         val kinds = exercise.first().blocks.map { it.kind }
         assertTrue(kinds.contains(3))
+    }
+
+    @Test
+    fun brokenHindiIsDetected() {
+        val screenshot = "इस उपन्\u093Eास के न्\u0947 ससंकीक पी द \u094B द \u094Dद ते सम् मय सम नह स पा \u0940हा हा \uFFFDक क्\u093E \u094Dद \u093E? अ\uFFFDधक-से-अ\uFFFDधक मय अपनव हा\uFFFDदरक कक"
+        assertTrue(TextCleaner.looksBroken(screenshot))
+        val chromium = File(fixtures, "broken_extract.txt")
+        if (chromium.exists()) assertTrue(TextCleaner.looksBroken(TextCleaner.fixDevanagariOrder(chromium.readText())))
+        val clean = "इस उपन्यास के नये संस्करण पर दो शब्द लिखते समय मैं यह नहीं समझ पा रहा हूँ कि क्या लिखूँ? अधिक-से-अधिक मैं अपनी हार्दिक कृतज्ञता उन सब पाठकों के प्रति प्रकट कर सकता हूँ।"
+        assertTrue(!TextCleaner.looksBroken(clean))
+        assertTrue(!TextCleaner.looksBroken("Psychology is the science of behavior and mental processes."))
+    }
+
+    @Test
+    fun wordsAlignToBlocks() {
+        val blocks = listOf(Block("Lecture One"), Block("Sleep helps the brain. नींद ज़रूरी है।"))
+        val words = listOf("Lecture", "One", "Sleep", "helps", "the", "brain.", "नींद", "ज़रूरी", "है।").mapIndexed { i, w ->
+            RawWord(w, i * 0.1f, 0.1f, i * 0.1f + 0.08f, 0.15f)
+        }
+        val boxes = TextCleaner.alignWords(blocks, words)
+        assertEquals(9, boxes.size)
+        assertEquals(1, boxes[6].b)
+        assertEquals("नींद", blocks[1].text.substring(boxes[6].s, boxes[6].e))
+        assertEquals("brain", blocks[1].text.substring(boxes[5].s, boxes[5].e))
     }
 
     @Test

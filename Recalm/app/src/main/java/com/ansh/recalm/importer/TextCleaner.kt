@@ -3,6 +3,8 @@ package com.ansh.recalm.importer
 import com.ansh.recalm.data.Block
 import com.ansh.recalm.data.BlockKind
 import com.ansh.recalm.data.Page
+import com.ansh.recalm.data.RawWord
+import com.ansh.recalm.data.WordBox
 
 object TextCleaner {
 
@@ -31,6 +33,61 @@ object TextCleaner {
         RegexOption.IGNORE_CASE
     )
     private val terminal = charArrayOf('.', '?', '!', '।', '॥', ':', '"', '”')
+
+    fun looksBroken(text: String): Boolean {
+        var letters = 0
+        var bad = 0
+        var prev = ' '
+        for (c in text) {
+            if (c == '\uFFFD' || c in '\uE000'..'\uF8FF' || (c < ' ' && c != '\n' && c != '\r' && c != '\t')) bad++
+            if (c in '\u0900'..'\u097F') {
+                letters++
+                val isConsonant = c in '\u0915'..'\u0939' || c in '\u0958'..'\u095F'
+                val prevConsonant = prev in '\u0915'..'\u0939' || prev in '\u0958'..'\u095F' || prev == '\u093C'
+                val isSign = c in '\u093E'..'\u094D' || c == '\u0962' || c == '\u0963'
+                val isNasal = c in '\u0901'..'\u0903'
+                if (isSign && !prevConsonant) bad++
+                if (isNasal && prev !in '\u0900'..'\u097F') bad++
+                if (!isConsonant && prev == '\u094D' && c != '\u200D') bad++
+            }
+            prev = c
+        }
+        if (letters >= 150 && text.none { it == '\u093F' }) return true
+        if (letters < 20) return bad >= 5
+        return bad * 100 >= letters * 2
+    }
+
+    fun alignWords(blocks: List<Block>, words: List<RawWord>): List<WordBox> {
+        if (blocks.isEmpty() || words.isEmpty()) return emptyList()
+        val out = mutableListOf<WordBox>()
+        var b = 0
+        var p = 0
+        for (word in words) {
+            val w = fixDevanagariOrder(word.text.trim()).trim { !it.isLetterOrDigit() && it !in '\u0900'..'\u097F' }
+            if (w.isEmpty()) continue
+            var found = -1
+            var foundBlock = b
+            val here = blocks[b].text.indexOf(w, p)
+            if (here >= 0 && here - p < 160) found = here
+            else {
+                var nb = b + 1
+                while (nb < blocks.size && nb <= b + 3) {
+                    val at = blocks[nb].text.indexOf(w)
+                    if (at in 0..159) {
+                        found = at
+                        foundBlock = nb
+                        break
+                    }
+                    nb++
+                }
+            }
+            if (found < 0) continue
+            b = foundBlock
+            p = found + w.length
+            out += WordBox(b, found, p, word.x0, word.y0, word.x1, word.y1)
+        }
+        return out
+    }
 
     fun fixDevanagariOrder(text: String): String {
         if (text.none { it in 'ऀ'..'ॿ' }) return text

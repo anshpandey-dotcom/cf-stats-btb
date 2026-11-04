@@ -10,6 +10,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
@@ -59,6 +64,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Subject
@@ -184,8 +190,17 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
     val pagerState = rememberPagerState(initialPage = book.page.coerceIn(0, (loaded.size - 1).coerceAtLeast(0))) { loaded.size }
     val listening = player.bookId == bookId && player.active
     var follow by remember { mutableStateOf(true) }
-    var originalView by remember { mutableStateOf(false) }
-    var tapped by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var originalView by remember(bookId) { mutableStateOf(book.format == "pdf") }
+    var reprocessConfirm by remember { mutableStateOf(false) }
+    fun playFrom(pageIndex: Int, block: Int, offset: Int) {
+        val refs = Sentences.forPage(loaded[pageIndex])
+        if (refs.isEmpty()) return
+        val idx = refs.indexOfFirst { it.block == block && offset < it.end }.takeIf { it >= 0 }
+            ?: refs.indexOfLast { it.block <= block }.coerceAtLeast(0)
+        val within = (offset - refs[idx].start).coerceAtLeast(0)
+        follow = true
+        app.engine.play(bookId, pageIndex, idx, within)
+    }
     var menu by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<String?>(null) }
     var gotoOpen by remember { mutableStateOf(false) }
@@ -237,6 +252,8 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                             DropdownMenuItem(text = { Text("Fix broken text with OCR") }, leadingIcon = { Icon(Icons.Rounded.DocumentScanner, null) },
                                 onClick = { menu = false; ocrConfirm = true })
                         }
+                        DropdownMenuItem(text = { Text("Update this book") }, leadingIcon = { Icon(Icons.Rounded.Refresh, null) },
+                            onClick = { menu = false; reprocessConfirm = true })
                     }
                 }
             }
@@ -291,7 +308,14 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                         )
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             if (originalView && pdf != null && page.source in 0 until pdf.count) {
-                                OriginalPage(pdf, page.source)
+                                OriginalPage(
+                                    pdf = pdf,
+                                    page = page,
+                                    activeSentence = if (listening && player.page == index) player.sentence else -1,
+                                    wordStart = if (listening && player.page == index) player.wordStart else -1,
+                                    onTapWord = { block, offset -> playFrom(index, block, offset) },
+                                    onTapEmpty = { chromeVisible = !chromeVisible }
+                                )
                             } else {
                                 TextPage(
                                     page = page,
@@ -301,7 +325,7 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                                     wordStart = if (listening && player.page == index) player.wordStart else -1,
                                     wordEnd = if (listening && player.page == index) player.wordEnd else -1,
                                     skip = { kind -> app.settings.shouldSkip(kind, prefs) },
-                                    onTapSentence = { s -> tapped = index to s },
+                                    onTapWord = { block, offset -> playFrom(index, block, offset) },
                                     onTapEmpty = { chromeVisible = !chromeVisible }
                                 )
                             }
@@ -324,28 +348,6 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
             }
 
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AnimatedVisibility(tapped != null, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(
-                            onClick = {
-                                tapped?.let { (p, s) ->
-                                    follow = true
-                                    app.engine.play(bookId, p, s)
-                                }
-                                tapped = null
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Palette.Mint, contentColor = Palette.Night)
-                        ) {
-                            Icon(Icons.Rounded.PlayArrow, null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Listen from here")
-                        }
-                        Button(
-                            onClick = { tapped = null },
-                            colors = ButtonDefaults.buttonColors(containerColor = Palette.NightCard, contentColor = Palette.Text)
-                        ) { Text("Cancel") }
-                    }
-                }
                 AnimatedVisibility(listening && !follow && player.page != pagerState.currentPage) {
                     Button(
                         onClick = {
@@ -434,6 +436,29 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
         )
     }
 
+    if (reprocessConfirm) {
+        AlertDialog(
+            onDismissRequest = { reprocessConfirm = false },
+            title = { Text("Update this book?") },
+            text = { Text("Recalm will read the file again with the newest engine: it fixes broken Hindi text, finds text in pictures and lets you tap words on the original pages. Your progress is kept.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    reprocessConfirm = false
+                    if (listening) app.engine.stop()
+                    ocrProgress = 0f to "Starting"
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            runCatching { app.importer.reprocess(book) { f, m -> ocrProgress = f to m } }
+                        }
+                        ocrProgress = null
+                        reload++
+                    }
+                }) { Text("Update") }
+            },
+            dismissButton = { TextButton(onClick = { reprocessConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
     if (ocrConfirm) {
         AlertDialog(
             onDismissRequest = { ocrConfirm = false },
@@ -472,16 +497,79 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
 }
 
 @Composable
-private fun OriginalPage(pdf: PdfSource, index: Int) {
+private fun OriginalPage(
+    pdf: PdfSource,
+    page: Page,
+    activeSentence: Int,
+    wordStart: Int,
+    onTapWord: (Int, Int) -> Unit,
+    onTapEmpty: () -> Unit
+) {
+    val index = page.source
     var bitmap by remember(index) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(index) { bitmap = pdf.render(index, 1400) }
-    Box(Modifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+    val refs = remember(page) { Sentences.forPage(page) }
+    val active = refs.getOrNull(activeSentence)
+    val sentenceBoxes = remember(page, active) {
+        if (active == null) emptyList() else page.words.filter { it.b == active.block && it.s >= active.start && it.e <= active.end }
+    }
+    val wordBox = remember(page, active, wordStart) {
+        if (active == null || wordStart < 0) null
+        else page.words.firstOrNull { it.b == active.block && wordStart >= it.s && wordStart < it.e }
+            ?: page.words.firstOrNull { it.b == active.block && it.s >= wordStart }
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         val b = bitmap
-        if (b == null) CircularProgressIndicator(color = Palette.Mint)
-        else Image(
-            b.asImageBitmap(), contentDescription = "Page ${index + 1}", contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
-        )
+        if (b == null) {
+            Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Palette.Mint) }
+        } else {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(b.width.toFloat() / b.height)
+                    .clip(RoundedCornerShape(4.dp))
+                    .pointerInput(page) {
+                        detectTapGestures { pos ->
+                            val x = pos.x / size.width
+                            val y = pos.y / size.height
+                            val pad = 0.012f
+                            val hit = page.words.firstOrNull { x >= it.x0 - pad && x <= it.x1 + pad && y >= it.y0 - pad && y <= it.y1 + pad }
+                                ?: page.words.minByOrNull {
+                                    val cx = (it.x0 + it.x1) / 2
+                                    val cy = (it.y0 + it.y1) / 2
+                                    (cx - x) * (cx - x) + (cy - y) * (cy - y) * 4
+                                }?.takeIf { val cy = (it.y0 + it.y1) / 2; kotlin.math.abs(cy - y) < 0.03f }
+                            if (hit != null) onTapWord(hit.b, hit.s) else onTapEmpty()
+                        }
+                    }
+            ) {
+                Image(b.asImageBitmap(), contentDescription = "Page ${index + 1}", contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
+                Canvas(Modifier.fillMaxSize()) {
+                    for (w in sentenceBoxes) {
+                        drawRect(
+                            Palette.Periwinkle.copy(alpha = 0.18f),
+                            topLeft = Offset(w.x0 * size.width, w.y0 * size.height),
+                            size = Size((w.x1 - w.x0) * size.width, (w.y1 - w.y0) * size.height)
+                        )
+                    }
+                    wordBox?.let { w ->
+                        drawRoundRect(
+                            Palette.Mint.copy(alpha = 0.45f),
+                            topLeft = Offset(w.x0 * size.width - 3f, w.y0 * size.height - 2f),
+                            size = Size((w.x1 - w.x0) * size.width + 6f, (w.y1 - w.y0) * size.height + 4f),
+                            cornerRadius = CornerRadius(6f)
+                        )
+                    }
+                }
+            }
+            if (page.words.isEmpty() && page.blocks.isNotEmpty()) {
+                Text(
+                    "Tip: open the menu and choose \"Update this book\" to tap words on this page.",
+                    color = Palette.Muted, style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
     }
 }
 
@@ -494,7 +582,7 @@ private fun TextPage(
     wordStart: Int,
     wordEnd: Int,
     skip: (Int) -> Boolean,
-    onTapSentence: (Int) -> Unit,
+    onTapWord: (Int, Int) -> Unit,
     onTapEmpty: () -> Unit
 ) {
     val sentences = remember(page) { Sentences.forPage(page) }
@@ -530,7 +618,7 @@ private fun TextPage(
                 wordStart = wordStart,
                 wordEnd = wordEnd,
                 skipped = skip(block.kind),
-                onTapSentence = onTapSentence
+                onTapWord = onTapWord
             )
         }
     }
@@ -547,7 +635,7 @@ private fun BlockText(
     wordStart: Int,
     wordEnd: Int,
     skipped: Boolean,
-    onTapSentence: (Int) -> Unit
+    onTapWord: (Int, Int) -> Unit
 ) {
     val mine = remember(sentences, blockIndex) { sentences.withIndex().filter { it.value.block == blockIndex } }
     val active = sentences.getOrNull(activeSentence)?.takeIf { it.block == blockIndex }
@@ -594,9 +682,9 @@ private fun BlockText(
             modifier = Modifier.pointerInput(mine) {
                 detectTapGestures { pos ->
                     val l = layout ?: return@detectTapGestures
-                    val offset = l.getOffsetForPosition(pos)
-                    val hit = mine.firstOrNull { offset >= it.value.start && offset <= it.value.end } ?: mine.lastOrNull { it.value.start <= offset }
-                    if (hit != null) onTapSentence(hit.index)
+                    var offset = l.getOffsetForPosition(pos).coerceIn(0, block.text.length)
+                    while (offset > 0 && !block.text[offset - 1].isWhitespace()) offset--
+                    onTapWord(blockIndex, offset)
                 }
             }
         )

@@ -33,6 +33,8 @@ import com.tom_roush.pdfbox.pdmodel.PDResources
 import com.tom_roush.pdfbox.pdmodel.graphics.form.PDFormXObject
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.tom_roush.pdfbox.text.TextPosition
+import com.ansh.recalm.data.RawWord
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
@@ -138,43 +140,113 @@ class Importer(private val context: Context, private val library: Library) {
         return bitmap
     }
 
+    private class PositionStripper : PDFTextStripper() {
+        val words = mutableListOf<RawWord>()
+        private val current = StringBuilder()
+        private var x0 = 0f
+        private var y0 = 0f
+        private var x1 = 0f
+        private var y1 = 0f
+
+        init {
+            sortByPosition = false
+            addMoreFormatting = false
+        }
+
+        fun reset() {
+            words.clear()
+            current.clear()
+        }
+
+        private fun flush() {
+            if (current.isNotBlank()) words += RawWord(current.toString(), x0, y0, x1, y1)
+            current.clear()
+        }
+
+        override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
+            super.writeString(text, textPositions)
+            for (t in textPositions) {
+                val unicode = t.unicode ?: continue
+                if (unicode.isBlank()) {
+                    flush()
+                    continue
+                }
+                val w = t.pageWidth.coerceAtLeast(1f)
+                val h = t.pageHeight.coerceAtLeast(1f)
+                val left = t.xDirAdj / w
+                val right = (t.xDirAdj + t.widthDirAdj) / w
+                val top = (t.yDirAdj - t.heightDir * 1.15f) / h
+                val bottom = (t.yDirAdj + t.heightDir * 0.3f) / h
+                if (current.isEmpty()) {
+                    x0 = left
+                    y0 = top
+                    x1 = right
+                    y1 = bottom
+                } else {
+                    x0 = minOf(x0, left)
+                    y0 = minOf(y0, top)
+                    x1 = maxOf(x1, right)
+                    y1 = maxOf(y1, bottom)
+                }
+                current.append(unicode)
+            }
+            flush()
+        }
+
+        override fun writeWordSeparator() {
+            flush()
+            super.writeWordSeparator()
+        }
+
+        override fun writeLineSeparator() {
+            flush()
+            super.writeLineSeparator()
+        }
+    }
+
     private fun readPdf(file: File, onProgress: (Float, String) -> Unit): List<Page> {
         val raw = mutableListOf<String>()
+        val rawWords = mutableListOf<List<RawWord>>()
         val imageText = HashMap<Int, List<String>>()
         PDDocument.load(file, MemoryUsageSetting.setupTempFileOnly()).use { doc ->
-            val stripper = PDFTextStripper().apply {
-                sortByPosition = false
-                addMoreFormatting = false
-            }
+            val stripper = PositionStripper()
             val total = doc.numberOfPages
             for (p in 1..total) {
+                stripper.reset()
                 stripper.startPage = p
                 stripper.endPage = p
                 val text = runCatching { stripper.getText(doc) }.getOrDefault("")
                 raw += text
-                if (text.count { it.isLetter() } >= 25) {
+                rawWords += stripper.words.toList()
+                if (text.count { it.isLetter() } >= 25 && !TextCleaner.looksBroken(TextCleaner.fixDevanagariOrder(text))) {
                     val found = runCatching { textInImages(doc.getPage(p - 1).resources, text, 0) }.getOrDefault(emptyList())
                     if (found.isNotEmpty()) imageText[p - 1] = found
                 }
-                onProgress(p.toFloat() / total * 0.85f, "Reading page $p of $total")
+                onProgress(p.toFloat() / total * 0.5f, "Reading page $p of $total")
             }
         }
-        val needOcr = raw.indices.filter { raw[it].count { c -> c.isLetter() } < 25 }
+        val needOcr = raw.indices.filter { i ->
+            raw[i].count { it.isLetter() } < 25 || TextCleaner.looksBroken(TextCleaner.fixDevanagariOrder(raw[i]))
+        }
         if (needOcr.isNotEmpty()) {
+            val broken = needOcr.count { raw[it].count { c -> c.isLetter() } >= 25 }
             ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
                 PdfRenderer(fd).use { renderer ->
                     needOcr.forEachIndexed { n, index ->
-                        onProgress(0.85f + 0.15f * n / needOcr.size, "Scanning page ${index + 1} with OCR")
-                        raw[index] = ocrPage(renderer, index)
+                        val why = if (broken > 0) "Fixing broken Hindi text" else "Scanning"
+                        onProgress(0.5f + 0.5f * n / needOcr.size, "$why: page ${index + 1} of ${raw.size}")
+                        val (text, words) = ocrPage(renderer, index)
+                        raw[index] = text
+                        rawWords[index] = words
                     }
                 }
             }
         }
         val pages = TextCleaner.buildPages(raw)
         return pages.mapIndexed { i, page ->
+            val words = runCatching { TextCleaner.alignWords(page.blocks, rawWords[i]) }.getOrDefault(emptyList())
             val extra = imageText[i].orEmpty().map { Block(it, BlockKind.IMAGE_TEXT) }
-            val merged = if (extra.isEmpty()) page else page.copy(blocks = page.blocks + extra)
-            if (i in needOcr) merged.copy(ocr = true) else merged
+            page.copy(blocks = page.blocks + extra, words = words, ocr = i in needOcr)
         }
     }
 
@@ -217,28 +289,62 @@ class Importer(private val context: Context, private val library: Library) {
         result.textBlocks.joinToString("\n") { block -> block.lines.joinToString("\n") { it.text } }
     }.getOrNull()
 
-    fun ocrPage(renderer: PdfRenderer, index: Int): String = runCatching {
-        val bitmap = renderer.openPage(index).use { renderPage(it, 1600) }
+    fun ocrPage(renderer: PdfRenderer, index: Int): Pair<String, List<RawWord>> = runCatching {
+        val bitmap = renderer.openPage(index).use { renderPage(it, 1700) }
         val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
+        val w = bitmap.width.toFloat()
+        val h = bitmap.height.toFloat()
         bitmap.recycle()
-        result.textBlocks.joinToString("\n\n") { block -> block.lines.joinToString("\n") { it.text } }
-    }.getOrDefault("")
+        val words = mutableListOf<RawWord>()
+        val text = result.textBlocks.joinToString("\n\n") { block ->
+            block.lines.joinToString("\n") { line ->
+                line.elements.forEach { e ->
+                    val r = e.boundingBox
+                    if (r != null) words += RawWord(e.text, r.left / w, r.top / h, r.right / w, r.bottom / h)
+                }
+                line.text
+            }
+        }
+        text to words
+    }.getOrDefault("" to emptyList())
 
     fun ocrWholeBook(book: Book, onProgress: (Float, String) -> Unit): List<Page> {
         val file = library.sourceFile(book)
         val raw = mutableListOf<String>()
+        val rawWords = mutableListOf<List<RawWord>>()
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
             PdfRenderer(fd).use { renderer ->
                 for (i in 0 until renderer.pageCount) {
                     onProgress(i.toFloat() / renderer.pageCount, "Scanning page ${i + 1} of ${renderer.pageCount}")
-                    raw += ocrPage(renderer, i)
+                    val (text, words) = ocrPage(renderer, i)
+                    raw += text
+                    rawWords += words
                 }
             }
         }
-        val pages = TextCleaner.buildPages(raw).map { it.copy(ocr = true) }
-        library.writePages(book.id, pages)
-        library.update(book.id) { it.copy(pageCount = pages.size) }
+        val pages = TextCleaner.buildPages(raw).mapIndexed { i, page ->
+            page.copy(ocr = true, words = TextCleaner.alignWords(page.blocks, rawWords[i]))
+        }
+        save(book, pages)
         return pages
+    }
+
+    fun reprocess(book: Book, onProgress: (Float, String) -> Unit): List<Page> {
+        val file = library.sourceFile(book)
+        val pages = when (book.format) {
+            "pdf" -> readPdf(file, onProgress)
+            "epub" -> readEpub(file, onProgress)
+            else -> readText(file)
+        }.ifEmpty { listOf(Page(listOf(Block("This file has no readable text.", BlockKind.BODY)))) }
+        save(book, pages)
+        return pages
+    }
+
+    private fun save(book: Book, pages: List<Page>) {
+        library.writePages(book.id, pages)
+        library.update(book.id) {
+            it.copy(pageCount = pages.size, page = it.page.coerceAtMost(pages.size - 1), sentence = if (it.page < pages.size) it.sentence else 0)
+        }
     }
 
     private fun readText(file: File): List<Page> {

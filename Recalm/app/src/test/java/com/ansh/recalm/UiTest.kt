@@ -89,6 +89,31 @@ class UiTest {
     }
 
     @Test
+    fun pdfImportKeepsWordPositions() {
+        val fixtures = System.getProperty("recalm.fixtures").orEmpty()
+        for (name in listOf("english.pdf", "hindi.pdf")) {
+            val source = File(fixtures, name)
+            if (!source.exists()) continue
+            val id = "pdf-" + name
+            val dir = app.library.dir(id).apply { mkdirs() }
+            val file = File(dir, "source.pdf")
+            source.copyTo(file, overwrite = true)
+            val book = app.importer.complete(com.ansh.recalm.importer.PendingImport(id, "pdf", file, name, emptyList()), name, null) { _, _ -> }
+            val pages = app.library.pages(book.id)
+            val page = pages.first()
+            println("$name: ocr=${page.ocr} blocks=${page.blocks.size} words=${page.words.size}")
+            page.blocks.forEach { println("  [${it.kind}] ${it.text.take(90)}") }
+            page.words.take(6).forEach { w -> println("  word '${page.blocks[w.b].text.substring(w.s, w.e)}' at %.2f,%.2f-%.2f,%.2f".format(w.x0, w.y0, w.x1, w.y1)) }
+            if (name == "english.pdf") {
+                assertEquals(false, page.ocr)
+                org.junit.Assert.assertTrue(page.words.size > 20)
+            } else {
+                assertEquals(true, page.ocr)
+            }
+        }
+    }
+
+    @Test
     fun piperVoiceDownloadsAndInstalls() {
         if (System.getProperty("recalm.download") == null && System.getenv("RECALM_DOWNLOAD") == null) return
         val pack = VoiceCatalog.pack("piper-rohan")!!

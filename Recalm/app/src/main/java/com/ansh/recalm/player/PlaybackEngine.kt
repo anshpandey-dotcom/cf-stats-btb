@@ -54,7 +54,7 @@ data class PlayerState(
     val musicPlaying: Boolean = false
 )
 
-private class Spoken(val page: Int, val sentence: Int, val utterance: Utterance)
+private class Spoken(val page: Int, val sentence: Int, val base: Int, val utterance: Utterance)
 
 private class Written(val startFrame: Long, val spoken: Spoken)
 
@@ -94,7 +94,7 @@ class PlaybackEngine(
         }
     }
 
-    fun play(bookId: String, page: Int, sentence: Int) {
+    fun play(bookId: String, page: Int, sentence: Int, offset: Int = 0) {
         scope.launch {
             control.withLock {
                 stopRun()
@@ -106,7 +106,7 @@ class PlaybackEngine(
                 startService()
                 requestFocus()
                 startMusicIfChosen()
-                runJob = scope.launch { run(bookId, page, sentence) }
+                runJob = scope.launch { run(bookId, page, sentence, offset) }
             }
         }
     }
@@ -322,7 +322,7 @@ class PlaybackEngine(
         }.also { _state.update { s -> s.copy(loading = null) } }
     }
 
-    private suspend fun run(bookId: String, startPage: Int, startSentence: Int) {
+    private suspend fun run(bookId: String, startPage: Int, startSentence: Int, startOffset: Int) {
         val engine = loadSynth()
         if (engine == null) {
             _state.update {
@@ -338,17 +338,21 @@ class PlaybackEngine(
         val producer = scope.launch(synthDispatcher) {
             var page = startPage.coerceIn(0, pages.size - 1)
             var sentence = startSentence
+            var skipChars = startOffset.coerceAtLeast(0)
             try {
                 while (isActive && page < pages.size) {
                     val refs = Sentences.forPage(pages[page])
                     while (isActive && sentence < refs.size) {
                         val ref = refs[sentence]
-                        val text = pages[page].blocks[ref.block].text.substring(ref.start, ref.end)
+                        val from = (ref.start + skipChars).coerceAtMost(ref.end)
+                        skipChars = 0
+                        val text = pages[page].blocks[ref.block].text.substring(from, ref.end)
                         val speakable = text.any { it.isLetterOrDigit() } && !settings.shouldSkip(ref.kind)
                         if (speakable) {
                             val utterance = runCatching { engine.speak(text, speed) }.getOrNull()
                             if (utterance != null && utterance.samples.isNotEmpty()) {
-                                queue.send(Spoken(page, sentence, utterance))
+                                boost(utterance.samples)
+                                queue.send(Spoken(page, sentence, from, utterance))
                             }
                         }
                         sentence++
@@ -394,6 +398,17 @@ class PlaybackEngine(
         }
     }
 
+    private fun boost(samples: FloatArray) {
+        var peak = 0f
+        for (v in samples) peak = maxOf(peak, kotlin.math.abs(v))
+        if (peak <= 0.0001f) return
+        val gain = (0.97f / peak).coerceIn(1f, 1.8f)
+        for (i in samples.indices) {
+            val v = samples[i] * gain
+            samples[i] = if (v > 0.9f) 0.9f + (v - 0.9f) * 0.3f else if (v < -0.9f) -0.9f + (v + 0.9f) * 0.3f else v
+        }
+    }
+
     private suspend fun writeAll(out: AudioTrack, samples: FloatArray) {
         var offset = 0
         while (offset < samples.size) {
@@ -424,7 +439,8 @@ class PlaybackEngine(
                     val mark = spoken.utterance.marks.lastOrNull { it.sample <= local }
                     _state.update {
                         it.copy(page = spoken.page, sentence = spoken.sentence,
-                            wordStart = mark?.start ?: -1, wordEnd = mark?.end ?: -1)
+                            wordStart = mark?.let { m -> spoken.base + m.start } ?: -1,
+                            wordEnd = mark?.let { m -> spoken.base + m.end } ?: -1)
                     }
                     if (lastSaved != spoken.page to spoken.sentence) {
                         lastSaved = spoken.page to spoken.sentence
