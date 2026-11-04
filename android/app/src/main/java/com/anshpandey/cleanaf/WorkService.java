@@ -136,11 +136,20 @@ public final class WorkService extends Service {
     }
 
     private void startInForeground(Notification n) {
-        int type = 0;
-        if (Build.VERSION.SDK_INT >= 35) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING;
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            startForeground(ID_WORK, n);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 35) {
+            try {
+                startForeground(ID_WORK, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING);
+                return;
+            } catch (RuntimeException e) {
+                App.report(this, e);
+            }
+        }
         try {
-            ServiceCompat.startForeground(this, ID_WORK, n, type);
+            startForeground(ID_WORK, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         } catch (RuntimeException e) {
             App.report(this, e);
         }
