@@ -29,6 +29,9 @@ import com.google.android.gms.tasks.Tasks
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDResources
+import com.tom_roush.pdfbox.pdmodel.graphics.form.PDFormXObject
+import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -137,17 +140,23 @@ class Importer(private val context: Context, private val library: Library) {
 
     private fun readPdf(file: File, onProgress: (Float, String) -> Unit): List<Page> {
         val raw = mutableListOf<String>()
+        val imageText = HashMap<Int, List<String>>()
         PDDocument.load(file, MemoryUsageSetting.setupTempFileOnly()).use { doc ->
             val stripper = PDFTextStripper().apply {
-                sortByPosition = true
+                sortByPosition = false
                 addMoreFormatting = false
             }
             val total = doc.numberOfPages
             for (p in 1..total) {
                 stripper.startPage = p
                 stripper.endPage = p
-                raw += runCatching { stripper.getText(doc) }.getOrDefault("")
-                if (p % 5 == 0 || p == total) onProgress(p.toFloat() / total * 0.8f, "Reading page $p of $total")
+                val text = runCatching { stripper.getText(doc) }.getOrDefault("")
+                raw += text
+                if (text.count { it.isLetter() } >= 25) {
+                    val found = runCatching { textInImages(doc.getPage(p - 1).resources, text, 0) }.getOrDefault(emptyList())
+                    if (found.isNotEmpty()) imageText[p - 1] = found
+                }
+                onProgress(p.toFloat() / total * 0.85f, "Reading page $p of $total")
             }
         }
         val needOcr = raw.indices.filter { raw[it].count { c -> c.isLetter() } < 25 }
@@ -155,15 +164,58 @@ class Importer(private val context: Context, private val library: Library) {
             ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
                 PdfRenderer(fd).use { renderer ->
                     needOcr.forEachIndexed { n, index ->
-                        onProgress(0.8f + 0.2f * n / needOcr.size, "Scanning page ${index + 1} with OCR")
+                        onProgress(0.85f + 0.15f * n / needOcr.size, "Scanning page ${index + 1} with OCR")
                         raw[index] = ocrPage(renderer, index)
                     }
                 }
             }
         }
         val pages = TextCleaner.buildPages(raw)
-        return pages.mapIndexed { i, page -> if (i in needOcr) page.copy(ocr = true) else page }
+        return pages.mapIndexed { i, page ->
+            val extra = imageText[i].orEmpty().map { Block(it, BlockKind.IMAGE_TEXT) }
+            val merged = if (extra.isEmpty()) page else page.copy(blocks = page.blocks + extra)
+            if (i in needOcr) merged.copy(ocr = true) else merged
+        }
     }
+
+    private fun normalizeForCompare(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
+
+    private fun textInImages(resources: PDResources?, pageText: String, depth: Int): List<String> {
+        if (resources == null || depth > 2) return emptyList()
+        val known = normalizeForCompare(pageText)
+        val out = mutableListOf<String>()
+        for (name in resources.xObjectNames) {
+            val obj = runCatching { resources.getXObject(name) }.getOrNull() ?: continue
+            when (obj) {
+                is PDImageXObject -> {
+                    if (obj.width < 160 || obj.height < 60) continue
+                    val text = ocrImage(obj) ?: continue
+                    val fresh = text.lines().map { it.trim() }.filter { line ->
+                        val n = normalizeForCompare(line)
+                        n.count { it.isLetter() } >= 3 && !known.contains(n)
+                    }
+                    if (fresh.isNotEmpty()) {
+                        val joined = TextCleaner.fixDevanagariOrder(fresh.joinToString(" "))
+                        if (joined.count { it.isLetter() } >= 8) out += joined
+                    }
+                }
+                is PDFormXObject -> out += textInImages(obj.resources, pageText, depth + 1)
+            }
+        }
+        return out
+    }
+
+    private fun ocrImage(image: PDImageXObject): String? = runCatching {
+        val source = image.image ?: return null
+        val longest = maxOf(source.width, source.height)
+        val bitmap = if (longest > 2000) {
+            val k = 2000f / longest
+            Bitmap.createScaledBitmap(source, (source.width * k).toInt(), (source.height * k).toInt(), true).also { source.recycle() }
+        } else source
+        val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
+        bitmap.recycle()
+        result.textBlocks.joinToString("\n") { block -> block.lines.joinToString("\n") { it.text } }
+    }.getOrNull()
 
     fun ocrPage(renderer: PdfRenderer, index: Int): String = runCatching {
         val bitmap = renderer.openPage(index).use { renderPage(it, 1600) }
@@ -195,7 +247,7 @@ class Importer(private val context: Context, private val library: Library) {
         val paragraphs = text.replace("\r\n", "\n").split(Regex("\\n\\s*\\n"))
             .flatMap { TextCleaner.paragraphs(it.lines()) }
         val blocks = TextCleaner.classify(paragraphs, TextCleaner.ClassifyState())
-        return TextCleaner.paginate(blocks)
+        return TextCleaner.markBoilerplatePages(TextCleaner.paginate(blocks))
     }
 
     private fun decode(bytes: ByteArray): String {
@@ -222,7 +274,7 @@ class Importer(private val context: Context, private val library: Library) {
             val blocks = htmlBlocks(html, state)
             if (blocks.isNotEmpty()) pages += TextCleaner.paginate(blocks)
         }
-        pages
+        TextCleaner.markBoilerplatePages(pages)
     }
 
     private fun opfPath(zip: ZipFile): String {

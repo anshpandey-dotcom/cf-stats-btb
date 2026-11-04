@@ -1,8 +1,11 @@
 package com.ansh.recalm.tts
 
-import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +21,11 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
@@ -37,8 +45,8 @@ class VoiceManager(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val root = File(context.filesDir, "voices").apply { mkdirs() }
     private val customRoot = File(root, "custom").apply { mkdirs() }
-    private val prefs = context.getSharedPreferences("voice_downloads", Context.MODE_PRIVATE)
-    private val downloads = context.getSystemService(DownloadManager::class.java)
+    private val downloadDir = File(context.filesDir, "downloads").apply { mkdirs() }
+    private val jobs = ConcurrentHashMap<String, Job>()
 
     private val _states = MutableStateFlow(VoiceCatalog.packs.associate { it.id to stateOnDisk(it.id) })
     val states: StateFlow<Map<String, PackState>> = _states.asStateFlow()
@@ -48,8 +56,9 @@ class VoiceManager(private val context: Context) {
 
     init {
         VoiceCatalog.packs.forEach { pack ->
-            val id = prefs.getLong(pack.id, -1L)
-            if (id >= 0 && _states.value[pack.id] != PackState.Ready) watch(pack, id)
+            if (_states.value[pack.id] != PackState.Ready && partFile(pack).exists()) {
+                set(pack.id, PackState.Failed("Download paused at ${(progressOf(pack) * 100).toInt()}%. Tap Download to continue."))
+            }
         }
     }
 
@@ -69,23 +78,37 @@ class VoiceManager(private val context: Context) {
     }
 
     fun download(pack: VoicePack) {
-        val request = DownloadManager.Request(Uri.parse(pack.url))
-            .setTitle("Recalm voice: ${pack.title}")
-            .setDescription("Downloading voice for offline reading")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            .setDestinationInExternalFilesDir(context, null, "${pack.id}.tar.bz2")
-            .setAllowedOverMetered(true)
-        File(context.getExternalFilesDir(null), "${pack.id}.tar.bz2").delete()
-        val id = downloads.enqueue(request)
-        prefs.edit().putLong(pack.id, id).apply()
-        set(pack.id, PackState.Downloading(0f))
-        watch(pack, id)
+        if (jobs[pack.id]?.isActive == true) return
+        set(pack.id, PackState.Downloading(progressOf(pack)))
+        DownloadService.start(context)
+        val job = scope.launch {
+            val part = partFile(pack)
+            var attempt = 0
+            while (true) {
+                try {
+                    fetch(pack, part)
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attempt++
+                    if (attempt >= 6) {
+                        set(pack.id, PackState.Failed("Download stopped (${e.message ?: "network error"}). Tap Download to continue from where it stopped."))
+                        return@launch
+                    }
+                    delay(2500L * attempt)
+                }
+            }
+            install(pack, part)
+        }
+        jobs[pack.id] = job
+        job.invokeOnCompletion { jobs.remove(pack.id, job) }
     }
 
     fun cancel(pack: VoicePack) {
-        val id = prefs.getLong(pack.id, -1L)
-        if (id >= 0) downloads.remove(id)
-        prefs.edit().remove(pack.id).apply()
+        jobs.remove(pack.id)?.cancel()
+        partFile(pack).delete()
+        sizeFile(pack).delete()
         set(pack.id, PackState.Missing)
     }
 
@@ -94,41 +117,75 @@ class VoiceManager(private val context: Context) {
         set(pack.id, PackState.Missing)
     }
 
+    val busy: Boolean get() = _states.value.values.any { it is PackState.Downloading || it == PackState.Installing }
+
     private fun set(id: String, state: PackState) = _states.update { it + (id to state) }
 
-    private fun watch(pack: VoicePack, downloadId: Long) = scope.launch {
+    private fun partFile(pack: VoicePack) = File(downloadDir, "${pack.id}.part")
+    private fun sizeFile(pack: VoicePack) = File(downloadDir, "${pack.id}.size")
+
+    private fun progressOf(pack: VoicePack): Float {
+        val total = sizeFile(pack).takeIf { it.exists() }?.readText()?.toLongOrNull() ?: return 0f
+        return if (total > 0) (partFile(pack).length().toFloat() / total).coerceIn(0f, 1f) else 0f
+    }
+
+    private suspend fun fetch(pack: VoicePack, part: File) {
+        var url = URL(pack.url)
+        var redirects = 0
         while (true) {
-            val cursor = downloads.query(DownloadManager.Query().setFilterById(downloadId))
-            if (cursor == null || !cursor.moveToFirst()) {
-                cursor?.close()
-                prefs.edit().remove(pack.id).apply()
-                set(pack.id, stateOnDisk(pack.id))
-                return@launch
+            currentCoroutineContext().ensureActive()
+            val have = if (part.exists()) part.length() else 0L
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 20_000
+                readTimeout = 30_000
+                setRequestProperty("User-Agent", "Recalm/1.0 (Android)")
+                setRequestProperty("Accept-Encoding", "identity")
+                if (have > 0) setRequestProperty("Range", "bytes=$have-")
             }
-            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            val done = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-            val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-            cursor.close()
-            when (status) {
-                DownloadManager.STATUS_SUCCESSFUL -> {
-                    prefs.edit().remove(pack.id).apply()
-                    install(pack)
-                    return@launch
+            try {
+                val code = connection.responseCode
+                if (code in 300..399) {
+                    val location = connection.getHeaderField("Location") ?: throw IOException("Bad redirect")
+                    url = URL(url, location)
+                    if (++redirects > 8) throw IOException("Too many redirects")
+                    continue
                 }
-                DownloadManager.STATUS_FAILED -> {
-                    prefs.edit().remove(pack.id).apply()
-                    set(pack.id, PackState.Failed("Download failed. Check your connection and try again."))
-                    return@launch
+                val known = sizeFile(pack).takeIf { it.exists() }?.readText()?.toLongOrNull() ?: -1L
+                if (code == 416 && known > 0 && have >= known) return
+                if (code !in 200..299) throw IOException("server replied $code")
+                val append = code == 206 && have > 0
+                val total = if (append) have + connection.contentLengthLong else connection.contentLengthLong
+                if (total > 0) sizeFile(pack).writeText(total.toString())
+                var written = if (append) have else 0L
+                var lastUpdate = 0L
+                connection.inputStream.use { input ->
+                    FileOutputStream(part, append).use { output ->
+                        val buffer = ByteArray(1 shl 16)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            output.write(buffer, 0, n)
+                            written += n
+                            val now = System.currentTimeMillis()
+                            if (now - lastUpdate > 400) {
+                                lastUpdate = now
+                                set(pack.id, PackState.Downloading(if (total > 0) written.toFloat() / total else 0f))
+                            }
+                        }
+                    }
                 }
-                else -> set(pack.id, PackState.Downloading(if (total > 0) done.toFloat() / total else 0f))
+                if (total > 0 && written < total) throw IOException("connection closed early")
+                return
+            } finally {
+                connection.disconnect()
             }
-            delay(700)
         }
     }
 
-    private fun install(pack: VoicePack) {
+    private fun install(pack: VoicePack, archive: File) {
         set(pack.id, PackState.Installing)
-        val archive = File(context.getExternalFilesDir(null), "${pack.id}.tar.bz2")
         val target = packDir(pack.id)
         try {
             target.deleteRecursively()
@@ -136,11 +193,13 @@ class VoiceManager(private val context: Context) {
             archive.inputStream().buffered(1 shl 16).use { extractTarBz2(it, target) }
             File(target, ".ready").writeText("ok")
             set(pack.id, PackState.Ready)
+            archive.delete()
+            sizeFile(pack).delete()
         } catch (e: Exception) {
             target.deleteRecursively()
-            set(pack.id, PackState.Failed("Could not install voice: ${e.message}"))
-        } finally {
             archive.delete()
+            sizeFile(pack).delete()
+            set(pack.id, PackState.Failed("Could not unpack the voice (${e.message}). Please download it again."))
         }
     }
 

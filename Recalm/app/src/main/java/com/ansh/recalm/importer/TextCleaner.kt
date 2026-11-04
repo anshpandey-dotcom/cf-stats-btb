@@ -23,6 +23,13 @@ object TextCleaner {
     private val activityHeading = Regex("^(activity|क्रियाकलाप|गतिविधि|do this|try this|project)\\s*[\\d०-९.]*.*", RegexOption.IGNORE_CASE)
     private val caption = Regex("^(fig\\.?|figure|चित्र|table|तालिका|सारणी)\\s*[\\d०-९]+([.:]\\d+)*", RegexOption.IGNORE_CASE)
     private val question = Regex("^(q\\.?\\s*\\d+|प्रश्न\\s*[\\d०-९]+|\\(?[\\d०-९]{1,2}[.)]|\\(?[a-z][.)]|\\(?[ivx]{1,4}[.)])\\s*", RegexOption.IGNORE_CASE)
+    private val boilerplate = Regex(
+        "©|\\(c\\)\\s*\\d{4}|copyright|all rights reserved|isbn|issn|printed (in|by|at)|published by|publisher|first (published|edition)|" +
+            "reprint(ed)?\\s+\\d{4}|no part of this (publication|book)|without (the )?prior (written )?permission|www\\.|https?://|@[a-z0-9-]+\\.|" +
+            "phone\\s*:|fax\\s*:|tel\\s*\\.?:|e-?mail\\s*:|cataloging|library of congress|headquarters|suite \\d+|" +
+            "सर्वाधिकार|प्रकाशक|प्रकाशन विभाग|मुद्रक|मुद्रित|प्रथम संस्करण|पुनर्मुद्रण|मूल्य\\s*[:₹]|₹\\s*\\d",
+        RegexOption.IGNORE_CASE
+    )
     private val terminal = charArrayOf('.', '?', '!', '।', '॥', ':', '"', '”')
 
     fun fixDevanagariOrder(text: String): String {
@@ -114,6 +121,7 @@ object TextCleaner {
         val t = text.trim()
         val heading = looksLikeHeading(t)
         when {
+            isBoilerplate(t) -> Block(t, BlockKind.BOILERPLATE)
             heading && exerciseHeading.matches(t) -> {
                 state.inExercise = true
                 state.inActivity = false
@@ -136,6 +144,13 @@ object TextCleaner {
         }
     }
 
+    fun isBoilerplate(t: String): Boolean {
+        val hits = boilerplate.findAll(t).count()
+        if (hits == 0) return false
+        val words = t.split(Regex("\\s+")).size
+        return hits >= 3 || (hits >= 2 && hits * 50 >= words) || words <= 20
+    }
+
     private fun isQuestion(t: String): Boolean {
         if (t.length > 420) return false
         val end = t.trimEnd().lastOrNull() ?: return false
@@ -152,9 +167,18 @@ object TextCleaner {
         val lines = rawPages.map { fixDevanagariOrder(it).lines() }
         val stripped = stripRunningLines(lines)
         val state = ClassifyState()
-        return stripped.mapIndexed { i, pageLines ->
+        return markBoilerplatePages(stripped.mapIndexed { i, pageLines ->
             Page(classify(paragraphs(pageLines), state), source = sourceOffset + i)
-        }
+        })
+    }
+
+    fun markBoilerplatePages(pages: List<Page>): List<Page> = pages.map { page ->
+        val total = page.blocks.sumOf { it.text.length }.coerceAtLeast(1)
+        val legal = page.blocks.filter { it.kind == BlockKind.BOILERPLATE }
+        val legalChars = legal.sumOf { it.text.length }
+        if (legal.size >= 3 && legalChars * 2 >= total || legal.size >= 2 && legalChars * 10 >= total * 7) {
+            page.copy(blocks = page.blocks.map { if (it.kind == BlockKind.BODY || it.kind == BlockKind.HEADING) it.copy(kind = BlockKind.BOILERPLATE) else it })
+        } else page
     }
 
     fun paginate(blocks: List<Block>, target: Int = 1600): List<Page> {

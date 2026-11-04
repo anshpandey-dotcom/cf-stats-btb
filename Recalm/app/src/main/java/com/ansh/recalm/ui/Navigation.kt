@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,28 +29,30 @@ fun RecalmNav(incoming: Incoming?, onIncomingHandled: () -> Unit) {
             nav.popBackStack("library", inclusive = false)
         }
     }
-    NavHost(
-        navController = nav,
-        startDestination = "library",
-        enterTransition = { fadeIn(tween(260)) + slideInHorizontally(tween(320)) { it / 8 } },
-        exitTransition = { fadeOut(tween(200)) },
-        popEnterTransition = { fadeIn(tween(260)) },
-        popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(320)) { it / 8 } }
-    ) {
-        composable("library") {
-            LibraryScreen(
-                incoming = pendingIncoming,
-                onIncomingConsumed = { pendingIncoming = null },
-                openBook = { nav.navigate("reader/$it") },
-                openVoices = { nav.navigate("voices") },
-                openSettings = { nav.navigate("settings") }
-            )
+    Surface(color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
+        NavHost(
+            navController = nav,
+            startDestination = "library",
+            enterTransition = { fadeIn(tween(260)) + slideInHorizontally(tween(320)) { it / 8 } },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(260)) },
+            popExitTransition = { fadeOut(tween(200)) + slideOutHorizontally(tween(320)) { it / 8 } }
+        ) {
+            composable("library") {
+                LibraryScreen(
+                    incoming = pendingIncoming,
+                    onIncomingConsumed = { pendingIncoming = null },
+                    openBook = { nav.navigate("reader/$it") },
+                    openVoices = { nav.navigate("voices") },
+                    openSettings = { nav.navigate("settings") }
+                )
+            }
+            composable("reader/{id}") { entry ->
+                val id = entry.arguments?.getString("id") ?: return@composable
+                ReaderScreen(bookId = id, onBack = { nav.popBackStack() }, openVoices = { nav.navigate("voices") })
+            }
+            composable("voices") { VoicesScreen(onBack = { nav.popBackStack() }) }
+            composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }, openVoices = { nav.navigate("voices") }) }
         }
-        composable("reader/{id}") { entry ->
-            val id = entry.arguments?.getString("id") ?: return@composable
-            ReaderScreen(bookId = id, onBack = { nav.popBackStack() }, openVoices = { nav.navigate("voices") })
-        }
-        composable("voices") { VoicesScreen(onBack = { nav.popBackStack() }) }
-        composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }, openVoices = { nav.navigate("voices") }) }
     }
 }

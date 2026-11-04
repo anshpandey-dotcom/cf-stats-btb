@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,23 +118,25 @@ fun BookCover(bookId: String, title: String, hasCover: Boolean, modifier: Modifi
         if (b != null) {
             Image(b.asImageBitmap(), contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
-            Box(
+            BoxWithConstraints(
                 Modifier.fillMaxSize().background(
                     Brush.linearGradient(listOf(Color(0xFF1B2A4A), Color(0xFF3E4C7A)))
                 ),
                 contentAlignment = Alignment.Center
             ) {
+                val small = maxWidth < 110.dp
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    RecalmLogo(Modifier.padding(8.dp).fillMaxWidth(0.45f).aspectRatio(1f), background = false)
+                    RecalmLogo(Modifier.padding(if (small) 4.dp else 8.dp).fillMaxWidth(if (small) 0.38f else 0.45f).aspectRatio(1f), background = false)
                     Text(
                         title,
                         color = Palette.Moon,
                         fontFamily = FontFamily.Serif,
-                        fontSize = 13.sp,
-                        maxLines = 3,
+                        fontSize = if (small) 10.sp else 14.sp,
+                        lineHeight = if (small) 12.sp else 18.sp,
+                        maxLines = if (small) 4 else 3,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 10.dp)
+                        modifier = Modifier.padding(horizontal = if (small) 6.dp else 10.dp)
                     )
                 }
             }

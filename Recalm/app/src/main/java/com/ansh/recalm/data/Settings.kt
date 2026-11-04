@@ -14,6 +14,8 @@ data class Preferences(
     val skipQuestions: Boolean = true,
     val skipActivities: Boolean = false,
     val skipCaptions: Boolean = true,
+    val skipBoilerplate: Boolean = true,
+    val readImageText: Boolean = true,
     val fontScale: Float = 1f,
     val readerTheme: Int = 0,
     val sleepMinutes: Int = 30,
@@ -39,6 +41,8 @@ class Settings(context: Context) {
             skipQuestions = prefs.getBoolean("skipQuestions", d.skipQuestions),
             skipActivities = prefs.getBoolean("skipActivities", d.skipActivities),
             skipCaptions = prefs.getBoolean("skipCaptions", d.skipCaptions),
+            skipBoilerplate = prefs.getBoolean("skipBoilerplate", d.skipBoilerplate),
+            readImageText = prefs.getBoolean("readImageText", d.readImageText),
             fontScale = prefs.getFloat("fontScale", d.fontScale),
             readerTheme = prefs.getInt("readerTheme", d.readerTheme),
             sleepMinutes = prefs.getInt("sleepMinutes", d.sleepMinutes),
@@ -57,6 +61,8 @@ class Settings(context: Context) {
             .putBoolean("skipQuestions", p.skipQuestions)
             .putBoolean("skipActivities", p.skipActivities)
             .putBoolean("skipCaptions", p.skipCaptions)
+            .putBoolean("skipBoilerplate", p.skipBoilerplate)
+            .putBoolean("readImageText", p.readImageText)
             .putFloat("fontScale", p.fontScale)
             .putInt("readerTheme", p.readerTheme)
             .putInt("sleepMinutes", p.sleepMinutes)
@@ -70,6 +76,8 @@ class Settings(context: Context) {
         BlockKind.QUESTION, BlockKind.EXERCISE -> p.skipQuestions
         BlockKind.ACTIVITY -> p.skipActivities
         BlockKind.CAPTION -> p.skipCaptions
+        BlockKind.BOILERPLATE -> p.skipBoilerplate
+        BlockKind.IMAGE_TEXT -> !p.readImageText
         else -> false
     }
 }

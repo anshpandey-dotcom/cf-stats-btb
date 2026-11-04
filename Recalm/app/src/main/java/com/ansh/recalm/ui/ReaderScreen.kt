@@ -5,6 +5,18 @@ import android.graphics.Color as AndroidColor
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -194,56 +206,13 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(colors.background)) {
-        HorizontalPager(
-            state = pagerState,
-            beyondViewportPageCount = 1,
-            modifier = Modifier.fillMaxSize()
-        ) { index ->
-            val offset = (pagerState.currentPage - index) + pagerState.currentPageOffsetFraction
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .zIndex(if (offset > 0f) 1f else 0f)
-                    .graphicsLayer {
-                        translationX = size.width * offset
-                        cameraDistance = 18f * density
-                        if (offset > 0f) {
-                            transformOrigin = TransformOrigin(0f, 0.5f)
-                            rotationY = -offset.coerceIn(0f, 1f) * 92f
-                            alpha = if (offset > 0.98f) 0f else 1f
-                            shadowElevation = 24f
-                        } else {
-                            val under = (1f + offset).coerceIn(0f, 1f)
-                            alpha = 0.55f + 0.45f * under
-                        }
-                    }
-                    .background(colors.background)
-            ) {
-                val page = loaded[index]
-                if (originalView && pdf != null && page.source in 0 until pdf.count) {
-                    OriginalPage(pdf, page.source)
-                } else {
-                    TextPage(
-                        page = page,
-                        index = index,
-                        colors = colors,
-                        fontScale = prefs.fontScale,
-                        activeSentence = if (listening && player.page == index) player.sentence else -1,
-                        wordStart = if (listening && player.page == index) player.wordStart else -1,
-                        wordEnd = if (listening && player.page == index) player.wordEnd else -1,
-                        skip = { kind -> app.settings.shouldSkip(kind, prefs) },
-                        onTapSentence = { s -> tapped = index to s },
-                        onTapEmpty = { chromeVisible = !chromeVisible }
-                    )
-                }
-            }
-        }
+    val desk = lerp(colors.background, Color.Black, if (colors.background.luminance() > 0.5f) 0.12f else 0.45f)
+    val paperShape = RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 12.dp, bottomEnd = 12.dp)
 
-        AnimatedVisibility(chromeVisible, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it },
-            modifier = Modifier.align(Alignment.TopCenter)) {
+    Column(Modifier.fillMaxSize().background(desk)) {
+        AnimatedVisibility(chromeVisible, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Row(
-                Modifier.fillMaxWidth().background(colors.background.copy(alpha = 0.94f)).statusBarsPadding().padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().background(desk).statusBarsPadding().padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = colors.text) }
@@ -272,74 +241,163 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                 }
             }
         }
+        if (!chromeVisible) Spacer(Modifier.statusBarsPadding())
 
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            AnimatedVisibility(tapped != null, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it },
-                modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Row(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            tapped?.let { (p, s) ->
-                                follow = true
-                                app.engine.play(bookId, p, s)
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+            HorizontalPager(
+                state = pagerState,
+                beyondViewportPageCount = 1,
+                modifier = Modifier.fillMaxSize()
+            ) { index ->
+                val offset = (pagerState.currentPage - index) + pagerState.currentPageOffsetFraction
+                val turning = offset > 0f
+                val visible = offset > -1f && offset < 1f
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(if (turning) 2f else if (visible) 1f else 0f)
+                        .graphicsLayer {
+                            translationX = size.width * offset
+                            cameraDistance = 22f * density
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                            if (!visible) {
+                                alpha = 0f
+                            } else if (turning) {
+                                rotationY = -offset * 100f
+                                alpha = if (offset > 0.9f) 0f else 1f
+                            } else {
+                                val reveal = (1f + offset).coerceIn(0f, 1f)
+                                scaleX = 0.97f + 0.03f * reveal
+                                scaleY = 0.97f + 0.03f * reveal
                             }
-                            tapped = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Palette.Mint, contentColor = Palette.Night)
-                    ) {
-                        Icon(Icons.Rounded.PlayArrow, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Listen from here")
+                        }
+                        .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 10.dp)
+                        .shadow(10.dp, paperShape)
+                        .clip(paperShape)
+                        .background(colors.background)
+                ) {
+                    val page = loaded[index]
+                    Column(Modifier.fillMaxSize()) {
+                        Text(
+                            book.title,
+                            color = colors.dim,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            fontFamily = FontFamily.Serif,
+                            fontStyle = FontStyle.Italic,
+                            modifier = Modifier.fillMaxWidth().padding(start = 30.dp, end = 30.dp, top = 12.dp, bottom = 4.dp)
+                        )
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            if (originalView && pdf != null && page.source in 0 until pdf.count) {
+                                OriginalPage(pdf, page.source)
+                            } else {
+                                TextPage(
+                                    page = page,
+                                    colors = colors,
+                                    fontScale = prefs.fontScale,
+                                    activeSentence = if (listening && player.page == index) player.sentence else -1,
+                                    wordStart = if (listening && player.page == index) player.wordStart else -1,
+                                    wordEnd = if (listening && player.page == index) player.wordEnd else -1,
+                                    skip = { kind -> app.settings.shouldSkip(kind, prefs) },
+                                    onTapSentence = { s -> tapped = index to s },
+                                    onTapEmpty = { chromeVisible = !chromeVisible }
+                                )
+                            }
+                        }
+                        Text(
+                            "${index + 1}",
+                            color = colors.dim,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Serif,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp)
+                        )
                     }
-                    TextButton(onClick = { tapped = null }) { Text("Cancel", color = colors.text) }
+                    Box(
+                        Modifier.fillMaxHeight().width(26.dp).align(Alignment.CenterStart).background(
+                            Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.28f), Color.Black.copy(alpha = 0.08f), Color.Transparent))
+                        )
+                    )
                 }
             }
-            AnimatedVisibility(listening && !follow && player.page != pagerState.currentPage, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                TextButton(onClick = {
-                    follow = true
-                    scope.launch { pagerState.animateScrollToPage(player.page) }
-                }, modifier = Modifier.padding(bottom = 6.dp)) { Text("Back to the voice  ·  page ${player.page + 1}", color = Palette.Mint) }
-            }
-            AnimatedVisibility(chromeVisible, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
-                PlayerPanel(
-                    book = book,
-                    pageCount = loaded.size,
-                    currentPage = pagerState.currentPage,
-                    listening = listening,
-                    playing = listening && player.playing,
-                    loading = if (listening) player.loading else null,
-                    speed = prefs.speed,
-                    timerOn = player.sleepEndsAt != null,
-                    musicOn = player.musicPlaying,
-                    onPlay = {
-                        follow = true
-                        when {
-                            listening -> app.engine.toggle()
-                            pagerState.currentPage == book.page -> app.engine.play(bookId, book.page, book.sentence)
-                            else -> app.engine.play(bookId, pagerState.currentPage, 0)
+
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                AnimatedVisibility(tapped != null, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = {
+                                tapped?.let { (p, s) ->
+                                    follow = true
+                                    app.engine.play(bookId, p, s)
+                                }
+                                tapped = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Palette.Mint, contentColor = Palette.Night)
+                        ) {
+                            Icon(Icons.Rounded.PlayArrow, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Listen from here")
                         }
-                    },
-                    onPrev = { if (listening) app.engine.skipSentence(-1) else scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0)) } },
-                    onNext = { if (listening) app.engine.skipSentence(1) else scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1).coerceAtMost(loaded.size - 1)) } },
-                    onSeekPage = { p -> scope.launch { pagerState.scrollToPage(p) } },
-                    onSpeed = { sheet = "speed" },
-                    onTimer = { sheet = "sounds" },
-                    onMusic = { sheet = "sounds" },
-                    onVoice = { sheet = "voice" },
-                    colors = colors
-                )
+                        Button(
+                            onClick = { tapped = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = Palette.NightCard, contentColor = Palette.Text)
+                        ) { Text("Cancel") }
+                    }
+                }
+                AnimatedVisibility(listening && !follow && player.page != pagerState.currentPage) {
+                    Button(
+                        onClick = {
+                            follow = true
+                            scope.launch { pagerState.animateScrollToPage(player.page) }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Palette.NightCard, contentColor = Palette.Mint)
+                    ) { Text("Back to the voice  ·  page ${player.page + 1}") }
+                }
             }
         }
 
-        player.error?.takeIf { player.bookId == bookId || player.bookId == null }?.let { message ->
-            AlertDialog(
-                onDismissRequest = { app.engine.clearError() },
-                title = { Text("Voice needed") },
-                text = { Text(message) },
-                confirmButton = { TextButton(onClick = { app.engine.clearError(); openVoices() }) { Text("Open Voices") } },
-                dismissButton = { TextButton(onClick = { app.engine.clearError() }) { Text("Later") } }
+        AnimatedVisibility(chromeVisible, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            PlayerPanel(
+                book = book,
+                pageCount = loaded.size,
+                currentPage = pagerState.currentPage,
+                listening = listening,
+                playing = listening && player.playing,
+                loading = if (listening) player.loading else null,
+                speed = prefs.speed,
+                timerOn = player.sleepEndsAt != null,
+                musicOn = player.musicPlaying,
+                onPlay = {
+                    follow = true
+                    when {
+                        listening -> app.engine.toggle()
+                        pagerState.currentPage == book.page -> app.engine.play(bookId, book.page, book.sentence)
+                        else -> app.engine.play(bookId, pagerState.currentPage, 0)
+                    }
+                },
+                onPrev = { if (listening) app.engine.skipSentence(-1) else scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0)) } },
+                onNext = { if (listening) app.engine.skipSentence(1) else scope.launch { pagerState.animateScrollToPage((pagerState.currentPage + 1).coerceAtMost(loaded.size - 1)) } },
+                onSeekPage = { p -> scope.launch { pagerState.scrollToPage(p) } },
+                onSpeed = { sheet = "speed" },
+                onTimer = { sheet = "sounds" },
+                onMusic = { sheet = "sounds" },
+                onVoice = { sheet = "voice" },
+                colors = colors
             )
         }
+        if (!chromeVisible) Spacer(Modifier.navigationBarsPadding())
+    }
+
+    player.error?.takeIf { player.bookId == bookId || player.bookId == null }?.let { message ->
+        AlertDialog(
+            onDismissRequest = { app.engine.clearError() },
+            title = { Text("Voice needed") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { app.engine.clearError(); openVoices() }) { Text("Open Voices") } },
+            dismissButton = { TextButton(onClick = { app.engine.clearError() }) { Text("Later") } }
+        )
     }
 
     when (sheet) {
@@ -417,12 +475,12 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
 private fun OriginalPage(pdf: PdfSource, index: Int) {
     var bitmap by remember(index) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(index) { bitmap = pdf.render(index, 1400) }
-    Box(Modifier.fillMaxSize().statusBarsPadding().padding(top = 56.dp, bottom = 150.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
         val b = bitmap
         if (b == null) CircularProgressIndicator(color = Palette.Mint)
         else Image(
             b.asImageBitmap(), contentDescription = "Page ${index + 1}", contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp).verticalScroll(rememberScrollState()).clip(RoundedCornerShape(6.dp))
+            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp))
         )
     }
 }
@@ -430,7 +488,6 @@ private fun OriginalPage(pdf: PdfSource, index: Int) {
 @Composable
 private fun TextPage(
     page: Page,
-    index: Int,
     colors: ReaderColors,
     fontScale: Float,
     activeSentence: Int,
@@ -446,22 +503,19 @@ private fun TextPage(
     LaunchedEffect(activeBlock) {
         if (activeBlock >= 0) {
             val visible = listState.layoutInfo.visibleItemsInfo
-            val target = activeBlock + 1
+            val target = activeBlock
             val item = visible.firstOrNull { it.index == target }
             val viewport = listState.layoutInfo.viewportEndOffset
             if (item == null || item.offset + item.size > viewport * 0.8f || item.offset < 0) {
-                listState.animateScrollToItem(target, -260)
+                listState.animateScrollToItem(target, -120)
             }
         }
     }
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 110.dp, bottom = 240.dp),
+        contentPadding = PaddingValues(start = 30.dp, end = 24.dp, top = 10.dp, bottom = 90.dp),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTapEmpty() } }
     ) {
-        item {
-            Text("${index + 1}", color = colors.dim, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 14.dp))
-        }
         if (page.blocks.isEmpty()) {
             item { Text("This page has no text. It may be a picture.", color = colors.dim, style = ReadingStyle) }
         }
@@ -514,18 +568,22 @@ private fun BlockText(
     val base = ReadingStyle.copy(fontSize = ReadingStyle.fontSize * fontScale, lineHeight = ReadingStyle.lineHeight * fontScale)
     val style = when (block.kind) {
         BlockKind.HEADING -> base.copy(fontSize = base.fontSize * 1.22f, fontWeight = FontWeight.SemiBold, lineHeight = base.lineHeight * 1.15f)
-        BlockKind.CAPTION -> base.copy(fontSize = base.fontSize * 0.85f)
-        else -> base
+        BlockKind.CAPTION -> base.copy(fontSize = base.fontSize * 0.85f, fontStyle = FontStyle.Italic)
+        BlockKind.IMAGE_TEXT -> base.copy(fontSize = base.fontSize * 0.92f, fontStyle = FontStyle.Italic)
+        else -> base.copy(textAlign = TextAlign.Justify, hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph)
     }
     val color = if (skipped) colors.dim else colors.text
     Column(Modifier.padding(bottom = if (block.kind == BlockKind.HEADING) 14.dp else 18.dp, top = if (block.kind == BlockKind.HEADING) 10.dp else 0.dp)) {
-        if (skipped && (block.kind == BlockKind.QUESTION || block.kind == BlockKind.EXERCISE || block.kind == BlockKind.ACTIVITY || block.kind == BlockKind.CAPTION)) {
-            val label = when (block.kind) {
-                BlockKind.QUESTION -> "QUESTION · skipped while listening"
-                BlockKind.EXERCISE -> "EXERCISE · skipped while listening"
-                BlockKind.ACTIVITY -> "ACTIVITY · skipped while listening"
-                else -> "CAPTION · skipped while listening"
-            }
+        val label = when (block.kind) {
+            BlockKind.QUESTION -> "QUESTION"
+            BlockKind.EXERCISE -> "EXERCISE"
+            BlockKind.ACTIVITY -> "ACTIVITY"
+            BlockKind.CAPTION -> "CAPTION"
+            BlockKind.BOILERPLATE -> "PUBLISHER INFO"
+            BlockKind.IMAGE_TEXT -> "TEXT FROM IMAGE"
+            else -> null
+        }?.let { if (skipped) "$it · skipped while listening" else if (block.kind == BlockKind.IMAGE_TEXT) it else null }
+        if (label != null) {
             Text(label, color = colors.dim, fontSize = 10.sp, letterSpacing = 0.08.em, modifier = Modifier.padding(bottom = 4.dp))
         }
         Text(

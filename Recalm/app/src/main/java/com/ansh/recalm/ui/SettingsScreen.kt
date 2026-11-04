@@ -81,6 +81,12 @@ fun SettingsScreen(onBack: () -> Unit, openVoices: () -> Unit) {
         ToggleRow("Skip questions and exercises", "Great for NCERT and textbooks. Questions, exercises and \"Intext Questions\" are shown but not read aloud.",
             prefs.skipQuestions) { v -> app.settings.update { it.copy(skipQuestions = v) } }
         ToggleRow("Skip activities", "Skip \"Activity\" and \"क्रियाकलाप\" boxes.", prefs.skipActivities) { v -> app.settings.update { it.copy(skipActivities = v) } }
+        ToggleRow("Skip copyright and publisher pages", "Copyright notices, addresses, ISBN and printing details are shown faded and not read.", prefs.skipBoilerplate) { v ->
+            app.settings.update { it.copy(skipBoilerplate = v) }
+        }
+        ToggleRow("Read text inside pictures", "Text found in images and diagrams of a PDF is read too. Turn off to skip it.", prefs.readImageText) { v ->
+            app.settings.update { it.copy(readImageText = v) }
+        }
         ToggleRow("Skip figure and table captions", "Lines like \"Fig. 2.1\" or \"चित्र 3\" are not read.", prefs.skipCaptions) { v -> app.settings.update { it.copy(skipCaptions = v) } }
         ToggleRow("Keep sleep sounds when voice pauses", "Sounds continue after the voice stops until the sleep timer ends.", prefs.keepMusicAfterVoice) { v ->
             app.settings.update { it.copy(keepMusicAfterVoice = v) }

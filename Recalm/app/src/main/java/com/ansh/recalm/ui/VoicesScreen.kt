@@ -104,7 +104,7 @@ fun VoicesScreen(onBack: () -> Unit) {
             )
         }
         item { SectionTitle("Voice packs") }
-        items(VoiceCatalog.packs, key = { it.id }) { pack ->
+        items(VoiceCatalog.packs, key = { "pack-" + it.id }) { pack ->
             PackCard(
                 pack = pack,
                 state = states[pack.id] ?: PackState.Missing,
@@ -120,7 +120,7 @@ fun VoicesScreen(onBack: () -> Unit) {
             )
         }
         item { SectionTitle("Hindi + English voices") }
-        items(hindiVoices, key = { it.id }) { voice ->
+        items(hindiVoices, key = { "voice-" + it.id }) { voice ->
             VoiceRow(voice, app.voices.isVoiceReady(voice.id) && states.isNotEmpty(), prefs.voiceId == voice.id, previewing == voice.id) { select(voice.id) }
         }
         item {
@@ -135,7 +135,7 @@ fun VoicesScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = Palette.Muted, modifier = Modifier.padding(bottom = 8.dp))
         }
         if (showEnglish) {
-            items(englishVoices, key = { it.id }) { voice ->
+            items(englishVoices, key = { "voice-" + it.id }) { voice ->
                 VoiceRow(voice, app.voices.isVoiceReady(voice.id) && states.isNotEmpty(), prefs.voiceId == voice.id, previewing == voice.id) { select(voice.id) }
             }
         }
@@ -150,7 +150,7 @@ fun VoicesScreen(onBack: () -> Unit) {
                 Text("  Import voice (.zip)")
             }
         }
-        items(custom, key = { it.id }) { info ->
+        items(custom, key = { "custom-" + it.id }) { info ->
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(14.dp)).background(Palette.NightRaised)
                     .clickable { select(info.id) }.padding(14.dp),

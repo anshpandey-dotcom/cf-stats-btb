@@ -9,6 +9,8 @@ object BlockKind {
     const val EXERCISE = 3
     const val CAPTION = 4
     const val ACTIVITY = 5
+    const val BOILERPLATE = 6
+    const val IMAGE_TEXT = 7
 }
 
 @Serializable

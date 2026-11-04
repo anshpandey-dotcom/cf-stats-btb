@@ -73,6 +73,17 @@ class EngineTest {
     }
 
     @Test
+    fun copyrightPageIsMarked() {
+        val raw = listOf(
+            "PUBLISHED BY:\nTHE GREAT COURSES\nCorporate Headquarters\n4840 Westfields Boulevard, Suite 500\nChantilly, Virginia 20151-2299\nPhone: 1-800-832-2412\nwww.thegreatcourses.com\n\nCopyright © The Teaching Company, 2006\nPrinted in the United States of America\nThis book is in copyright. All rights reserved.",
+            "Lecture One\n\nPsychology is the science of behavior and mental processes. It asks why people act the way they do."
+        )
+        val pages = TextCleaner.buildPages(raw)
+        assertTrue(pages[0].blocks.all { it.kind == 6 })
+        assertTrue(pages[1].blocks.none { it.kind == 6 })
+    }
+
+    @Test
     fun mixedSentencePhonemizes() {
         val lexicon = File(fixtures, "lexicon-us-en.txt")
         val tokens = File(fixtures, "tokens.txt")
