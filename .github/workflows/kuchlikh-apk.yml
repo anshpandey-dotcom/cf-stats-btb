@@ -1,0 +1,62 @@
+name: Build KuchLikh APK
+
+on:
+  push:
+    paths:
+      - 'kuchlikh-app/**'
+      - '.github/workflows/kuchlikh-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kuchlikh-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run tests
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Build release APK
+        env:
+          KEYSTORE_B64: ${{ secrets.BLOCKCUT_KEYSTORE_B64 }}
+          KUCHLIKH_KEYSTORE_PASSWORD: ${{ secrets.BLOCKCUT_KEYSTORE_PASSWORD }}
+          KUCHLIKH_KEY_ALIAS: ${{ secrets.BLOCKCUT_KEY_ALIAS }}
+          KUCHLIKH_KEY_PASSWORD: ${{ secrets.BLOCKCUT_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export KUCHLIKH_KEYSTORE="$RUNNER_TEMP/release.jks"
+          fi
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk KuchLikh.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KuchLikh-apk
+          path: kuchlikh-app/KuchLikh.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kuchlikh-latest
+          name: KuchLikh (latest build)
+          prerelease: false
+          make_latest: false
+          files: kuchlikh-app/KuchLikh.apk
+          body: |
+            KuchLikh Android app, built from ${{ github.sha }}.
+            Download KuchLikh.apk below and install it on your phone.
