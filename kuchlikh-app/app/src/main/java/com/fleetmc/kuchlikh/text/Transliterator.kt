@@ -37,10 +37,11 @@ object Transliterator {
 
     private val latinWord = Regex("[A-Za-z]+")
     private val stop = Regex("(?<=[\\u0900-\\u097F])\\.(?![.\\d])")
+    private val bar = Regex("(?<=[\\u0900-\\u097F])\\s*\\|")
 
     fun text(input: String): String {
         val converted = latinWord.replace(input) { word(it.value) }
-        return stop.replace(converted, "।")
+        return bar.replace(stop.replace(converted, "।"), "।")
     }
 
     fun isDevanagari(c: Char): Boolean = c in 'ऀ'..'ॿ'

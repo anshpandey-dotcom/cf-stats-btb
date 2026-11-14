@@ -1,6 +1,7 @@
 package com.fleetmc.kuchlikh.editor
 
 import android.content.Context
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -41,7 +42,7 @@ object PageText {
     fun heading(context: Context, book: Book): TextStyle {
         val size = PageSpec.size(book.textSize)
         return TextStyle(
-            fontFamily = Fonts.family(context, book.font, bold = true),
+            fontFamily = Fonts.family(context, book.headFont ?: book.font, bold = true),
             fontSize = (size.font * 1.45f).sp,
             lineHeight = (size.font * 1.8f).sp,
             platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -49,7 +50,7 @@ object PageText {
     }
 }
 
-class Fitter(context: Context, book: Book) {
+class Fitter(private val context: Context, private val book: Book) {
 
     private val sizeIndex = book.textSize
     private val style = PageText.body(context, book)
@@ -65,12 +66,14 @@ class Fitter(context: Context, book: Book) {
         if (text.isEmpty()) return -1
         val lines = PageSpec.textLines(page, sizeIndex)
         if (lines <= 0) return 0
+        val limit = lines * PageSpec.size(sizeIndex).line * PageSpec.CANON + 0.5f
         val result = measurer.measure(
-            text = PageText.MARK_TEXT + text,
+            text = Styler.annotated(context, book, PageText.MARK_TEXT + text, Color.Unspecified, null),
             style = style,
             constraints = Constraints(maxWidth = width),
         )
-        if (result.lineCount <= lines) return -1
-        return (result.getLineStart(lines) - 1).coerceIn(0, text.length)
+        if (result.size.height <= limit) return -1
+        val cut = (0 until result.lineCount).firstOrNull { result.getLineBottom(it) > limit } ?: return -1
+        return (result.getLineStart(cut) - 1).coerceIn(0, text.length)
     }
 }

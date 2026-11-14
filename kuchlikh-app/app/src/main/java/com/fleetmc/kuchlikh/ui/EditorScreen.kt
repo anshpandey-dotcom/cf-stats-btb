@@ -36,6 +36,11 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.Delete
@@ -46,6 +51,7 @@ import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.outlined.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.fleetmc.kuchlikh.data.Blocks
 import com.fleetmc.kuchlikh.data.Book
 import com.fleetmc.kuchlikh.data.chapters
 import com.fleetmc.kuchlikh.data.wordCount
@@ -91,7 +98,11 @@ private sealed interface Panel {
     data object Add : Panel
     data object Chapters : Panel
     data object Text : Panel
-    data object Translate : Panel
+    data object Format : Panel
+    data object Ai : Panel
+    class AddImage(val pageId: String?) : Panel
+    class Link(val pageId: String?) : Panel
+    class Web(val pageId: String?) : Panel
     data object Export : Panel
     data object Details : Panel
     data object Stats : Panel
@@ -190,12 +201,13 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                         DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem({ Text("Book details") }, { menu = false; panel = Panel.Details })
+                            DropdownMenuItem({ Text("Cover and details") }, { menu = false; panel = Panel.Details })
                             DropdownMenuItem({ Text("Page style") }, { menu = false; panel = Panel.Style(null) })
                             DropdownMenuItem({ Text("Text") }, { menu = false; panel = Panel.Text })
                             HorizontalDivider()
                             DropdownMenuItem({ Text("Convert page to Hindi") }, { menu = false; editor.convertToHindi() })
-                            DropdownMenuItem({ Text("Fix grammar in whole book") }, { menu = false; editor.fixGrammar(true) })
+                            DropdownMenuItem({ Text("AI Beautify") }, { menu = false; panel = Panel.Ai })
+                            DropdownMenuItem({ Text("Fix grammar in whole book") }, { menu = false; editor.smartFix(true) })
                             HorizontalDivider()
                             DropdownMenuItem({ Text("Word count") }, { menu = false; panel = Panel.Stats })
                             DropdownMenuItem({ Text("Export") }, { menu = false; editor.flush(); panel = Panel.Export })
@@ -212,12 +224,19 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                 ) {
                     LanguageToggle(editor.hindi) { editor.hindi = it }
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { editor.fixGrammar(false) }) { Icon(Icons.Outlined.Spellcheck, "Fix grammar") }
-                    IconButton(onClick = { panel = Panel.Translate }) { Icon(Icons.Outlined.Translate, "Translate") }
-                    IconButton(onClick = { editor.undo() }, enabled = editor.canUndo) {
+                    IconButton(onClick = { editor.smartFix(false) }, modifier = Modifier.size(42.dp).testTag("fixButton")) {
+                        Icon(Icons.Outlined.Spellcheck, "Fix grammar")
+                    }
+                    IconButton(onClick = { panel = Panel.Format }, modifier = Modifier.size(42.dp).testTag("formatButton")) {
+                        Icon(Icons.Outlined.TextFormat, "Format")
+                    }
+                    IconButton(onClick = { panel = Panel.Ai }, modifier = Modifier.size(42.dp).testTag("aiButton")) {
+                        Icon(Icons.Outlined.AutoAwesome, "AI Beautify")
+                    }
+                    IconButton(onClick = { editor.undo() }, enabled = editor.canUndo, modifier = Modifier.size(42.dp)) {
                         Icon(Icons.AutoMirrored.Outlined.Undo, "Undo")
                     }
-                    IconButton(onClick = { editor.redo() }, enabled = editor.canRedo) {
+                    IconButton(onClick = { editor.redo() }, enabled = editor.canRedo, modifier = Modifier.size(42.dp)) {
                         Icon(Icons.AutoMirrored.Outlined.Redo, "Redo")
                     }
                 }
@@ -251,6 +270,7 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                                 chapterNumber = chapterNumbers[index],
                                 imageDir = imageDir,
                                 editor = editor,
+                                carry = Blocks.carry(book.pages, index)?.takeIf { !it.sized },
                                 onImage = { panel = Panel.Photo(page.id) },
                             )
                         }
@@ -268,6 +288,20 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                     }
                 }
             }
+            editor.busyText?.let { text ->
+                Surface(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    shadowElevation = 4.dp,
+                ) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.inverseOnSurface)
+                        Spacer(Modifier.width(10.dp))
+                        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.inverseOnSurface)
+                    }
+                }
+            }
         }
     }
 
@@ -282,9 +316,11 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                 panel = null
                 editor.addPage(true)
             }
-            SheetRow(Icons.Outlined.AddPhotoAlternate, "Add photo", "From your gallery") {
-                panel = null
-                pickPhoto(null)
+            SheetRow(Icons.Outlined.AddPhotoAlternate, "Add photo", "Gallery, a link or search the web") {
+                panel = Panel.AddImage(null)
+            }
+            SheetRow(Icons.Outlined.TextFormat, "Format paragraph", "Heading, subtitle, highlight, quote") {
+                panel = Panel.Format
             }
             SheetRow(Icons.Outlined.Palette, "Page style", "Plain, ruled, grid and more") {
                 panel = Panel.Style(editor.currentPageId ?: book.pages.getOrNull(listState.firstVisibleItemIndex)?.id)
@@ -294,8 +330,28 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
             panel = null
             scope.launch { listState.scrollToItem(index) }
         }
-        Panel.Text -> TextStyleSheet(book, { panel = null }) { font, size, justify -> editor.setTextStyle(font, size, justify) }
-        Panel.Translate -> TranslateSheet(editor) { panel = null }
+        Panel.Text -> TextStyleSheet(book, { panel = null }) { font, size, justify, head -> editor.setTextStyle(font, size, justify, head) }
+        Panel.Ai -> AiSheet(editor) { panel = null }
+        Panel.Format -> FormatSheet(editor.currentBlock(), book, { panel = null }) { block ->
+            editor.setBlock(block)
+            panel = null
+        }
+        is Panel.AddImage -> Sheet({ panel = null }, "Add a photo") {
+            SheetRow(Icons.Outlined.PhotoLibrary, "Gallery", "Pick from your phone") {
+                panel = null
+                pickPhoto(open.pageId)
+            }
+            SheetRow(Icons.Outlined.Link, "From a link", "Paste an image address") { panel = Panel.Link(open.pageId) }
+            SheetRow(Icons.Outlined.Search, "Search the web", "Wikimedia and Wikipedia, with filters") { panel = Panel.Web(open.pageId) }
+        }
+        is Panel.Link -> LinkDialog({ panel = null }) { bytes, credit ->
+            editor.addImageBytes(bytes, credit, open.pageId)
+            panel = null
+        }
+        is Panel.Web -> WebImageSheet({ panel = null }) { bytes, credit ->
+            editor.addImageBytes(bytes, credit, open.pageId)
+            panel = null
+        }
         Panel.Export -> ExportSheet(book) { panel = null }
         Panel.Stats -> StatsDialog(book) { panel = null }
         Panel.Details -> BookDetailsSheet(
@@ -304,10 +360,12 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
             initialTitle = book.title,
             initialAuthor = book.author,
             initialColor = book.coverColor,
+            initialStyle = book.coverStyle,
+            initialFont = book.coverFont,
             existingCover = book.cover?.let { editor.store.file(book.id, it) },
             onDismiss = { panel = null },
-        ) { title, author, color, cover, remove ->
-            editor.updateDetails(title, author, color, cover, remove)
+        ) { edit ->
+            editor.updateDetails(edit.title, edit.author, edit.color, edit.style, edit.font, edit.cover, edit.removeCover)
             panel = null
         }
         is Panel.Style -> {
@@ -339,10 +397,22 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                     } else {
                         SheetRow(Icons.Outlined.VerticalAlignBottom, "Move below text") { editor.updateImage(page.id, bottom = true) }
                     }
-                    SheetRow(Icons.Outlined.AddPhotoAlternate, "Replace photo") {
-                        panel = null
-                        pickPhoto(page.id)
+                    SectionLabel("Look")
+                    Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val grey = page.imageFx.contains("grey")
+                        val cut = page.imageFx.contains("cutout")
+                        FilterChip(grey, { editor.applyImageFx(page.id, !grey, cut) }, { Text("Black and white") })
+                        FilterChip(cut, { editor.applyImageFx(page.id, grey, !cut) }, { Text("Remove background") })
                     }
+                    page.imageCredit?.let {
+                        Text(
+                            "Source: $it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                        )
+                    }
+                    SheetRow(Icons.Outlined.AddPhotoAlternate, "Replace photo") { panel = Panel.AddImage(page.id) }
                     SheetRow(Icons.Outlined.Delete, "Remove photo", tint = MaterialTheme.colorScheme.error) {
                         panel = null
                         editor.updateImage(page.id, remove = true)
@@ -359,8 +429,7 @@ fun EditorScreen(editor: EditorViewModel, onBack: () -> Unit, onRead: () -> Unit
                 Sheet({ panel = null }, "Page ${index + 1}") {
                     SheetRow(Icons.Outlined.Palette, "Page style") { panel = Panel.Style(page.id) }
                     SheetRow(Icons.Outlined.AddPhotoAlternate, if (page.image == null) "Add photo" else "Replace photo") {
-                        panel = null
-                        pickPhoto(page.id)
+                        panel = Panel.AddImage(page.id)
                     }
                     if (page.chapter == null) {
                         SheetRow(Icons.Outlined.BookmarkAdd, "Start a chapter here") {

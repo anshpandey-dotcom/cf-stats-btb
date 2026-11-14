@@ -10,9 +10,17 @@ import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fleetmc.kuchlikh.KuchLikhApp
+import com.fleetmc.kuchlikh.ai.AiException
+import com.fleetmc.kuchlikh.ai.AiTask
+import com.fleetmc.kuchlikh.ai.Groq
+import com.fleetmc.kuchlikh.data.Block
+import com.fleetmc.kuchlikh.data.Blocks
 import com.fleetmc.kuchlikh.data.Book
+import com.fleetmc.kuchlikh.data.ImageTools
 import com.fleetmc.kuchlikh.data.Page
 import com.fleetmc.kuchlikh.data.newId
+import com.fleetmc.kuchlikh.net.Net
+import kotlinx.coroutines.CancellationException
 import com.fleetmc.kuchlikh.text.Autocorrect
 import com.fleetmc.kuchlikh.text.Transliterator
 import com.fleetmc.kuchlikh.text.TypingAssist
@@ -29,6 +37,13 @@ class Outcome(val selection: TextRange, val keep: Boolean)
 
 class TranslationSource(val pageId: String, val range: TextRange?, val text: String)
 
+class Parts(val blocks: List<Block>, val plain: List<String>, val send: List<Int>)
+
+class AiPreview(val source: TranslationSource, val parts: Parts, val result: List<String>) {
+    fun rebuilt(): String = EditorViewModel.rebuild(parts, result)
+    fun shown(): String = result.joinToString("\n")
+}
+
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private val host = app as KuchLikhApp
@@ -43,6 +58,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     var canUndo by mutableStateOf(false)
         private set
     var canRedo by mutableStateOf(false)
+        private set
+    var busyText by mutableStateOf<String?>(null)
         private set
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
@@ -176,6 +193,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             position = it.cursor
             changed = true
         }
+        val hoisted = hoistMark(text, position)
+        text = hoisted.first
+        position = hoisted.second
         val edited = current.pages.toMutableList()
         edited[index] = page.copy(text = text)
         val result = reflowAround(edited, index, position)
@@ -302,22 +322,37 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val bookId = book?.id ?: return
         viewModelScope.launch {
             val stored = withContext(Dispatchers.IO) { runCatching { store.importImage(bookId, uri) }.getOrNull() }
-            val current = book
-            if (stored == null || current == null || current.id != bookId) {
-                messages.tryEmit("That photo couldn't be added")
-                return@launch
-            }
-            val pages = current.pages.toMutableList()
-            var index = if (pageId != null) indexOf(pageId) else currentIndex()
-            if (index < 0) index = pages.lastIndex
-            if (pageId == null && pages[index].image != null) {
-                index++
-                pages.add(index, Page(id = newId(), image = stored.name, imageAspect = stored.aspect))
-            } else {
-                pages[index] = pages[index].copy(image = stored.name, imageAspect = stored.aspect)
-            }
-            setPages(reflowAround(pages, index, null).pages)
+            placeImage(bookId, stored, null, pageId)
         }
+    }
+
+    fun addImageBytes(bytes: ByteArray, credit: String?, pageId: String?) {
+        val bookId = book?.id ?: return
+        viewModelScope.launch {
+            val stored = withContext(Dispatchers.IO) { runCatching { store.importBytes(bookId, bytes) }.getOrNull() }
+            placeImage(bookId, stored, credit, pageId)
+        }
+    }
+
+    private fun placeImage(bookId: String, stored: com.fleetmc.kuchlikh.data.StoredImage?, credit: String?, pageId: String?) {
+        val current = book
+        if (stored == null || current == null || current.id != bookId) {
+            messages.tryEmit("That photo couldn't be added")
+            return
+        }
+        val pages = current.pages.toMutableList()
+        var index = if (pageId != null) indexOf(pageId) else currentIndex()
+        if (index < 0) index = pages.lastIndex
+        val fresh = { page: Page ->
+            page.copy(image = stored.name, imageAspect = stored.aspect, imageSrc = null, imageFx = "", imageCredit = credit)
+        }
+        if (pageId == null && pages[index].image != null) {
+            index++
+            pages.add(index, fresh(Page(id = newId())))
+        } else {
+            pages[index] = fresh(pages[index])
+        }
+        setPages(reflowAround(pages, index, null).pages)
     }
 
     fun updateImage(pageId: String, size: Int? = null, bottom: Boolean? = null, remove: Boolean = false) {
@@ -327,11 +362,54 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val page = current.pages[index]
         val pages = current.pages.toMutableList()
         pages[index] = if (remove) {
-            page.copy(image = null)
+            page.copy(image = null, imageSrc = null, imageFx = "", imageCredit = null)
         } else {
             page.copy(imageSize = size ?: page.imageSize, imageBottom = bottom ?: page.imageBottom)
         }
         setPages(reflowAround(pages, index, null).pages)
+    }
+
+    fun applyImageFx(pageId: String, grey: Boolean, cutout: Boolean) {
+        val current = book ?: return
+        val index = indexOf(pageId)
+        if (index < 0 || busyText != null) return
+        val page = current.pages[index]
+        val source = page.imageSrc ?: page.image ?: return
+        if (!grey && !cutout) {
+            val pages = current.pages.toMutableList()
+            pages[index] = page.copy(image = source, imageSrc = null, imageFx = "")
+            setPages(reflowAround(pages, index, null).pages)
+            return
+        }
+        val bookId = current.id
+        viewModelScope.launch {
+            busyText = if (cutout) "Removing background…" else "Editing photo…"
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    var bitmap = store.loadBitmap(bookId, source) ?: return@runCatching null
+                    if (cutout) {
+                        bitmap = ImageTools.cutout(bitmap) ?: return@runCatching "nocut"
+                    }
+                    if (grey) bitmap = ImageTools.blackAndWhite(bitmap)
+                    store.saveBitmap(bookId, bitmap)
+                }.getOrNull()
+            }
+            busyText = null
+            val latest = book
+            if (latest == null || latest.id != bookId) return@launch
+            when (outcome) {
+                null -> messages.tryEmit("The photo couldn't be edited")
+                "nocut" -> messages.tryEmit("Couldn't find a clear subject. Try a photo with a plain background.")
+                is com.fleetmc.kuchlikh.data.StoredImage -> {
+                    val at = latest.pages.indexOfFirst { it.id == pageId }
+                    if (at < 0) return@launch
+                    val pages = latest.pages.toMutableList()
+                    val fx = listOfNotNull(if (grey) "grey" else null, if (cutout) "cutout" else null).joinToString(",")
+                    pages[at] = pages[at].copy(image = outcome.name, imageAspect = outcome.aspect, imageSrc = source, imageFx = fx)
+                    setPages(reflowAround(pages, at, null).pages)
+                }
+            }
+        }
     }
 
     fun setPageStyle(pageId: String?, style: String) {
@@ -347,9 +425,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         setPages(pages)
     }
 
-    fun setTextStyle(font: String, size: Int, justify: Boolean) {
+    fun setTextStyle(font: String, size: Int, justify: Boolean, headFont: String? = book?.headFont) {
         val current = book ?: return
-        val updated = current.copy(font = font, textSize = size, justify = justify)
+        val updated = current.copy(font = font, textSize = size, justify = justify, headFont = headFont)
         fitter = Fitter(host, updated)
         undoStack.clear()
         redoStack.clear()
@@ -357,9 +435,23 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         commitBook(updated.copy(pages = Flow.reflowAll(updated.pages, ::fit)))
     }
 
-    fun updateDetails(title: String, author: String, coverColor: Int, cover: Uri?, removeCover: Boolean) {
+    fun updateDetails(
+        title: String,
+        author: String,
+        coverColor: Int,
+        coverStyle: String,
+        coverFont: String,
+        cover: Uri?,
+        removeCover: Boolean,
+    ) {
         val current = book ?: return
-        var updated = current.copy(title = title.ifBlank { "Untitled" }, author = author, coverColor = coverColor)
+        var updated = current.copy(
+            title = title.ifBlank { "Untitled" },
+            author = author,
+            coverColor = coverColor,
+            coverStyle = coverStyle,
+            coverFont = coverFont,
+        )
         if (removeCover) updated = updated.copy(cover = null)
         commitBook(updated)
         if (cover == null) return
@@ -367,6 +459,198 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val stored = withContext(Dispatchers.IO) { runCatching { store.importImage(current.id, cover) }.getOrNull() }
             val latest = book
             if (stored != null && latest != null && latest.id == current.id) commitBook(latest.copy(cover = stored.name))
+        }
+    }
+
+    private fun hoistMark(text: String, cursor: Int): Pair<String, Int> {
+        if (text.none { Blocks.isMark(it) }) return text to cursor
+        val start = if (cursor <= 0) 0 else text.lastIndexOf('\n', cursor - 1) + 1
+        val end = text.indexOf('\n', start).let { if (it < 0) text.length else it }
+        var first = -1
+        for (k in start until end) {
+            if (Blocks.isMark(text[k])) {
+                first = k
+                break
+            }
+        }
+        if (first <= start) return text to cursor
+        val mark = text[first]
+        val rebuilt = StringBuilder(text)
+        rebuilt.deleteCharAt(first)
+        rebuilt.insert(start, mark)
+        var next = cursor
+        if (cursor <= first) next = cursor + 1
+        return rebuilt.toString() to next
+    }
+
+    fun currentBlock(): Block {
+        val current = book ?: return Block.Normal
+        val index = currentIndex()
+        if (index < 0) return Block.Normal
+        val page = current.pages[index]
+        val offset = if (page.id == currentPageId) selection.start.coerceIn(0, page.text.length) else 0
+        return Blocks.styleAt(current.pages, index, offset)
+    }
+
+    fun setBlock(block: Block) {
+        val current = book ?: return
+        val index = currentIndex()
+        if (index < 0) return
+        val page = current.pages[index]
+        val offset = if (page.id == currentPageId) selection.start.coerceIn(0, page.text.length) else 0
+        val (target, at) = Blocks.paragraphStart(current.pages, index, offset)
+        val pages = current.pages.toMutableList()
+        val holder = pages[target]
+        val has = holder.text.getOrNull(at)?.let { Blocks.isMark(it) } == true
+        val updated = StringBuilder(holder.text)
+        var shift = 0
+        if (has) {
+            updated.deleteCharAt(at)
+            shift = -1
+        }
+        block.mark?.let {
+            updated.insert(at, it)
+            shift += 1
+        }
+        if (updated.toString() == holder.text) return
+        pages[target] = holder.copy(text = updated.toString())
+        val caret = if (target == index && at <= offset) offset + shift else offset
+        val result = reflowAround(pages, target, if (target == index) caret else null)
+        setPages(result.pages)
+        val keep = result.caret ?: if (target == index) Caret(page.id, caret.coerceAtLeast(0)) else null
+        keep?.let { focus = FocusTarget(it.pageId, it.offset) }
+    }
+
+    private fun parts(raw: String, keepBlocks: Boolean): Parts {
+        val lines = raw.split("\n")
+        val blocks = ArrayList<Block>(lines.size)
+        val plain = ArrayList<String>(lines.size)
+        lines.forEach { line ->
+            if (keepBlocks) {
+                val (block, text) = Blocks.split(line)
+                blocks += block
+                plain += Blocks.strip(text)
+            } else {
+                blocks += Block.Normal
+                plain += Blocks.strip(line)
+            }
+        }
+        val send = plain.indices.filter { plain[it].isNotBlank() }
+        return Parts(blocks, plain, send)
+    }
+
+    private fun flowStream(pages: List<Page>, start: Int): String {
+        var end = start
+        while (end + 1 < pages.size && !Flow.starts(pages, end + 1)) end++
+        val stream = StringBuilder()
+        for (j in start..end) {
+            stream.append(pages[j].text)
+            if (pages[j].para && j < end) stream.append('\n')
+        }
+        return stream.toString()
+    }
+
+    private fun aiSource(useSelection: Boolean): TranslationSource? {
+        val current = book ?: return null
+        val page = current.pages[currentIndex()]
+        val range = selection
+        if (useSelection && page.id == currentPageId && !range.collapsed && range.max <= page.text.length) {
+            return TranslationSource(page.id, range, page.text.substring(range.min, range.max))
+        }
+        return TranslationSource(page.id, null, page.text)
+    }
+
+    fun hasSelection(): Boolean = aiSource(true)?.range != null
+
+    fun aiReady(): Boolean = prefs.aiEnabled && Groq.ready(host)
+
+    fun online(): Boolean = Net.online(host)
+
+    suspend fun aiPreview(task: AiTask, useSelection: Boolean, onProgress: (Int, Int) -> Unit): AiPreview {
+        val source = aiSource(useSelection) ?: throw AiException("Nothing to work on.")
+        val parts = parts(source.text, source.range == null)
+        if (parts.send.isEmpty()) throw AiException("There is no text here yet.")
+        val out = Groq.run(host, task, parts.send.map { parts.plain[it] }, onProgress)
+        return AiPreview(source, parts, out)
+    }
+
+    suspend fun offlinePreview(useSelection: Boolean): AiPreview {
+        val source = aiSource(useSelection) ?: throw AiException("Nothing to work on.")
+        val parts = parts(source.text, source.range == null)
+        if (parts.send.isEmpty()) throw AiException("There is no text here yet.")
+        if (!com.fleetmc.kuchlikh.text.HindiTranslator.ready()) {
+            throw AiException("Offline translation needs the Hindi language pack. Download it in Settings.")
+        }
+        val out = try {
+            parts.send.map { com.fleetmc.kuchlikh.text.HindiTranslator.translate(parts.plain[it]) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw AiException("Offline translation didn't work this time.")
+        }
+        return AiPreview(source, parts, out)
+    }
+
+    fun applyPreview(preview: AiPreview) {
+        replaceText(preview.source, preview.rebuilt())
+    }
+
+    suspend fun aiRewrite(task: AiTask, wholeBook: Boolean, onProgress: (Int, Int) -> Unit): Int {
+        val current = book ?: return 0
+        val starts = if (wholeBook) {
+            current.pages.indices.filter { Flow.starts(current.pages, it) }
+        } else {
+            listOf(Flow.firstOf(current.pages, currentIndex()))
+        }
+        val ids = starts.map { current.pages[it].id }
+        val all = starts.map { parts(flowStream(current.pages, it), true) }
+        val send = all.flatMap { part -> part.send.map { part.plain[it] } }
+        if (send.isEmpty()) throw AiException("There is no text here yet.")
+        val out = Groq.run(host, task, send, onProgress)
+        var cursor = 0
+        val streams = all.map { part ->
+            val slice = out.subList(cursor, cursor + part.send.size)
+            cursor += part.send.size
+            rebuild(part, slice)
+        }
+        val latest = book ?: return 0
+        val pages = latest.pages.toMutableList()
+        ids.zip(streams).forEach { (id, stream) ->
+            val s = pages.indexOfFirst { it.id == id }
+            if (s < 0) return@forEach
+            var end = s
+            while (end + 1 < pages.size && !Flow.starts(pages, end + 1)) end++
+            pages[s] = pages[s].copy(text = stream, para = false)
+            for (j in s + 1..end) pages[j] = pages[j].copy(text = "", para = false)
+        }
+        setPages(Flow.reflowAll(pages, ::fit))
+        return starts.size
+    }
+
+    fun smartFix(all: Boolean) {
+        if (busyText != null) return
+        if (!aiReady() || !online()) {
+            fixGrammar(all)
+            return
+        }
+        viewModelScope.launch {
+            busyText = "Fixing with AI…"
+            try {
+                if (all) {
+                    aiRewrite(AiTask.Fix, true) { done, total -> busyText = "Fixing with AI… $done of $total" }
+                } else {
+                    applyPreview(aiPreview(AiTask.Fix, false) { _, _ -> })
+                }
+                messages.tryEmit("Fixed with AI")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AiException) {
+                busyText = null
+                messages.tryEmit("${e.message} Fixed offline instead.")
+                fixGrammar(all)
+            } finally {
+                busyText = null
+            }
         }
     }
 
@@ -469,6 +753,18 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         book = current.copy(pages = pages, updatedAt = System.currentTimeMillis())
         refreshHistory()
         scheduleSave()
+    }
+
+    companion object {
+        fun rebuild(parts: Parts, out: List<String>): String {
+            val lines = ArrayList<String>(parts.plain.size)
+            var next = 0
+            parts.plain.indices.forEach { i ->
+                val text = if (i in parts.send && next < out.size) out[next++] else parts.plain[i]
+                lines += Blocks.join(parts.blocks[i], text)
+            }
+            return lines.joinToString("\n")
+        }
     }
 
     override fun onCleared() {

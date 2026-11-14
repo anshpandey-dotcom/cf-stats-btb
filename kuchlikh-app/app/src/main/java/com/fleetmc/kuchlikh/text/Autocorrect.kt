@@ -1,6 +1,7 @@
 package com.fleetmc.kuchlikh.text
 
 import android.content.res.AssetManager
+import com.fleetmc.kuchlikh.data.Blocks
 
 class Fixed(val text: String, val changes: Int)
 
@@ -69,13 +70,18 @@ object Autocorrect {
 
     fun sentenceStart(text: String, index: Int, startOfFlow: Boolean): Boolean {
         var i = index - 1
-        while (i >= 0 && (text[i] == ' ' || text[i] == '"' || text[i] == '\'' || text[i] == '(')) i--
+        while (i >= 0 && (text[i] == ' ' || text[i] == '"' || text[i] == '\'' || text[i] == '(' || Blocks.isMark(text[i]) || text[i] == '\u200B')) i--
         if (i < 0) return startOfFlow
         val c = text[i]
         return c == '.' || c == '!' || c == '?' || c == '\n' || c == '।'
     }
 
     private val spaces = Regex("[ \\t]{2,}")
+    private val devaDanda = Regex("(?<=[\\u0900-\\u0963])\\s*\\|")
+    private val devaStop = Regex("(?<=[\\u0900-\\u0963])\\.(?=\\s|$|[\"\u201D\u2019)])")
+    private val afterDanda = Regex("\\u0964(?=[\\u0900-\\u097F])")
+    private val doubleMarks = Regex("([!?])\\1+")
+    private val doubleCommas = Regex("([,;:])\\1+")
     private val spaceBefore = Regex("(?<=\\S) +([,.!?;:।])")
     private val spaceAfter = Regex("([,;!?])(?=[A-Za-z\\u0900-\\u097F])")
     private val stopAfter = Regex("(?<=[a-z]{2})\\.(?!(?:com|org|net|in|io|co|edu|gov|app)\\b)(?=[A-Za-z]{2})")
@@ -97,7 +103,12 @@ object Autocorrect {
         }
 
         pass(spaces) { " " }
+        pass(devaDanda) { "\u0964" }
+        pass(devaStop) { "\u0964" }
         pass(spaceBefore) { it.groupValues[1] }
+        pass(afterDanda) { "\u0964 " }
+        pass(doubleMarks) { it.groupValues[1] }
+        pass(doubleCommas) { it.groupValues[1] }
         pass(spaceAfter) { it.groupValues[1] + " " }
         pass(stopAfter) { ". " }
         pass(repeated) { match ->

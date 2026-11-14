@@ -16,6 +16,9 @@ data class Page(
     val imageAspect: Float = 1f,
     val imageSize: Int = 1,
     val imageBottom: Boolean = false,
+    val imageSrc: String? = null,
+    val imageFx: String = "",
+    val imageCredit: String? = null,
     val style: String? = null,
 )
 
@@ -26,8 +29,11 @@ data class Book(
     val author: String = "",
     val cover: String? = null,
     val coverColor: Int = 0,
+    val coverStyle: String = "classic",
+    val coverFont: String = "serif",
     val pageStyle: String = "plain",
     val font: String = "serif",
+    val headFont: String? = null,
     val textSize: Int = 1,
     val justify: Boolean = false,
     val pages: List<Page> = listOf(Page(id = newId(), flowStart = true)),
@@ -46,7 +52,7 @@ fun Book.chapters(): List<ChapterRef> {
 }
 
 fun Book.wordCount(): Int = pages.sumOf { page ->
-    page.text.split(Regex("\\s+")).count { it.isNotBlank() }
+    Blocks.strip(page.text).split(Regex("\\s+")).count { it.isNotBlank() }
 }
 
 class TextSize(val font: Int, val line: Int)

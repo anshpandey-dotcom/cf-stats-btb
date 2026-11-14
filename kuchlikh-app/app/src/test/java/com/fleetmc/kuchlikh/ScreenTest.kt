@@ -61,6 +61,13 @@ class ScreenTest {
         rule.onNodeWithTag("chapterTitle").performTextInput("The Second Rain")
         rule.onAllNodesWithTag("pageText").onLast().performTextInput("barish ")
         shot("5_chapter")
+        rule.onNodeWithTag("formatButton").performClick()
+        shot("6_format")
+        rule.onNodeWithText("Heading").performClick()
+        rule.waitForIdle()
+        shot("7_heading")
+        rule.onNodeWithTag("aiButton").performClick()
+        shot("8_ai")
         val app = rule.activity.application as KuchLikhApp
         val books = app.store.list()
         assertTrue(books.isNotEmpty())

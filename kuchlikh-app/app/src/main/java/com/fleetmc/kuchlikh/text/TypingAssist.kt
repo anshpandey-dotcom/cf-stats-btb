@@ -4,7 +4,7 @@ class Typed(val text: String, val cursor: Int)
 
 object TypingAssist {
 
-    private const val BOUNDARIES = " \n\t.,!?;:)\"”"
+    private const val BOUNDARIES = " \n\t.,!?;:)\"”|"
     private const val TIGHT = ",.!?;:"
 
     private fun letter(c: Char) = (c in 'a'..'z') || (c in 'A'..'Z')
@@ -30,7 +30,7 @@ object TypingAssist {
 
         if (hindi) {
             if (word.isEmpty()) {
-                if (typed == '.' && at > 0 && Transliterator.isDevanagari(new[at - 1])) {
+                if ((typed == '.' || typed == '|') && at > 0 && Transliterator.isDevanagari(new[at - 1])) {
                     return Typed(new.substring(0, at) + "।" + new.substring(cursor), cursor)
                 }
                 return null
@@ -38,11 +38,12 @@ object TypingAssist {
             if (attached) return null
             val converted = Transliterator.word(word)
             if (converted == word) return null
-            val mark = if (typed == '.') "।" else typed.toString()
+            val mark = if (typed == '.' || typed == '|') "।" else typed.toString()
             val text = new.substring(0, start) + converted + mark + new.substring(cursor)
             return Typed(text, start + converted.length + mark.length)
         }
 
+        if (typed == '|') return null
         if (!autocorrect) return null
 
         if (word.isEmpty()) {

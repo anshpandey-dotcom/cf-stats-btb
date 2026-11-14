@@ -25,6 +25,8 @@ jobs:
           java-version: '17'
 
       - name: Run tests
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
@@ -32,6 +34,7 @@ jobs:
 
       - name: Build release APK
         env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           KEYSTORE_B64: ${{ secrets.BLOCKCUT_KEYSTORE_B64 }}
           KUCHLIKH_KEYSTORE_PASSWORD: ${{ secrets.BLOCKCUT_KEYSTORE_PASSWORD }}
           KUCHLIKH_KEY_ALIAS: ${{ secrets.BLOCKCUT_KEY_ALIAS }}

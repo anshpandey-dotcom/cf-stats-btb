@@ -2,15 +2,12 @@ package com.fleetmc.kuchlikh.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.net.Uri
-import androidx.exifinterface.media.ExifInterface
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-class StoredImage(val name: String, val aspect: Float)
+class StoredImage(val name: String, val aspect: Float, val transparent: Boolean)
 
 class BookStore(private val context: Context) {
 
@@ -71,41 +68,38 @@ class BookStore(private val context: Context) {
         return copy
     }
 
-    fun importImage(bookId: String, uri: Uri, maxSide: Int = 1600): StoredImage? {
-        val resolver = context.contentResolver
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        var bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
-        val rotation = resolver.openInputStream(uri)?.use { stream ->
-            when (ExifInterface(stream).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                else -> 0f
-            }
-        } ?: 0f
-        val longest = maxOf(bitmap.width, bitmap.height)
-        val scale = if (longest > maxSide) maxSide / longest.toFloat() else 1f
-        if (rotation != 0f || scale != 1f) {
-            val matrix = Matrix().apply {
-                postScale(scale, scale)
-                postRotate(rotation)
-            }
-            bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    fun importImage(bookId: String, uri: Uri): StoredImage? {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        return importBytes(bookId, bytes)
+    }
+
+    fun importBytes(bookId: String, bytes: ByteArray, maxSide: Int = 1600): StoredImage? {
+        val bitmap = ImageTools.decode(bytes, maxSide) ?: return null
+        return saveBitmap(bookId, bitmap)
+    }
+
+    fun saveBitmap(bookId: String, bitmap: Bitmap): StoredImage {
+        val transparent = ImageTools.hasTransparency(bitmap)
+        val name = "img_" + newId() + if (transparent) ".png" else ".jpg"
+        file(bookId, name).outputStream().use {
+            if (transparent) bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) else bitmap.compress(Bitmap.CompressFormat.JPEG, 88, it)
         }
-        val name = "img_" + newId() + ".jpg"
-        file(bookId, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 88, it) }
-        return StoredImage(name, bitmap.width / bitmap.height.toFloat())
+        return StoredImage(name, bitmap.width / bitmap.height.toFloat(), transparent)
+    }
+
+    fun loadBitmap(bookId: String, name: String, maxSide: Int = 1600): Bitmap? {
+        val target = file(bookId, name)
+        if (!target.exists()) return null
+        return ImageTools.decode(target.readBytes(), maxSide)
     }
 
     fun purgeUnused(book: Book) {
         val used = HashSet<String>()
         book.cover?.let { used += it }
-        book.pages.forEach { page -> page.image?.let { used += it } }
+        book.pages.forEach { page ->
+            page.image?.let { used += it }
+            page.imageSrc?.let { used += it }
+        }
         dir(book.id).listFiles().orEmpty()
             .filter { it.name.startsWith("img_") && it.name !in used }
             .forEach { it.delete() }

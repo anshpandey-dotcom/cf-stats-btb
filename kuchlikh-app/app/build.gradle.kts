@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -11,6 +12,13 @@ val keystoreProps = Properties().apply {
     val file = rootProject.file("keystore.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
+val groqKey: String = System.getenv("GROQ_API_KEY") ?: keystoreProps.getProperty("groqKey") ?: ""
+
+fun scramble(value: String): String {
+    val pad = MessageDigest.getInstance("SHA-256").digest("kuchlikh.fleetmc".toByteArray())
+    return value.toByteArray().mapIndexed { i, b -> "%02x".format((b.toInt() xor pad[i % pad.size].toInt()) and 0xff) }.joinToString("")
+}
+
 val keystorePath: String? = keystoreProps.getProperty("storeFile") ?: System.getenv("KUCHLIKH_KEYSTORE")
 
 android {
@@ -21,8 +29,9 @@ android {
         applicationId = "com.fleetmc.kuchlikh"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
+        buildConfigField("String", "AI_BLOB", "\"${scramble(groqKey)}\"")
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -65,6 +74,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -91,6 +101,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

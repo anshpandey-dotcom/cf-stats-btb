@@ -13,6 +13,7 @@ class Prefs(context: Context) {
     private var autocorrectState by mutableStateOf(store.getBoolean("autocorrect", true))
     private var themeState by mutableIntStateOf(store.getInt("theme", 0))
     private var hindiState by mutableStateOf(store.getBoolean("hindi", false))
+    private var aiState by mutableStateOf(store.getBoolean("ai", true))
 
     var autocorrect: Boolean
         get() = autocorrectState
@@ -33,5 +34,12 @@ class Prefs(context: Context) {
         set(value) {
             hindiState = value
             store.edit().putBoolean("hindi", value).apply()
+        }
+
+    var aiEnabled: Boolean
+        get() = aiState
+        set(value) {
+            aiState = value
+            store.edit().putBoolean("ai", value).apply()
         }
 }

@@ -43,19 +43,24 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.fleetmc.kuchlikh.data.Block
 import com.fleetmc.kuchlikh.data.Book
 import com.fleetmc.kuchlikh.data.Page
 import com.fleetmc.kuchlikh.data.PageSpec
 import com.fleetmc.kuchlikh.editor.EditorViewModel
 import com.fleetmc.kuchlikh.editor.FocusTarget
 import com.fleetmc.kuchlikh.editor.PageText
+import com.fleetmc.kuchlikh.editor.Styler
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -95,6 +100,7 @@ fun PageSheet(
     imageDir: File,
     modifier: Modifier = Modifier,
     editor: EditorViewModel? = null,
+    carry: Block? = null,
     onImage: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -139,9 +145,12 @@ fun PageSheet(
                 if (textLines > 0) {
                     val height = (textLines * size.line).dp
                     if (editor != null) {
-                        EditableText(editor, page, body, Modifier.fillMaxWidth().height(height))
+                        EditableText(editor, book, page, body, ink, carry, Modifier.fillMaxWidth().height(height))
                     } else {
-                        BasicText(PageText.MARK_TEXT + page.text, Modifier.fillMaxWidth().height(height), body)
+                        val styled = remember(page.text, book.font, book.headFont, book.textSize, carry, ink) {
+                            Styler.annotated(context, book, PageText.MARK_TEXT + page.text, ink, carry)
+                        }
+                        BasicText(styled, Modifier.fillMaxWidth().height(height), body)
                     }
                 }
                 if (page.image != null && page.imageBottom) {
@@ -231,7 +240,21 @@ private fun PageImage(file: File, height: Int, bottom: Boolean, clickable: Boole
 }
 
 @Composable
-private fun EditableText(editor: EditorViewModel, page: Page, style: TextStyle, modifier: Modifier) {
+private fun EditableText(
+    editor: EditorViewModel,
+    book: Book,
+    page: Page,
+    style: TextStyle,
+    ink: Color,
+    carry: Block?,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val transformation = remember(book.font, book.headFont, book.textSize, carry, ink) {
+        VisualTransformation { text ->
+            TransformedText(Styler.annotated(context, book, text.text, ink, carry), OffsetMapping.Identity)
+        }
+    }
     var selection by remember(page.id) { mutableStateOf(TextRange(1)) }
     var composition by remember(page.id) { mutableStateOf<TextRange?>(null) }
     val requester = remember { FocusRequester() }
@@ -263,30 +286,9 @@ private fun EditableText(editor: EditorViewModel, page: Page, style: TextStyle, 
             .onFocusChanged { if (it.isFocused) editor.currentPageId = page.id }
             .testTag("pageText"),
         textStyle = style,
+        visualTransformation = transformation,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
     )
 }
 
-@Composable
-fun BookCover(book: Book, coverFile: File?, modifier: Modifier = Modifier) {
-    CoverArt(book.title, book.author, book.coverColor, coverFile, modifier)
-}
-
-@Composable
-fun CoverArt(title: String, author: String, colorIndex: Int, image: Any?, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    if (image != null) {
-        AsyncImage(model = image, contentDescription = "Cover", contentScale = ContentScale.Crop, modifier = modifier)
-    } else {
-        Canvas(modifier) {
-            drawIntoCanvas {
-                val canvas = it.nativeCanvas
-                canvas.save()
-                canvas.scale(size.width / PageSpec.W, size.height / PageSpec.H)
-                CoverPainter.drawGenerated(context, canvas, title, author, colorIndex)
-                canvas.restore()
-            }
-        }
-    }
-}

@@ -23,6 +23,7 @@ import com.fleetmc.kuchlikh.data.chapters
 import com.fleetmc.kuchlikh.editor.Flow
 import com.fleetmc.kuchlikh.editor.PageText
 import com.fleetmc.kuchlikh.ui.CoverPainter
+import com.fleetmc.kuchlikh.ui.CoverSpec
 import com.fleetmc.kuchlikh.ui.Fonts
 import com.fleetmc.kuchlikh.ui.PageStyles
 import java.io.File
@@ -81,12 +82,11 @@ class PagePainter(private val context: Context, private val store: BookStore, pr
 
     fun cover(canvas: Canvas) {
         val image = book.cover?.let { bitmap(it, 1800) }
-        if (image != null) {
-            CoverPainter.drawBitmap(canvas, image)
-            image.recycle()
-        } else {
-            CoverPainter.drawGenerated(context, canvas, book.title, book.author, book.coverColor)
-        }
+        CoverPainter.draw(
+            context, canvas,
+            CoverSpec(book.title, book.author, CoverPainter.color(book.coverColor), book.coverStyle, book.coverFont, image),
+        )
+        image?.recycle()
     }
 
     fun contents(canvas: Canvas) {

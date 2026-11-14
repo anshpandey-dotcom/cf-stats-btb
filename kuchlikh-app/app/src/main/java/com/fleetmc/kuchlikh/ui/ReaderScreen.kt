@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fleetmc.kuchlikh.data.Blocks
 import com.fleetmc.kuchlikh.data.PageSpec
 import com.fleetmc.kuchlikh.editor.EditorViewModel
 
@@ -90,6 +91,7 @@ fun ReaderScreen(editor: EditorViewModel, onBack: () -> Unit) {
                             number = index,
                             chapterNumber = chapterNumbers[index - 1],
                             imageDir = imageDir,
+                            carry = Blocks.carry(book.pages, index - 1)?.takeIf { !it.sized },
                         )
                     }
                 }

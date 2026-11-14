@@ -3,6 +3,7 @@ package com.fleetmc.kuchlikh.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -145,6 +146,16 @@ fun SectionLabel(text: String) {
     )
 }
 
+class CoverEdit(
+    val title: String,
+    val author: String,
+    val color: Int,
+    val style: String,
+    val font: String,
+    val cover: Uri?,
+    val removeCover: Boolean,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookDetailsSheet(
@@ -153,13 +164,18 @@ fun BookDetailsSheet(
     initialTitle: String,
     initialAuthor: String,
     initialColor: Int,
+    initialStyle: String,
+    initialFont: String,
     existingCover: File?,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, author: String, color: Int, cover: Uri?, removeCover: Boolean) -> Unit,
+    onConfirm: (CoverEdit) -> Unit,
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf(initialTitle) }
     var author by remember { mutableStateOf(initialAuthor) }
     var color by remember { mutableIntStateOf(initialColor) }
+    var style by remember { mutableStateOf(initialStyle) }
+    var font by remember { mutableStateOf(initialFont) }
     var picked by remember { mutableStateOf<Uri?>(null) }
     var removed by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -169,18 +185,20 @@ fun BookDetailsSheet(
         }
     }
     val image: Any? = picked ?: existingCover?.takeIf { !removed }
+    if (image == null && style == "photo") style = "classic"
+    val pickPhoto = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
 
     Sheet(onDismiss, heading) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Row(Modifier.padding(horizontal = 24.dp)) {
                 CoverArt(
-                    title, author, color, image,
+                    title, author, color, style, font, image,
                     Modifier
-                        .width(104.dp)
+                        .width(112.dp)
                         .aspectRatio(PageSpec.W / PageSpec.H.toFloat())
                         .shadow(3.dp, RoundedCornerShape(4.dp))
                         .clip(RoundedCornerShape(4.dp))
-                        .clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        .clickable { pickPhoto() },
                 )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
@@ -203,37 +221,49 @@ fun BookDetailsSheet(
                     )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                    Text(if (image == null) "Choose cover photo" else "Change cover photo")
-                }
+                TextButton(onClick = { pickPhoto() }) { Text(if (image == null) "Add cover photo" else "Change photo") }
                 if (image != null) {
                     TextButton(onClick = {
                         picked = null
                         removed = true
-                    }) { Text("Remove") }
+                    }) { Text("Remove photo") }
                 }
             }
-            if (image == null) {
-                SectionLabel("Cover colour")
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CoverPainter.colors.forEachIndexed { index, value ->
-                        Box(
-                            Modifier.size(36.dp).clip(CircleShape).background(Color(value)).clickable { color = index },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (index == color) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        }
+            SectionLabel("Layout")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CoverPainter.styles.filter { it.first != "photo" || image != null }.forEach { (id, label) ->
+                    FilterChip(style == id, { style = id }, { Text(label) })
+                }
+            }
+            SectionLabel("Title font")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Fonts.all(context).forEach { key -> FilterChip(font == key, { font = key }, { Text(Fonts.label(key)) }) }
+            }
+            SectionLabel(if (image == null) "Cover colour" else "Accent colour")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CoverPainter.colors.forEachIndexed { index, value ->
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(Color(value)).clickable { color = index },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (index == color) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
             }
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { onConfirm(title.trim(), author.trim(), color, picked, removed) },
+                onClick = { onConfirm(CoverEdit(title.trim(), author.trim(), color, style, font, picked, removed)) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(48.dp).testTag("confirmBook"),
             ) { Text(confirm) }
         }
@@ -304,39 +334,71 @@ fun PageStyleSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TextStyleSheet(book: Book, onDismiss: () -> Unit, onChange: (font: String, size: Int, justify: Boolean) -> Unit) {
+fun TextStyleSheet(
+    book: Book,
+    onDismiss: () -> Unit,
+    onChange: (font: String, size: Int, justify: Boolean, headFont: String?) -> Unit,
+) {
+    val context = LocalContext.current
+    var fonts by remember { mutableStateOf(Fonts.all(context)) }
+    val addFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+        val key = Fonts.import(context, uri, name)
+        if (key == null) {
+            Toast.makeText(context, "That file isn't a usable font. Choose a .ttf or .otf file.", Toast.LENGTH_LONG).show()
+        } else {
+            fonts = Fonts.all(context)
+            onChange(key, book.textSize, book.justify, book.headFont)
+        }
+    }
     Sheet(onDismiss, "Text") {
-        SectionLabel("Typeface")
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Fonts.keys.forEach { key ->
-                FilterChip(book.font == key, { onChange(key, book.textSize, book.justify) }, { Text(Fonts.label(key)) })
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            SectionLabel("Typeface")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                fonts.forEach { key ->
+                    FilterChip(book.font == key, { onChange(key, book.textSize, book.justify, book.headFont) }, { Text(Fonts.label(key)) })
+                }
+                FilterChip(false, { addFont.launch(arrayOf("*/*")) }, { Text("+ Add font") })
             }
-        }
-        SectionLabel("Size")
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            PageSpec.sizeLabels.forEachIndexed { index, label ->
-                FilterChip(book.textSize == index, { onChange(book.font, index, book.justify) }, { Text(label) })
+            SectionLabel("Heading typeface")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(book.headFont == null, { onChange(book.font, book.textSize, book.justify, null) }, { Text("Same as text") })
+                fonts.forEach { key ->
+                    FilterChip(book.headFont == key, { onChange(book.font, book.textSize, book.justify, key) }, { Text(Fonts.label(key)) })
+                }
             }
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Justify text", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Align both edges like a printed book",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            SectionLabel("Size")
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PageSpec.sizeLabels.forEachIndexed { index, label ->
+                    FilterChip(book.textSize == index, { onChange(book.font, index, book.justify, book.headFont) }, { Text(label) })
+                }
             }
-            Switch(book.justify, { onChange(book.font, book.textSize, it) })
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Justify text", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Align both edges like a printed book",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(book.justify, { onChange(book.font, book.textSize, it, book.headFont) })
+            }
         }
     }
 }
@@ -423,109 +485,6 @@ fun ExportSheet(book: Book, onDismiss: () -> Unit) {
             SheetRow(Icons.Outlined.IosShare, "Share") {
                 build { file -> share(context, file, if (file.extension == "epub") "application/epub+zip" else "application/pdf") }
             }
-        }
-    }
-}
-
-@Composable
-fun TranslateSheet(editor: EditorViewModel, onDismiss: () -> Unit) {
-    val source = remember { editor.translationSource() }
-    val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
-    var stage by remember { mutableStateOf("checking") }
-    var result by remember { mutableStateOf("") }
-
-    fun run(source: TranslationSource) {
-        stage = "working"
-        scope.launch {
-            val translated = runCatching { HindiTranslator.translate(source.text) }.getOrNull()
-            if (translated == null) {
-                stage = "failed"
-            } else {
-                result = translated
-                stage = "done"
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        stage = when {
-            source == null || source.text.isBlank() -> "empty"
-            HindiTranslator.ready() -> {
-                run(source)
-                "working"
-            }
-            else -> "pack"
-        }
-    }
-
-    Sheet(onDismiss, "Translate to English") {
-        Column(Modifier.padding(horizontal = 24.dp)) {
-            when (stage) {
-                "empty" -> Text("Write something in Hindi or Hinglish on this page first.", style = MaterialTheme.typography.bodyMedium)
-                "checking", "working" -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(16.dp))
-                    Text("Translating…", style = MaterialTheme.typography.bodyMedium)
-                }
-                "pack" -> {
-                    Text(
-                        "Translation needs the Hindi language pack (about 30 MB). It downloads once, then works without internet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Button(onClick = {
-                        stage = "downloading"
-                        scope.launch {
-                            val ok = runCatching { HindiTranslator.download() }.isSuccess
-                            if (ok && source != null) run(source) else stage = "offline"
-                        }
-                    }) { Text("Download language pack") }
-                }
-                "downloading" -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(16.dp))
-                    Text("Downloading language pack…", style = MaterialTheme.typography.bodyMedium)
-                }
-                "offline" -> Text(
-                    "The language pack couldn't be downloaded. Check your connection and try again.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                "failed" -> Text("This text couldn't be translated.", style = MaterialTheme.typography.bodyMedium)
-                else -> {
-                    Text(
-                        if (source?.range != null) "Selected text" else "This page",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 280.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
-                    ) {
-                        Text(result, style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(result)) }, modifier = Modifier.weight(1f)) {
-                            Text("Copy")
-                        }
-                        Button(
-                            onClick = {
-                                source?.let { editor.replaceText(it, result) }
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Replace") }
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

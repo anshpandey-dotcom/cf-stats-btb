@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -75,6 +76,7 @@ fun LibraryScreen(onOpen: (String) -> Unit, onRead: (String) -> Unit, onSettings
     var selected by remember { mutableStateOf<Book?>(null) }
     var deleting by remember { mutableStateOf<Book?>(null) }
     var exporting by remember { mutableStateOf<Book?>(null) }
+    var restyling by remember { mutableStateOf<Book?>(null) }
 
     LaunchedEffect(version) {
         books = withContext(Dispatchers.IO) { store.list() }
@@ -187,19 +189,20 @@ fun LibraryScreen(onOpen: (String) -> Unit, onRead: (String) -> Unit, onSettings
             initialTitle = "",
             initialAuthor = "",
             initialColor = (books?.size ?: 0) % CoverPainter.colors.size,
+            initialStyle = "classic",
+            initialFont = "serif",
             existingCover = null,
             onDismiss = { creating = false },
-        ) { title, author, color, cover, _ ->
+        ) { edit ->
             creating = false
             scope.launch {
                 val id = withContext(Dispatchers.IO) {
-                    var book = store.create(title.ifBlank { "Untitled" }, author, color)
-                    if (cover != null) {
-                        runCatching { store.importImage(book.id, cover) }.getOrNull()?.let {
-                            book = book.copy(cover = it.name)
-                            store.save(book)
-                        }
+                    var book = store.create(edit.title.ifBlank { "Untitled" }, edit.author, edit.color)
+                    book = book.copy(coverStyle = edit.style, coverFont = edit.font)
+                    if (edit.cover != null) {
+                        runCatching { store.importImage(book.id, edit.cover) }.getOrNull()?.let { book = book.copy(cover = it.name) }
                     }
+                    store.save(book)
                     book.id
                 }
                 onOpen(id)
@@ -212,6 +215,10 @@ fun LibraryScreen(onOpen: (String) -> Unit, onRead: (String) -> Unit, onSettings
             SheetRow(Icons.Outlined.Edit, "Write") {
                 selected = null
                 onOpen(book.id)
+            }
+            SheetRow(Icons.Outlined.Palette, "Edit cover", "Layout, font, colour and photo") {
+                selected = null
+                restyling = book
             }
             SheetRow(Icons.AutoMirrored.Outlined.MenuBook, "Read") {
                 selected = null
@@ -236,6 +243,41 @@ fun LibraryScreen(onOpen: (String) -> Unit, onRead: (String) -> Unit, onSettings
     }
 
     exporting?.let { book -> ExportSheet(book) { exporting = null } }
+
+    restyling?.let { book ->
+        BookDetailsSheet(
+            heading = "Edit cover",
+            confirm = "Save",
+            initialTitle = book.title,
+            initialAuthor = book.author,
+            initialColor = book.coverColor,
+            initialStyle = book.coverStyle,
+            initialFont = book.coverFont,
+            existingCover = book.cover?.let { store.file(book.id, it) },
+            onDismiss = { restyling = null },
+        ) { edit ->
+            restyling = null
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    var updated = book.copy(
+                        title = edit.title.ifBlank { "Untitled" },
+                        author = edit.author,
+                        coverColor = edit.color,
+                        coverStyle = edit.style,
+                        coverFont = edit.font,
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    if (edit.removeCover) updated = updated.copy(cover = null)
+                    if (edit.cover != null) {
+                        runCatching { store.importImage(book.id, edit.cover) }.getOrNull()?.let { updated = updated.copy(cover = it.name) }
+                    }
+                    store.save(updated)
+                    store.purgeUnused(updated)
+                }
+                version++
+            }
+        }
+    }
 
     deleting?.let { book ->
         AlertDialog(
