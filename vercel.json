@@ -1,12 +1,44 @@
 {
   "redirects": [
-    { "source": "/bc-07b66425200ba7ac", "destination": "/bc-07b66425200ba7ac/", "permanent": false }
+    {
+      "source": "/bc-07b66425200ba7ac",
+      "destination": "/bc-07b66425200ba7ac/",
+      "permanent": false
+    },
+    {
+      "source": "/xray",
+      "destination": "/xray/",
+      "permanent": false
+    }
   ],
   "rewrites": [
-    { "source": "/bc-07b66425200ba7ac/", "destination": "/blockcut-app/app/src/main/assets/www/index.html" },
-    { "source": "/bc-07b66425200ba7ac/:path*", "destination": "/blockcut-app/app/src/main/assets/www/:path*" }
+    {
+      "source": "/bc-07b66425200ba7ac/",
+      "destination": "/blockcut-app/app/src/main/assets/www/index.html"
+    },
+    {
+      "source": "/bc-07b66425200ba7ac/:path*",
+      "destination": "/blockcut-app/app/src/main/assets/www/:path*"
+    }
   ],
   "headers": [
-    { "source": "/blockcut-app/app/src/main/assets/www/stories/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    {
+      "source": "/blockcut-app/app/src/main/assets/www/stories/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/xray/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self)"
+        }
+      ]
+    }
   ]
 }
