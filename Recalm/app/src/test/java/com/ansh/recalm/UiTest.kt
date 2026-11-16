@@ -105,12 +105,32 @@ class UiTest {
             page.blocks.forEach { println("  [${it.kind}] ${it.text.take(90)}") }
             page.words.take(6).forEach { w -> println("  word '${page.blocks[w.b].text.substring(w.s, w.e)}' at %.2f,%.2f-%.2f,%.2f".format(w.x0, w.y0, w.x1, w.y1)) }
             if (name == "english.pdf") {
-                assertEquals(false, page.ocr)
+                assertEquals(false, page.pending)
                 org.junit.Assert.assertTrue(page.words.size > 20)
             } else {
-                assertEquals(true, page.ocr)
+                assertEquals(true, page.pending)
             }
         }
+    }
+
+    @Test
+    fun backupAndRestoreRoundTrip() {
+        val book = sampleBook()
+        app.library.saveProgress(book.id, 2, 0)
+        app.settings.update { it.copy(speed = 1.3f, musicVolume = 0.2f) }
+        val backup = File(app.cacheDir, "test-backup.zip")
+        app.backups.export(android.net.Uri.fromFile(backup)) { _, _ -> }
+        org.junit.Assert.assertTrue(backup.length() > 200)
+        app.library.delete(book.id)
+        app.settings.update { it.copy(speed = 0.7f) }
+        org.junit.Assert.assertTrue(app.library.book(book.id) == null)
+        val result = app.backups.restore(android.net.Uri.fromFile(backup)) { _, _ -> }
+        assertEquals(1, result.added)
+        val restored = app.library.book(book.id)!!
+        assertEquals(2, restored.page)
+        assertEquals(3, app.library.pages(book.id).size)
+        assertEquals(1.3f, app.settings.value.speed)
+        println("backup bytes=${backup.length()} restored=${restored.title} page=${restored.page}")
     }
 
     @Test

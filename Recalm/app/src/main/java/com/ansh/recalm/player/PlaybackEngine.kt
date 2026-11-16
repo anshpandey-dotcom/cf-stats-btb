@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.ansh.recalm.data.Library
 import com.ansh.recalm.data.Sentences
 import com.ansh.recalm.data.Settings
+import com.ansh.recalm.importer.OcrWorker
 import com.ansh.recalm.tts.EnglishG2p
 import com.ansh.recalm.tts.Engine
 import com.ansh.recalm.tts.KokoroSynthesizer
@@ -54,7 +55,7 @@ data class PlayerState(
     val musicPlaying: Boolean = false
 )
 
-private class Spoken(val page: Int, val sentence: Int, val base: Int, val utterance: Utterance)
+private class Spoken(val page: Int, val sentence: Int, val base: Int, val utterance: Utterance, val pause: Float)
 
 private class Written(val startFrame: Long, val spoken: Spoken)
 
@@ -62,7 +63,8 @@ class PlaybackEngine(
     private val context: Context,
     private val library: Library,
     private val settings: Settings,
-    private val voices: VoiceManager
+    private val voices: VoiceManager,
+    private val scanner: OcrWorker
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -331,28 +333,45 @@ class PlaybackEngine(
             }
             return
         }
-        val pages = library.pages(bookId)
-        if (pages.isEmpty()) return
-        val queue = Channel<Spoken>(capacity = 3)
+        if (library.pages(bookId).isEmpty()) return
+        val queue = Channel<Spoken>(capacity = 6)
         val speed = settings.value.speed
         val producer = scope.launch(synthDispatcher) {
-            var page = startPage.coerceIn(0, pages.size - 1)
+            var page = startPage.coerceIn(0, library.pages(bookId).size - 1)
             var sentence = startSentence
             var skipChars = startOffset.coerceAtLeast(0)
+            var first = true
             try {
-                while (isActive && page < pages.size) {
-                    val refs = Sentences.forPage(pages[page])
+                while (isActive) {
+                    var pages = library.pages(bookId)
+                    if (page >= pages.size) break
+                    scanner.focus(bookId, page)
+                    if (pages[page].pending) {
+                        _state.update { it.copy(loading = "Scanning page ${page + 1}") }
+                        while (isActive && library.pages(bookId).getOrNull(page)?.pending == true) delay(250)
+                        _state.update { it.copy(loading = null) }
+                        pages = library.pages(bookId)
+                    }
+                    val current = pages[page]
+                    val refs = Sentences.forPage(current)
                     while (isActive && sentence < refs.size) {
                         val ref = refs[sentence]
-                        val from = (ref.start + skipChars).coerceAtMost(ref.end)
+                        val from = (ref.start + skipChars).coerceIn(ref.start, ref.end)
                         skipChars = 0
-                        val text = pages[page].blocks[ref.block].text.substring(from, ref.end)
-                        val speakable = text.any { it.isLetterOrDigit() } && !settings.shouldSkip(ref.kind)
+                        val text = current.blocks[ref.block].text
+                        val speakable = !settings.shouldSkip(ref.kind) && (from until ref.end).any { text[it].isLetterOrDigit() }
                         if (speakable) {
-                            val utterance = runCatching { engine.speak(text, speed) }.getOrNull()
-                            if (utterance != null && utterance.samples.isNotEmpty()) {
+                            val parts = Phrases.split(text, from, ref.end, if (first) 70 else 150)
+                            for ((index, range) in parts.withIndex()) {
+                                val piece = text.substring(range.first, range.last + 1)
+                                if (piece.none { it.isLetterOrDigit() }) continue
+                                val utterance = runCatching { engine.speak(piece, speed) }.getOrNull() ?: continue
+                                if (utterance.samples.isEmpty()) continue
                                 boost(utterance.samples)
-                                queue.send(Spoken(page, sentence, from, utterance))
+                                val last = index == parts.size - 1
+                                val pause = if (last) 0.22f else if (piece.trimEnd().lastOrNull()?.let { it in ",;:—" } == true) 0.08f else 0.02f
+                                queue.send(Spoken(page, sentence, range.first, utterance, pause))
+                                first = false
                             }
                         }
                         sentence++
@@ -373,7 +392,7 @@ class PlaybackEngine(
             if (!paused) out.play()
             for (item in queue) {
                 synchronized(written) { written.addLast(Written(total, item)) }
-                val pause = if (item.utterance.samples.size > 0) (engine.sampleRate * 0.18f).toInt() else 0
+                val pause = (engine.sampleRate * item.pause).toInt()
                 writeAll(out, item.utterance.samples)
                 writeAll(out, FloatArray(pause))
                 total += item.utterance.samples.size + pause
@@ -384,7 +403,7 @@ class PlaybackEngine(
                 delay(100)
             }
             if (currentCoroutineContext().isActive) {
-                val last = pages.size - 1
+                val last = library.pages(bookId).size - 1
                 library.saveProgress(bookId, last, 0)
                 _state.update { it.copy(playing = false, active = false, wordStart = -1, wordEnd = -1) }
                 if (!settings.value.keepMusicAfterVoice) {
@@ -395,6 +414,15 @@ class PlaybackEngine(
         } finally {
             producer.cancel()
             ticker.cancel()
+        }
+    }
+
+    fun warmUp() {
+        scope.launch {
+            control.withLock {
+                if (!_state.value.active) runCatching { loadSynth() }
+                _state.update { it.copy(loading = null) }
+            }
         }
     }
 

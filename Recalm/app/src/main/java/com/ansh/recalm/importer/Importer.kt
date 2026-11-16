@@ -57,6 +57,8 @@ class Importer(private val context: Context, private val library: Library) {
         PDFBoxResourceLoader.init(context.applicationContext)
     }
 
+    var afterImport: (String) -> Unit = {}
+
     private val recognizer by lazy { TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build()) }
 
     fun prepare(uri: Uri): PendingImport {
@@ -109,9 +111,11 @@ class Importer(private val context: Context, private val library: Library) {
             pageCount = pages.size,
             createdAt = System.currentTimeMillis(),
             lastOpened = System.currentTimeMillis(),
-            hasCover = cover != null
+            hasCover = cover != null,
+            pending = pages.count { it.pending || it.scanImages }
         )
         library.add(book, pages)
+        afterImport(book.id)
         return book
     }
 
@@ -207,7 +211,7 @@ class Importer(private val context: Context, private val library: Library) {
     private fun readPdf(file: File, onProgress: (Float, String) -> Unit): List<Page> {
         val raw = mutableListOf<String>()
         val rawWords = mutableListOf<List<RawWord>>()
-        val imageText = HashMap<Int, List<String>>()
+        val withImages = HashSet<Int>()
         PDDocument.load(file, MemoryUsageSetting.setupTempFileOnly()).use { doc ->
             val stripper = PositionStripper()
             val total = doc.numberOfPages
@@ -218,41 +222,38 @@ class Importer(private val context: Context, private val library: Library) {
                 val text = runCatching { stripper.getText(doc) }.getOrDefault("")
                 raw += text
                 rawWords += stripper.words.toList()
-                if (text.count { it.isLetter() } >= 25 && !TextCleaner.looksBroken(TextCleaner.fixDevanagariOrder(text))) {
-                    val found = runCatching { textInImages(doc.getPage(p - 1).resources, text, 0) }.getOrDefault(emptyList())
-                    if (found.isNotEmpty()) imageText[p - 1] = found
-                }
-                onProgress(p.toFloat() / total * 0.5f, "Reading page $p of $total")
+                if (runCatching { hasLargeImage(doc.getPage(p - 1).resources, 0) }.getOrDefault(false)) withImages += p - 1
+                if (p % 4 == 0 || p == total) onProgress(p.toFloat() / total, "Reading page $p of $total")
             }
         }
         val needOcr = raw.indices.filter { i ->
             raw[i].count { it.isLetter() } < 25 || TextCleaner.looksBroken(TextCleaner.fixDevanagariOrder(raw[i]))
-        }
-        if (needOcr.isNotEmpty()) {
-            val broken = needOcr.count { raw[it].count { c -> c.isLetter() } >= 25 }
-            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-                PdfRenderer(fd).use { renderer ->
-                    needOcr.forEachIndexed { n, index ->
-                        val why = if (broken > 0) "Fixing broken Hindi text" else "Scanning"
-                        onProgress(0.5f + 0.5f * n / needOcr.size, "$why: page ${index + 1} of ${raw.size}")
-                        val (text, words) = ocrPage(renderer, index)
-                        raw[index] = text
-                        rawWords[index] = words
-                    }
-                }
-            }
-        }
-        val pages = TextCleaner.buildPages(raw)
-        return pages.mapIndexed { i, page ->
+        }.toSet()
+        val textIndices = raw.indices.filter { it !in needOcr }
+        val built = TextCleaner.buildPages(textIndices.map { raw[it] })
+        val pages = arrayOfNulls<Page>(raw.size)
+        textIndices.forEachIndexed { n, i ->
+            val page = built[n]
             val words = runCatching { TextCleaner.alignWords(page.blocks, rawWords[i]) }.getOrDefault(emptyList())
-            val extra = imageText[i].orEmpty().map { Block(it, BlockKind.IMAGE_TEXT) }
-            page.copy(blocks = page.blocks + extra, words = words, ocr = i in needOcr)
+            pages[i] = page.copy(source = i, words = words, scanImages = i in withImages)
         }
+        for (i in needOcr) pages[i] = Page(emptyList(), source = i, pending = true)
+        return pages.map { it!! }
+    }
+
+    private fun hasLargeImage(resources: PDResources?, depth: Int): Boolean {
+        if (resources == null || depth > 2) return false
+        for (name in resources.xObjectNames) {
+            val obj = runCatching { resources.getXObject(name) }.getOrNull() ?: continue
+            if (obj is PDImageXObject && obj.width >= 160 && obj.height >= 60) return true
+            if (obj is PDFormXObject && hasLargeImage(obj.resources, depth + 1)) return true
+        }
+        return false
     }
 
     private fun normalizeForCompare(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
 
-    private fun textInImages(resources: PDResources?, pageText: String, depth: Int): List<String> {
+    fun textInImages(resources: PDResources?, pageText: String, depth: Int): List<String> {
         if (resources == null || depth > 2) return emptyList()
         val known = normalizeForCompare(pageText)
         val out = mutableListOf<String>()
@@ -308,25 +309,10 @@ class Importer(private val context: Context, private val library: Library) {
         text to words
     }.getOrDefault("" to emptyList())
 
-    fun ocrWholeBook(book: Book, onProgress: (Float, String) -> Unit): List<Page> {
-        val file = library.sourceFile(book)
-        val raw = mutableListOf<String>()
-        val rawWords = mutableListOf<List<RawWord>>()
-        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-            PdfRenderer(fd).use { renderer ->
-                for (i in 0 until renderer.pageCount) {
-                    onProgress(i.toFloat() / renderer.pageCount, "Scanning page ${i + 1} of ${renderer.pageCount}")
-                    val (text, words) = ocrPage(renderer, i)
-                    raw += text
-                    rawWords += words
-                }
-            }
-        }
-        val pages = TextCleaner.buildPages(raw).mapIndexed { i, page ->
-            page.copy(ocr = true, words = TextCleaner.alignWords(page.blocks, rawWords[i]))
-        }
+    fun ocrWholeBook(book: Book) {
+        val pages = library.pages(book.id).mapIndexed { i, p -> Page(emptyList(), source = if (p.source >= 0) p.source else i, pending = true) }
+        File(library.dir(book.id), "ocr.json").delete()
         save(book, pages)
-        return pages
     }
 
     fun reprocess(book: Book, onProgress: (Float, String) -> Unit): List<Page> {
@@ -336,6 +322,7 @@ class Importer(private val context: Context, private val library: Library) {
             "epub" -> readEpub(file, onProgress)
             else -> readText(file)
         }.ifEmpty { listOf(Page(listOf(Block("This file has no readable text.", BlockKind.BODY)))) }
+        File(library.dir(book.id), "ocr.json").delete()
         save(book, pages)
         return pages
     }
@@ -343,8 +330,9 @@ class Importer(private val context: Context, private val library: Library) {
     private fun save(book: Book, pages: List<Page>) {
         library.writePages(book.id, pages)
         library.update(book.id) {
-            it.copy(pageCount = pages.size, page = it.page.coerceAtMost(pages.size - 1), sentence = if (it.page < pages.size) it.sentence else 0)
+            it.copy(pageCount = pages.size, pending = pages.count { p -> p.pending || p.scanImages }, page = it.page.coerceAtMost(pages.size - 1), sentence = if (it.page < pages.size) it.sentence else 0)
         }
+        afterImport(book.id)
     }
 
     private fun readText(file: File): List<Page> {

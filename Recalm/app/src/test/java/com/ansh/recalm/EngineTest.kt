@@ -99,6 +99,19 @@ class EngineTest {
     }
 
     @Test
+    fun longSentencesStreamInShortPhrases() {
+        val text = "Psychology is the science of behavior and mental processes, and it asks why people act, feel and think the way they do, which is why researchers study memory, sleep, attention and emotion in careful experiments that last for many years."
+        val parts = com.ansh.recalm.player.Phrases.split(text, 0, text.length, 70)
+        assertTrue(parts.size >= 3)
+        assertTrue(parts.first().count() <= 110)
+        assertEquals(text.replace(Regex("\\s+"), ""), parts.joinToString("") { text.substring(it.first, it.last + 1) }.replace(Regex("\\s+"), ""))
+        val short = "Good night."
+        assertEquals(listOf(0 until short.length), com.ansh.recalm.player.Phrases.split(short, 0, short.length, 70))
+        val fromMiddle = com.ansh.recalm.player.Phrases.split(text, 50, text.length, 70)
+        assertEquals(50, fromMiddle.first().first)
+    }
+
+    @Test
     fun copyrightPageIsMarked() {
         val raw = listOf(
             "PUBLISHED BY:\nTHE GREAT COURSES\nCorporate Headquarters\n4840 Westfields Boulevard, Suite 500\nChantilly, Virginia 20151-2299\nPhone: 1-800-832-2412\nwww.thegreatcourses.com\n\nCopyright © The Teaching Company, 2006\nPrinted in the United States of America\nThis book is in copyright. All rights reserved.",

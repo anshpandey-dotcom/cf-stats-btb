@@ -42,6 +42,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.ansh.recalm.tts.VoiceCatalog
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, openVoices: () -> Unit) {
@@ -62,6 +69,21 @@ fun SettingsScreen(onBack: () -> Unit, openVoices: () -> Unit) {
         }
     }
     var speedOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var backupProgress by remember { mutableStateOf<String?>(null) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val createBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) {
+            backupProgress = "Preparing backup"
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { runCatching { app.backups.export(uri) { _, m -> backupProgress = m } } }
+                backupProgress = null
+                backupMessage = result.fold({ "Backup saved. Keep this file somewhere safe, like Google Drive." }, { "Backup failed: ${it.message}" })
+            }
+        }
+    }
+    val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) restoreUri = uri }
     if (speedOpen) SpeedSheet(onDismiss = { speedOpen = false })
     val voiceName = VoiceCatalog.voice(prefs.voiceId)?.let { "${it.name} · ${it.accent}" }
         ?: custom.firstOrNull { it.id == prefs.voiceId }?.name ?: "Not chosen"
@@ -102,15 +124,66 @@ fun SettingsScreen(onBack: () -> Unit, openVoices: () -> Unit) {
             else context.startActivity(Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName))
         }
 
+        Group("Backup & restore")
+        LinkRow("Create backup", "Saves all books, reading progress, settings and your own voices into one file.") {
+            createBackup.launch("Recalm backup ${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}.zip")
+        }
+        LinkRow("Restore from backup", "Adds books from a backup and brings back progress and settings. Nothing is deleted.") {
+            pickBackup.launch(arrayOf("application/zip", "application/octet-stream"))
+        }
+
         Group("About")
         Text(
-            "Recalm 1.0\nVoices: Kokoro (Apache 2.0) and Piper (MIT), running offline through sherpa-onnx.\nText recognition: ML Kit, on device.\nYour books and progress stay on your phone.",
+            "Recalm ${com.ansh.recalm.BuildConfig.VERSION_NAME}\nVoices: Kokoro (Apache 2.0) and Piper (MIT), running offline through sherpa-onnx.\nText recognition: ML Kit, on device.\nYour books and progress stay on your phone.",
             style = MaterialTheme.typography.bodySmall, color = Palette.Muted
         )
         Row(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
             RecalmLogo(Modifier.size(56.dp))
         }
         MadeByFooter(Modifier.navigationBarsPadding())
+    }
+
+    restoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { restoreUri = null },
+            title = { Text("Restore this backup?") },
+            text = { Text("Books in the backup that are not on this phone will be added. Reading progress is updated where the backup is newer. Your current books stay.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    restoreUri = null
+                    backupProgress = "Opening backup"
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { runCatching { app.backups.restore(uri) { _, m -> backupProgress = m } } }
+                        backupProgress = null
+                        backupMessage = result.fold(
+                            { "Restored. ${it.added} book(s) added, ${it.updated} progress update(s). Download voices again from Voices if this is a new phone." },
+                            { "Could not restore: ${it.message}" }
+                        )
+                    }
+                }) { Text("Restore") }
+            },
+            dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("Cancel") } }
+        )
+    }
+    backupProgress?.let { message ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Please wait") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Palette.Mint)
+                    Text(message, modifier = Modifier.padding(start = 14.dp), maxLines = 2)
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    backupMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { backupMessage = null },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { backupMessage = null }) { Text("OK") } }
+        )
     }
 }
 

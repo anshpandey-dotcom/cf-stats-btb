@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -18,6 +19,9 @@ class Library(context: Context) {
     private val pageCache = object : LinkedHashMap<String, List<Page>>(4, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Page>>?) = size > 2
     }
+
+    private val _revisions = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val revisions: StateFlow<Map<String, Int>> = _revisions.asStateFlow()
 
     private val _books = MutableStateFlow(load())
     val books: StateFlow<List<Book>> = _books.asStateFlow()
@@ -74,6 +78,21 @@ class Library(context: Context) {
         tmp.writeText(json.encodeToString(ListSerializer(Page.serializer()), pages))
         tmp.renameTo(File(d, "pages.json"))
         synchronized(pageCache) { pageCache[id] = pages }
+        _revisions.update { it + (id to ((it[id] ?: 0) + 1)) }
+    }
+
+    @Synchronized
+    fun merge(added: List<Book>, progress: Map<String, Book>) {
+        val current = _books.value.map { book ->
+            progress[book.id]?.let { b -> book.copy(page = b.page, sentence = b.sentence, lastOpened = b.lastOpened) } ?: book
+        }
+        save(added.filter { a -> current.none { it.id == a.id } } + current)
+    }
+
+    fun reloadIndex() {
+        _books.value = load()
+        synchronized(pageCache) { pageCache.clear() }
+        _revisions.update { r -> r.mapValues { it.value + 1 } }
     }
 
     fun saveCover(id: String, bitmap: Bitmap) {

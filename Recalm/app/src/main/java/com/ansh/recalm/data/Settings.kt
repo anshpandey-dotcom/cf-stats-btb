@@ -72,6 +72,33 @@ class Settings(context: Context) {
         _state.value = p
     }
 
+    data class Snapshot(
+        val strings: Map<String, String>,
+        val floats: Map<String, Float>,
+        val ints: Map<String, Int>,
+        val booleans: Map<String, Boolean>
+    )
+
+    fun snapshot(): Snapshot {
+        val all = prefs.all
+        return Snapshot(
+            all.filterValues { it is String }.mapValues { it.value as String },
+            all.filterValues { it is Float }.mapValues { it.value as Float },
+            all.filterValues { it is Int }.mapValues { it.value as Int },
+            all.filterValues { it is Boolean }.mapValues { it.value as Boolean }
+        )
+    }
+
+    fun restore(snapshot: Snapshot) {
+        val editor = prefs.edit()
+        snapshot.strings.forEach { (k, v) -> editor.putString(k, v) }
+        snapshot.floats.forEach { (k, v) -> editor.putFloat(k, v) }
+        snapshot.ints.forEach { (k, v) -> editor.putInt(k, v) }
+        snapshot.booleans.forEach { (k, v) -> editor.putBoolean(k, v) }
+        editor.commit()
+        _state.value = read()
+    }
+
     fun shouldSkip(kind: Int, p: Preferences = value): Boolean = when (kind) {
         BlockKind.QUESTION, BlockKind.EXERCISE -> p.skipQuestions
         BlockKind.ACTIVITY -> p.skipActivities

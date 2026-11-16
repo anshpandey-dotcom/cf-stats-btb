@@ -168,9 +168,14 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
 
     var pages by remember { mutableStateOf<List<Page>?>(null) }
     var reload by remember { mutableStateOf(0) }
-    LaunchedEffect(bookId, reload) {
+    val revisions by app.library.revisions.collectAsState()
+    val scanProgress by app.scanner.progress.collectAsState()
+    LaunchedEffect(bookId, reload, revisions[bookId]) {
         pages = withContext(Dispatchers.IO) { app.library.pages(bookId) }
+    }
+    LaunchedEffect(bookId) {
         app.library.update(bookId) { it.copy(lastOpened = System.currentTimeMillis()) }
+        app.engine.warmUp()
     }
     val loaded = pages
     val colors = readerThemes[prefs.readerTheme.coerceIn(0, readerThemes.size - 1)].second
@@ -194,7 +199,11 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
     var reprocessConfirm by remember { mutableStateOf(false) }
     fun playFrom(pageIndex: Int, block: Int, offset: Int) {
         val refs = Sentences.forPage(loaded[pageIndex])
-        if (refs.isEmpty()) return
+        if (refs.isEmpty()) {
+            follow = true
+            app.engine.play(bookId, pageIndex, 0)
+            return
+        }
         val idx = refs.indexOfFirst { it.block == block && offset < it.end }.takeIf { it >= 0 }
             ?: refs.indexOfLast { it.block <= block }.coerceAtLeast(0)
         val within = (offset - refs[idx].start).coerceAtLeast(0)
@@ -216,6 +225,7 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
     val listeningNow by rememberUpdatedState(listening)
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
+            if (app.library.pages(bookId).getOrNull(page)?.pending == true) app.scanner.focus(bookId, page)
             if (!listeningNow) app.library.update(bookId) { it.copy(page = page, sentence = if (it.page == page) it.sentence else 0) }
             else if (page != app.engine.state.value.page) follow = false
         }
@@ -233,7 +243,8 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = colors.text) }
                 Column(Modifier.weight(1f)) {
                     Text(book.title, color = colors.text, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("Page ${pagerState.currentPage + 1} of ${loaded.size}" + if (loaded[pagerState.currentPage].ocr) "  ·  scanned" else "",
+                    val scan = scanProgress[bookId]
+                    Text("Page ${pagerState.currentPage + 1} of ${loaded.size}" + if (scan != null && book.pending > 0) "  ·  scanning ${scan.done}/${scan.total}" else "",
                         color = colors.dim, style = MaterialTheme.typography.bodySmall)
                 }
                 if (pdf != null) {
@@ -373,10 +384,12 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                 musicOn = player.musicPlaying,
                 onPlay = {
                     follow = true
+                    val shown = pagerState.currentPage
                     when {
-                        listening -> app.engine.toggle()
-                        pagerState.currentPage == book.page -> app.engine.play(bookId, book.page, book.sentence)
-                        else -> app.engine.play(bookId, pagerState.currentPage, 0)
+                        listening && player.playing -> app.engine.pause()
+                        listening && shown == player.page -> app.engine.resume()
+                        shown == book.page -> app.engine.play(bookId, shown, book.sentence)
+                        else -> app.engine.play(bookId, shown, 0)
                     }
                 },
                 onPrev = { if (listening) app.engine.skipSentence(-1) else scope.launch { pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0)) } },
@@ -463,7 +476,7 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
         AlertDialog(
             onDismissRequest = { ocrConfirm = false },
             title = { Text("Re-read pages with OCR?") },
-            text = { Text("Use this if Hindi text looks jumbled or the voice reads nonsense. Recalm will look at every page like a photo and read the letters again. It can take a few minutes for big books.") },
+            text = { Text("Use this if Hindi text looks jumbled or the voice reads nonsense. Recalm will read every page again like a photo, in the background, starting from the page you are on. You can keep reading and listening meanwhile.") },
             confirmButton = {
                 TextButton(onClick = {
                     ocrConfirm = false
@@ -471,7 +484,7 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
                     ocrProgress = 0f to "Starting"
                     scope.launch {
                         withContext(Dispatchers.IO) {
-                            runCatching { app.importer.ocrWholeBook(book) { f, m -> ocrProgress = f to m } }
+                            runCatching { app.importer.ocrWholeBook(book) }
                         }
                         ocrProgress = null
                         reload++
@@ -539,7 +552,15 @@ private fun OriginalPage(
                                     val cy = (it.y0 + it.y1) / 2
                                     (cx - x) * (cx - x) + (cy - y) * (cy - y) * 4
                                 }?.takeIf { val cy = (it.y0 + it.y1) / 2; kotlin.math.abs(cy - y) < 0.03f }
-                            if (hit != null) onTapWord(hit.b, hit.s) else onTapEmpty()
+                            when {
+                                hit != null -> onTapWord(hit.b, hit.s)
+                                page.pending -> onTapWord(0, 0)
+                                page.words.isEmpty() && refs.isNotEmpty() -> {
+                                    val ref = refs[(y * refs.size).toInt().coerceIn(0, refs.size - 1)]
+                                    onTapWord(ref.block, ref.start)
+                                }
+                                else -> onTapEmpty()
+                            }
                         }
                     }
             ) {
@@ -604,7 +625,15 @@ private fun TextPage(
         contentPadding = PaddingValues(start = 30.dp, end = 24.dp, top = 10.dp, bottom = 90.dp),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTapEmpty() } }
     ) {
-        if (page.blocks.isEmpty()) {
+        if (page.pending) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 24.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Palette.Mint)
+                    Text("Reading this page with OCR. It will appear in a moment.", color = colors.dim, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 12.dp))
+                }
+            }
+        } else if (page.blocks.isEmpty()) {
             item { Text("This page has no text. It may be a picture.", color = colors.dim, style = ReadingStyle) }
         }
         itemsIndexed(page.blocks) { blockIndex, block ->
@@ -614,9 +643,9 @@ private fun TextPage(
                 sentences = sentences,
                 colors = colors,
                 fontScale = fontScale,
-                activeSentence = activeSentence,
-                wordStart = wordStart,
-                wordEnd = wordEnd,
+                activeSentence = if (activeBlock == blockIndex) activeSentence else -1,
+                wordStart = if (activeBlock == blockIndex) wordStart else -1,
+                wordEnd = if (activeBlock == blockIndex) wordEnd else -1,
                 skipped = skip(block.kind),
                 onTapWord = onTapWord
             )

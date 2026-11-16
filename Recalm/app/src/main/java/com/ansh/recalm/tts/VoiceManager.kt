@@ -266,6 +266,10 @@ class VoiceManager(private val context: Context) {
         }
     }
 
+    fun refreshCustom() {
+        _custom.value = loadCustom()
+    }
+
     fun deleteCustom(id: String) {
         customDir(id).deleteRecursively()
         _custom.value = loadCustom()

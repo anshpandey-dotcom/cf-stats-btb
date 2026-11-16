@@ -20,9 +20,17 @@ data class Block(val text: String, val kind: Int = BlockKind.BODY)
 data class WordBox(val b: Int, val s: Int, val e: Int, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
 
 @Serializable
-data class Page(val blocks: List<Block>, val source: Int = -1, val ocr: Boolean = false, val words: List<WordBox> = emptyList())
+data class Page(
+    val blocks: List<Block>,
+    val source: Int = -1,
+    val ocr: Boolean = false,
+    val words: List<WordBox> = emptyList(),
+    val pending: Boolean = false,
+    val scanImages: Boolean = false
+)
 
-class RawWord(val text: String, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
+@Serializable
+data class RawWord(val text: String, val x0: Float, val y0: Float, val x1: Float, val y1: Float)
 
 @Serializable
 data class Book(
@@ -34,7 +42,8 @@ data class Book(
     val lastOpened: Long = 0L,
     val page: Int = 0,
     val sentence: Int = 0,
-    val hasCover: Boolean = false
+    val hasCover: Boolean = false,
+    val pending: Int = 0
 ) {
     val progress: Float get() = if (pageCount <= 1) (if (page > 0) 1f else 0f) else page.toFloat() / (pageCount - 1)
 }
