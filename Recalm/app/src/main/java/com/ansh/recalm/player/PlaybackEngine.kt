@@ -96,19 +96,23 @@ class PlaybackEngine(
         }
     }
 
-    fun play(bookId: String, page: Int, sentence: Int, offset: Int = 0) {
+    @Volatile private var epoch = 0
+
+    fun play(bookId: String, page: Int, sentence: Int, offset: Int = 0, explicit: Boolean = false) {
+        val run = ++epoch
+        _state.update {
+            it.copy(bookId = bookId, page = page, sentence = sentence, wordStart = -1, wordEnd = -1,
+                playing = true, active = true, error = null)
+        }
         scope.launch {
             control.withLock {
+                if (run != epoch) return@withLock
                 stopRun()
                 paused = false
-                _state.update {
-                    it.copy(bookId = bookId, page = page, sentence = sentence, wordStart = -1, wordEnd = -1,
-                        playing = true, active = true, error = null)
-                }
                 startService()
                 requestFocus()
                 startMusicIfChosen()
-                runJob = scope.launch { run(bookId, page, sentence, offset) }
+                runJob = scope.launch { run(bookId, page, sentence, offset, explicit, run) }
             }
         }
     }
@@ -324,7 +328,7 @@ class PlaybackEngine(
         }.also { _state.update { s -> s.copy(loading = null) } }
     }
 
-    private suspend fun run(bookId: String, startPage: Int, startSentence: Int, startOffset: Int) {
+    private suspend fun run(bookId: String, startPage: Int, startSentence: Int, startOffset: Int, explicit: Boolean, run: Int) {
         val engine = loadSynth()
         if (engine == null) {
             _state.update {
@@ -341,6 +345,7 @@ class PlaybackEngine(
             var sentence = startSentence
             var skipChars = startOffset.coerceAtLeast(0)
             var first = true
+            val forcedBlock = Sentences.forPage(library.pages(bookId)[page]).getOrNull(startSentence)?.block ?: -1
             try {
                 while (isActive) {
                     var pages = library.pages(bookId)
@@ -359,7 +364,8 @@ class PlaybackEngine(
                         val from = (ref.start + skipChars).coerceIn(ref.start, ref.end)
                         skipChars = 0
                         val text = current.blocks[ref.block].text
-                        val speakable = !settings.shouldSkip(ref.kind) && (from until ref.end).any { text[it].isLetterOrDigit() }
+                        val forced = explicit && page == startPage && ref.block == forcedBlock
+                        val speakable = (forced || !settings.shouldSkip(ref.kind)) && (from until ref.end).any { text[it].isLetterOrDigit() }
                         if (speakable) {
                             val parts = Phrases.split(text, from, ref.end, if (first) 70 else 150)
                             for ((index, range) in parts.withIndex()) {
@@ -387,7 +393,7 @@ class PlaybackEngine(
         track = out
         val written = ArrayDeque<Written>()
         var total = 0L
-        val ticker = scope.launch { tick(bookId, written) }
+        val ticker = scope.launch { tick(bookId, written, run) }
         try {
             if (!paused) out.play()
             for (item in queue) {
@@ -451,7 +457,7 @@ class PlaybackEngine(
         }
     }
 
-    private suspend fun tick(bookId: String, written: ArrayDeque<Written>) {
+    private suspend fun tick(bookId: String, written: ArrayDeque<Written>, run: Int) {
         var lastSaved = -1 to -1
         while (scope.isActive) {
             val out = track
@@ -461,7 +467,7 @@ class PlaybackEngine(
                     while (written.size > 1 && written[1].startFrame <= head) written.removeFirst()
                     written.firstOrNull()
                 }
-                if (current != null && head >= current.startFrame) {
+                if (current != null && head >= current.startFrame && run == epoch) {
                     val spoken = current.spoken
                     val local = (head - current.startFrame).toInt()
                     val mark = spoken.utterance.marks.lastOrNull { it.sample <= local }

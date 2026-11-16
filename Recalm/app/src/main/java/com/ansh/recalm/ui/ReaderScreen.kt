@@ -208,7 +208,7 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
             ?: refs.indexOfLast { it.block <= block }.coerceAtLeast(0)
         val within = (offset - refs[idx].start).coerceAtLeast(0)
         follow = true
-        app.engine.play(bookId, pageIndex, idx, within)
+        app.engine.play(bookId, pageIndex, idx, within, explicit = true)
     }
     var menu by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<String?>(null) }
@@ -217,8 +217,13 @@ fun ReaderScreen(bookId: String, onBack: () -> Unit, openVoices: () -> Unit) {
     var ocrConfirm by remember { mutableStateOf(false) }
     var chromeVisible by remember { mutableStateOf(true) }
 
-    LaunchedEffect(player.page, listening, follow) {
-        if (listening && follow && player.page != pagerState.currentPage && player.page < loaded.size) {
+    val followNow by rememberUpdatedState(follow)
+    val listeningForFollow by rememberUpdatedState(listening)
+    var lastVoicePage by remember { mutableStateOf(player.page) }
+    LaunchedEffect(player.page) {
+        val moved = player.page != lastVoicePage
+        lastVoicePage = player.page
+        if (moved && listeningForFollow && followNow && player.playing && player.page != pagerState.currentPage && player.page < loaded.size) {
             pagerState.animateScrollToPage(player.page)
         }
     }

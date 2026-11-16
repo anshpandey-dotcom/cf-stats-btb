@@ -114,6 +114,17 @@ class UiTest {
     }
 
     @Test
+    fun tapStartsOnTappedPageImmediately() {
+        val book = sampleBook()
+        app.engine.play(book.id, 0, 0)
+        app.engine.play(book.id, 2, 0, explicit = true)
+        val state = app.engine.state.value
+        assertEquals(2, state.page)
+        assertEquals(book.id, state.bookId)
+        app.engine.stop()
+    }
+
+    @Test
     fun backupAndRestoreRoundTrip() {
         val book = sampleBook()
         app.library.saveProgress(book.id, 2, 0)
