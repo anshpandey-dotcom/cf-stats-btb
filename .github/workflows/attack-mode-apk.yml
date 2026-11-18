@@ -28,8 +28,6 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
-
       - uses: actions/cache@v4
         with:
           path: |
@@ -46,6 +44,7 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
@@ -58,12 +57,12 @@ jobs:
           path: attack-mode/attack-mode.apk
 
       - name: Publish release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release delete latest-apk --yes --cleanup-tag || true
-          gh release create latest-apk attack-mode/attack-mode.apk \
-            --title "Attack Mode (Android APK)" \
-            --notes "Debug-signed APK built from ${GITHUB_SHA}. Download on your phone and install." \
-            --target "${GITHUB_SHA}"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: attack-mode-latest
+          name: Attack Mode (latest APK)
+          make_latest: true
+          files: attack-mode/attack-mode.apk
+          body: |
+            Attack Mode Android app, built from ${{ github.sha }}.
+            Download attack-mode.apk below and install it on your phone.
