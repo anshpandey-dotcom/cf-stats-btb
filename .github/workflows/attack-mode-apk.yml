@@ -42,7 +42,7 @@ jobs:
       - run: bunx cap sync android
 
       - name: Build debug APK
-        working-directory: android
+        working-directory: attack-mode/android
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
