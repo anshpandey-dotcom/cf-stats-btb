@@ -1,0 +1,1625 @@
+From 26babb6fca341b27415a664d51d1784258ce835a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 04:25:28 +0000
+Subject: [PATCH] Add timed tasks with Web Push reminders for Android
+
+Tasks gain a reminder time and lead time. The Go server stores VAPID keys
+and push subscriptions in SQLite and sends notifications when a task is
+due. The service worker shows them and opens the day on tap. A bell
+button in the header enables, disables, and tests reminders.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HKWrdHbNRw4oxzAeRLnUYQ
+---
+ .env.example                                |   3 +
+ README.md                                   |   9 +
+ architecture.md                             |   3 +-
+ go.mod                                      |   2 +
+ go.sum                                      |  68 ++++++
+ internal/api/push.go                        |  78 +++++++
+ internal/api/router.go                      |   8 +
+ internal/config/config.go                   |  10 +-
+ internal/push/push.go                       | 229 ++++++++++++++++++++
+ internal/push/push_test.go                  |  48 ++++
+ internal/store/migrations/002_reminders.sql |  18 ++
+ internal/store/models.go                    |   6 +
+ internal/store/push.go                      | 138 ++++++++++++
+ internal/store/store_test.go                |  72 ++++++
+ internal/store/tasks.go                     |  61 ++++--
+ main.go                                     |   8 +
+ web/public/sw.js                            |  43 +++-
+ web/src/api/types.ts                        |   6 +
+ web/src/components/AppShell.tsx             |   3 +
+ web/src/components/NotificationButton.tsx   | 100 +++++++++
+ web/src/components/TaskForm.tsx             |  41 ++++
+ web/src/components/TaskList.tsx             |  12 +-
+ web/src/hooks/usePush.ts                    | 114 ++++++++++
+ web/src/index.css                           |   8 +-
+ 24 files changed, 1060 insertions(+), 28 deletions(-)
+ create mode 100644 internal/api/push.go
+ create mode 100644 internal/push/push.go
+ create mode 100644 internal/push/push_test.go
+ create mode 100644 internal/store/migrations/002_reminders.sql
+ create mode 100644 internal/store/push.go
+ create mode 100644 web/src/components/NotificationButton.tsx
+ create mode 100644 web/src/hooks/usePush.ts
+
+diff --git a/.env.example b/.env.example
+index f9ac027..e173825 100644
+--- a/.env.example
++++ b/.env.example
+@@ -28,4 +28,7 @@ SESSION_TTL_HOURS=720
+ # or Nginx, set this to the proxy's address or Docker network (e.g. 172.16.0.0/12).
+ TRUSTED_PROXIES=
+ 
++# Contact used in Web Push (VAPID) requests: a mailto: or https: URL. Optional.
++VAPID_SUBJECT=mailto:you@example.com
++
+ IMAGE=ghcr.io/ksumesh431/planner_attack_mode:latest
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index a73c6d2..c7cc148 100644
+--- a/README.md
++++ b/README.md
+@@ -116,3 +116,12 @@ TRUSTED_PROXIES=127.0.0.1
+ For Caddy inside the same Compose network, proxy to `attack-mode:8080` and set `TRUSTED_PROXIES` to the Docker network CIDR (for example `172.16.0.0/12`). A Cloudflare Tunnel is another option if you do not want to expose ports.
+ 
+ Architecture, development, backups, API, and security notes are in [architecture.md](architecture.md).
++
++## Android install and reminders
++
++1. Serve the app over HTTPS (required for install and push).
++2. Open it in Chrome on Android, then **⋮ → Install app** (or Add to Home screen).
++3. Tap the bell icon in the header and choose **Enable reminders**; allow notifications.
++4. When adding or editing a task, set a **Reminder time** and how long before to be notified.
++
++Reminders are Web Push messages sent by the server, so they arrive when the app is closed. VAPID keys are generated on first start and stored in the SQLite database; keep the data volume so existing subscriptions stay valid. The reminder clock uses the time zone your phone last reported. Set `VAPID_SUBJECT` in `.env` if you want a contact address in push requests.
+diff --git a/architecture.md b/architecture.md
+index 5ad4f32..8ab833f 100644
+--- a/architecture.md
++++ b/architecture.md
+@@ -61,7 +61,8 @@ GitHub Actions ──► GHCR image ──► Docker on the server
+ | Backend | Go 1.27.3 + Gin 1.12 | HTTP API and static serving |
+ | Database | SQLite via `modernc.org/sqlite` | Local persistence, embedded migrations |
+ | Auth | bcrypt + server-side sessions | Single-password login |
+-| PWA | manifest, PNG icons, minimal service worker | Installable app on Android/iOS |
++| PWA | manifest, PNG icons, service worker | Installable app on Android/iOS |
++| Notifications | Web Push (VAPID) via `webpush-go` | Task time reminders, delivered while the app is closed |
+ | Image | scratch + static Go binary | ~11 MB, no shell or OS packages |
+ | CI | GitHub Actions + Buildx | Tests, multi-arch image, GHCR push |
+ 
+diff --git a/go.mod b/go.mod
+index 1926800..ccbe63d 100644
+--- a/go.mod
++++ b/go.mod
+@@ -5,6 +5,7 @@ go 1.27.0
+ toolchain go1.27.3
+ 
+ require (
++	github.com/SherClockHolmes/webpush-go v1.4.0
+ 	github.com/gin-gonic/gin v1.12.0
+ 	github.com/joho/godotenv v1.5.1
+ 	golang.org/x/crypto v0.58.0
+@@ -24,6 +25,7 @@ require (
+ 	github.com/go-playground/validator/v10 v10.30.1 // indirect
+ 	github.com/goccy/go-json v0.10.5 // indirect
+ 	github.com/goccy/go-yaml v1.19.2 // indirect
++	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+ 	github.com/google/uuid v1.6.0 // indirect
+ 	github.com/json-iterator/go v1.1.12 // indirect
+ 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+diff --git a/go.sum b/go.sum
+index 0a535a0..9ef41d1 100644
+--- a/go.sum
++++ b/go.sum
+@@ -1,3 +1,5 @@
++github.com/SherClockHolmes/webpush-go v1.4.0 h1:ocnzNKWN23T9nvHi6IfyrQjkIc0oJWv1B1pULsf9i3s=
++github.com/SherClockHolmes/webpush-go v1.4.0/go.mod h1:XSq8pKX11vNV8MJEMwjrlTkxhAj1zKfxmyhdV7Pd6UA=
+ github.com/bytedance/gopkg v0.1.3 h1:TPBSwH8RsouGCBcMBktLt1AymVo2TVsBVCY4b6TnZ/M=
+ github.com/bytedance/gopkg v0.1.3/go.mod h1:576VvJ+eJgyCzdjS+c4+77QF3p7ubbtiKARP3TxducM=
+ github.com/bytedance/sonic v1.15.0 h1:/PXeWFaR5ElNcVE84U0dOHjiMHQOwNIx3K4ymzh/uSE=
+@@ -29,6 +31,9 @@ github.com/goccy/go-json v0.10.5 h1:Fq85nIqj+gXn/S5ahsiTlK3TmC85qgirsdTP/+DeaC4=
+ github.com/goccy/go-json v0.10.5/go.mod h1:oq7eo15ShAhp70Anwd5lgX2pLfOS3QCiwU/PULtXL6M=
+ github.com/goccy/go-yaml v1.19.2 h1:PmFC1S6h8ljIz6gMRBopkjP1TVT7xuwrButHID66PoM=
+ github.com/goccy/go-yaml v1.19.2/go.mod h1:XBurs7gK8ATbW4ZPGKgcbrY1Br56PdM69F7LkFRi1kA=
++github.com/golang-jwt/jwt/v5 v5.2.1 h1:OuVbFODueb089Lh128TAcimifWaLhJwVflnrgM17wHk=
++github.com/golang-jwt/jwt/v5 v5.2.1/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
++github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+ github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+ github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
+@@ -81,6 +86,7 @@ github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS
+ github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
+ github.com/ugorji/go/codec v1.3.1 h1:waO7eEiFDwidsBN6agj1vJQ4AG7lh2yqXyOXqhgQuyY=
+ github.com/ugorji/go/codec v1.3.1/go.mod h1:pRBVtBSKl77K30Bv8R2P+cLSGaTtex6fsA2Wjqmfxj4=
++github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
+ go.mongodb.org/mongo-driver/v2 v2.5.0 h1:yXUhImUjjAInNcpTcAlPHiT7bIXhshCTL3jVBkF3xaE=
+ go.mongodb.org/mongo-driver/v2 v2.5.0/go.mod h1:yOI9kBsufol30iFsl1slpdq1I0eHPzybRWdyYUs8K/0=
+ go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=
+@@ -89,20 +95,82 @@ go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
+ go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
+ golang.org/x/arch v0.22.0 h1:c/Zle32i5ttqRXjdLyyHZESLD/bB90DCU1g9l/0YBDI=
+ golang.org/x/arch v0.22.0/go.mod h1:dNHoOeKiyja7GTvF9NJS1l3Z2yntpQNzgrjh1cU103A=
++golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
++golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
++golang.org/x/crypto v0.13.0/go.mod h1:y6Z2r+Rw4iayiXXAIxJIDAJ1zMW4yaTpebo8fPOliYc=
++golang.org/x/crypto v0.19.0/go.mod h1:Iy9bg/ha4yyC70EfRS8jz+B6ybOBKMaSxLj6P6oBDfU=
++golang.org/x/crypto v0.23.0/go.mod h1:CKFgDieR+mRhux2Lsu27y0fO304Db0wZe70UKqHu0v8=
++golang.org/x/crypto v0.31.0/go.mod h1:kDsLvtWBEx7MV9tJOj9bnXsPbxwJQ6csT/x4KIN4Ssk=
+ golang.org/x/crypto v0.58.0 h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=
+ golang.org/x/crypto v0.58.0/go.mod h1:Xh+kl5A+M0gMiWDytH2Hhr5Z7WbNCpv/eB/EFgfSk+w=
++golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
++golang.org/x/mod v0.8.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
++golang.org/x/mod v0.12.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
++golang.org/x/mod v0.15.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
++golang.org/x/mod v0.17.0/go.mod h1:hTbmBsO62+eylJbnUtE2MGJUyE7QWk4xUqPFrRgJ+7c=
+ golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
+ golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
++golang.org/x/net v0.0.0-20190620200207-3b0461eec859/go.mod h1:z5CRVTTTmAJ677TzLLGU+0bjPO0LkuOLi4/5GtJWs/s=
++golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
++golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
++golang.org/x/net v0.6.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
++golang.org/x/net v0.10.0/go.mod h1:0qNGK6F8kojg2nk9dLZ2mShWaEBan6FAoqfSigmmuDg=
++golang.org/x/net v0.15.0/go.mod h1:idbUs1IY1+zTqbi8yxTbhexhEEk5ur9LInksu6HrEpk=
++golang.org/x/net v0.21.0/go.mod h1:bIjVDfnllIU7BJ2DNgfnXvpSvtn8VRwhlsaeUTyUS44=
++golang.org/x/net v0.25.0/go.mod h1:JkAGAh7GEvH74S6FOH42FLoXpXbE/aqXSrIQjXgsiwM=
+ golang.org/x/net v0.60.0 h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=
+ golang.org/x/net v0.60.0/go.mod h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
++golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
++golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
++golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
++golang.org/x/sync v0.3.0/go.mod h1:FU7BRWz2tNW+3quACPkgCx/L+uEAv1htQ0V83Z9Rj+Y=
++golang.org/x/sync v0.6.0/go.mod h1:Czt+wKu1gCyEFDUtn0jG5QVvpJ6rzVqr5aXyt9drQfk=
++golang.org/x/sync v0.7.0/go.mod h1:Czt+wKu1gCyEFDUtn0jG5QVvpJ6rzVqr5aXyt9drQfk=
++golang.org/x/sync v0.10.0/go.mod h1:Czt+wKu1gCyEFDUtn0jG5QVvpJ6rzVqr5aXyt9drQfk=
+ golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
+ golang.org/x/sync v0.24.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
++golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
++golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
++golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.5.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.8.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.12.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
++golang.org/x/sys v0.17.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
++golang.org/x/sys v0.20.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
++golang.org/x/sys v0.28.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+ golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+ golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
++golang.org/x/telemetry v0.0.0-20240228155512-f48c80bd79b2/go.mod h1:TeRTkGYfJXctD9OcfyVLyj2J3IxLnKwHJR8f4D8a3YE=
++golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
++golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
++golang.org/x/term v0.5.0/go.mod h1:jMB1sMXY+tzblOD4FWmEbocvup2/aLOaQEp7JmGp78k=
++golang.org/x/term v0.8.0/go.mod h1:xPskH00ivmX89bAKVGSKKtLOWNx2+17Eiy94tnKShWo=
++golang.org/x/term v0.12.0/go.mod h1:owVbMEjm3cBLCHdkQu9b1opXd4ETQWc3BhuQGKgXgvU=
++golang.org/x/term v0.17.0/go.mod h1:lLRBjIVuehSbZlaOtGMbcMncT+aqLLLmKrsjNrUguwk=
++golang.org/x/term v0.20.0/go.mod h1:8UkIAJTvZgivsXaD6/pH6U9ecQzZ45awqEOzuCvwpFY=
++golang.org/x/term v0.27.0/go.mod h1:iMsnZpn0cago0GOrHO2+Y7u7JPn5AylBrcoWkElMTSM=
++golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
++golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
++golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
++golang.org/x/text v0.7.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
++golang.org/x/text v0.9.0/go.mod h1:e1OnstbJyHTd6l/uOt8jFFHp6TRDWZR/bV3emEE/zU8=
++golang.org/x/text v0.13.0/go.mod h1:TvPlkZtksWOMsz7fbANvkp4WM8x/WCo/om8BMLbz+aE=
++golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
++golang.org/x/text v0.15.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
++golang.org/x/text v0.21.0/go.mod h1:4IBbMaMmOPCJ8SecivzSH54+73PCFmPWxNTLm+vZkEQ=
+ golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
+ golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
++golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
++golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
++golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
++golang.org/x/tools v0.6.0/go.mod h1:Xwgl3UAJ/d3gWutnCtw505GrjyAbvKui8lOU390QaIU=
++golang.org/x/tools v0.13.0/go.mod h1:HvlwmtVNQAhOuCjW7xxvovg8wbNq7LwfXh/k7wXUl58=
++golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d/go.mod h1:aiJjzUbINMkxbQROHiO6hDPo2LHcIPhhQsa9DLh0yGk=
+ golang.org/x/tools v0.52.0 h1:ryxg4U63oaUYk7uOLTF37n43f4qgtGvqV4Ioit1BaEs=
+ golang.org/x/tools v0.52.0/go.mod h1:ItcP5UNaVGG+Yc4eIYmaFLNJ4soEopkx5Y2d4lcEurs=
++golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ google.golang.org/protobuf v1.36.10 h1:AYd7cD/uASjIL6Q9LiTjz8JLcrh/88q5UObnmY3aOOE=
+ google.golang.org/protobuf v1.36.10/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+diff --git a/internal/api/push.go b/internal/api/push.go
+new file mode 100644
+index 0000000..2cc1ced
+--- /dev/null
++++ b/internal/api/push.go
+@@ -0,0 +1,78 @@
++package api
++
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++
++	"attackmode/internal/push"
++	"attackmode/internal/store"
++)
++
++type subscribeRequest struct {
++	Endpoint string `json:"endpoint"`
++	Keys     struct {
++		P256dh string `json:"p256dh"`
++		Auth   string `json:"auth"`
++	} `json:"keys"`
++	Timezone string `json:"timezone"`
++}
++
++func pushKeyHandler(service *push.Service) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		c.JSON(http.StatusOK, gin.H{"publicKey": service.PublicKey()})
++	}
++}
++
++func pushSubscribeHandler(st *store.Store) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		var request subscribeRequest
++		if err := c.ShouldBindJSON(&request); err != nil {
++			respondError(c, http.StatusBadRequest, "invalid_request", "Invalid request body.")
++			return
++		}
++
++		err := st.SaveSubscription(c.Request.Context(), store.PushSubscription{
++			Endpoint: request.Endpoint,
++			P256dh:   request.Keys.P256dh,
++			Auth:     request.Keys.Auth,
++			Timezone: request.Timezone,
++		})
++		if err != nil {
++			handleStoreError(c, err)
++			return
++		}
++		c.Status(http.StatusNoContent)
++	}
++}
++
++func pushUnsubscribeHandler(st *store.Store) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		var request subscribeRequest
++		if err := c.ShouldBindJSON(&request); err != nil {
++			respondError(c, http.StatusBadRequest, "invalid_request", "Invalid request body.")
++			return
++		}
++		if err := st.DeleteSubscription(c.Request.Context(), request.Endpoint); err != nil {
++			handleStoreError(c, err)
++			return
++		}
++		c.Status(http.StatusNoContent)
++	}
++}
++
++func pushTestHandler(service *push.Service) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		delivered, err := service.Broadcast(c.Request.Context(), push.Payload{
++			Title: "Attack Mode",
++			Body:  "Notifications are working. Time to attack.",
++			Tag:   "test",
++			URL:   "/today",
++		})
++		if err != nil {
++			handleStoreError(c, err)
++			return
++		}
++		c.JSON(http.StatusOK, gin.H{"delivered": delivered})
++	}
++}
+diff --git a/internal/api/router.go b/internal/api/router.go
+index 12c390a..0daa59c 100644
+--- a/internal/api/router.go
++++ b/internal/api/router.go
+@@ -9,12 +9,14 @@ import (
+ 	"github.com/gin-gonic/gin"
+ 
+ 	"attackmode/internal/auth"
++	"attackmode/internal/push"
+ 	"attackmode/internal/store"
+ )
+ 
+ // Deps are the dependencies required by the HTTP layer.
+ type Deps struct {
+ 	Store          *store.Store
++	Push           *push.Service
+ 	Auth           *auth.Service
+ 	Env            string
+ 	Assets         fs.FS
+@@ -66,6 +68,12 @@ func NewRouter(deps Deps) *gin.Engine {
+ 	protected.POST("/tasks/clone", cloneTasksHandler(deps.Store))
+ 	protected.PATCH("/tasks/:id", updateTaskHandler(deps.Store))
+ 	protected.DELETE("/tasks/:id", deleteTaskHandler(deps.Store))
++	if deps.Push != nil {
++		protected.GET("/push/key", pushKeyHandler(deps.Push))
++		protected.POST("/push/subscribe", pushSubscribeHandler(deps.Store))
++		protected.POST("/push/unsubscribe", pushUnsubscribeHandler(deps.Store))
++		protected.POST("/push/test", pushTestHandler(deps.Push))
++	}
+ 	protected.GET("/calendar", calendarHandler(deps.Store))
+ 	protected.GET("/stats", statsHandler(deps.Store))
+ 
+diff --git a/internal/config/config.go b/internal/config/config.go
+index e38bf30..d7c3aa8 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -20,6 +20,7 @@ type Config struct {
+ 	CookieSecure   bool
+ 	SessionTTL     time.Duration
+ 	TrustedProxies []string
++	VAPIDSubject   string
+ }
+ 
+ // Load reads configuration from the environment. A local .env file is loaded
+@@ -28,10 +29,11 @@ func Load() (Config, error) {
+ 	_ = godotenv.Load()
+ 
+ 	cfg := Config{
+-		Env:      strings.ToLower(strings.TrimSpace(envOr("APP_ENV", "development"))),
+-		Port:     strings.TrimSpace(envOr("PORT", "8080")),
+-		DBPath:   strings.TrimSpace(envOr("DB_PATH", "./data/attack.db")),
+-		Password: os.Getenv("APP_PASSWORD"),
++		Env:          strings.ToLower(strings.TrimSpace(envOr("APP_ENV", "development"))),
++		Port:         strings.TrimSpace(envOr("PORT", "8080")),
++		DBPath:       strings.TrimSpace(envOr("DB_PATH", "./data/attack.db")),
++		Password:     os.Getenv("APP_PASSWORD"),
++		VAPIDSubject: strings.TrimSpace(os.Getenv("VAPID_SUBJECT")),
+ 	}
+ 
+ 	if cfg.Port == "" {
+diff --git a/internal/push/push.go b/internal/push/push.go
+new file mode 100644
+index 0000000..b5b0834
+--- /dev/null
++++ b/internal/push/push.go
+@@ -0,0 +1,229 @@
++package push
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"log"
++	"math"
++	"net/http"
++	"strings"
++	"time"
++
++	webpush "github.com/SherClockHolmes/webpush-go"
++
++	"attackmode/internal/store"
++)
++
++const (
++	settingPublicKey  = "vapid_public"
++	settingPrivateKey = "vapid_private"
++	staleAfter        = 2 * time.Hour
++	tickEvery         = 20 * time.Second
++)
++
++// Service sends Web Push reminders for upcoming tasks.
++type Service struct {
++	store   *store.Store
++	public  string
++	private string
++	subject string
++	client  *http.Client
++}
++
++// New loads the VAPID key pair from the database, generating it on first run.
++func New(ctx context.Context, st *store.Store, subject string) (*Service, error) {
++	public, err := st.GetSetting(ctx, settingPublicKey)
++	if err != nil {
++		return nil, err
++	}
++	private, err := st.GetSetting(ctx, settingPrivateKey)
++	if err != nil {
++		return nil, err
++	}
++
++	if public == "" || private == "" {
++		private, public, err = webpush.GenerateVAPIDKeys()
++		if err != nil {
++			return nil, fmt.Errorf("generate vapid keys: %w", err)
++		}
++		if err := st.SetSetting(ctx, settingPublicKey, public); err != nil {
++			return nil, err
++		}
++		if err := st.SetSetting(ctx, settingPrivateKey, private); err != nil {
++			return nil, err
++		}
++	}
++
++	if subject == "" {
++		subject = "mailto:attackmode@example.com"
++	}
++
++	return &Service{
++		store:   st,
++		public:  public,
++		private: private,
++		subject: subject,
++		client:  &http.Client{Timeout: 15 * time.Second},
++	}, nil
++}
++
++// PublicKey is the VAPID application server key shared with browsers.
++func (s *Service) PublicKey() string {
++	return s.public
++}
++
++// Payload is the notification content delivered to the service worker.
++type Payload struct {
++	Title  string `json:"title"`
++	Body   string `json:"body"`
++	Tag    string `json:"tag"`
++	URL    string `json:"url"`
++	TaskID int64  `json:"taskId,omitempty"`
++}
++
++// Broadcast delivers a payload to every subscription and prunes dead ones.
++func (s *Service) Broadcast(ctx context.Context, payload Payload) (int, error) {
++	subs, err := s.store.ListSubscriptions(ctx)
++	if err != nil {
++		return 0, err
++	}
++	body, err := json.Marshal(payload)
++	if err != nil {
++		return 0, fmt.Errorf("encode payload: %w", err)
++	}
++
++	delivered := 0
++	for _, sub := range subs {
++		response, err := webpush.SendNotificationWithContext(ctx, body, &webpush.Subscription{
++			Endpoint: sub.Endpoint,
++			Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
++		}, &webpush.Options{
++			HTTPClient:      s.client,
++			Subscriber:      s.subject,
++			VAPIDPublicKey:  s.public,
++			VAPIDPrivateKey: s.private,
++			TTL:             3600,
++			Urgency:         webpush.UrgencyHigh,
++		})
++		if err != nil {
++			log.Printf("push send: %v", err)
++			continue
++		}
++		response.Body.Close()
++
++		switch {
++		case response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusGone:
++			_ = s.store.DeleteSubscription(ctx, sub.Endpoint)
++		case response.StatusCode >= 200 && response.StatusCode < 300:
++			delivered++
++		default:
++			log.Printf("push send: status %d", response.StatusCode)
++		}
++	}
++	return delivered, nil
++}
++
++// Run checks for due reminders until the context is cancelled.
++func (s *Service) Run(ctx context.Context) {
++	ticker := time.NewTicker(tickEvery)
++	defer ticker.Stop()
++
++	s.check(ctx, time.Now())
++	for {
++		select {
++		case <-ctx.Done():
++			return
++		case now := <-ticker.C:
++			s.check(ctx, now)
++		}
++	}
++}
++
++func (s *Service) check(ctx context.Context, now time.Time) {
++	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
++	defer cancel()
++
++	subs, err := s.store.ListSubscriptions(checkCtx)
++	if err != nil || len(subs) == 0 {
++		return
++	}
++	loc, err := time.LoadLocation(subs[0].Timezone)
++	if err != nil {
++		loc = time.UTC
++	}
++
++	local := now.In(loc)
++	from := local.AddDate(0, 0, -1).Format("2006-01-02")
++	to := local.AddDate(0, 0, 1).Format("2006-01-02")
++
++	tasks, err := s.store.PendingReminders(checkCtx, from, to)
++	if err != nil {
++		log.Printf("reminders: %v", err)
++		return
++	}
++
++	for _, task := range tasks {
++		due, ok := Moment(task, loc)
++		if !ok {
++			continue
++		}
++		fireAt := due.Add(-time.Duration(task.RemindBefore) * time.Minute)
++		if now.Before(fireAt) {
++			continue
++		}
++		if now.After(due.Add(staleAfter)) {
++			_ = s.store.MarkNotified(checkCtx, task.ID)
++			continue
++		}
++
++		if _, err := s.Broadcast(checkCtx, ReminderPayload(task, due, now)); err != nil {
++			log.Printf("reminders: %v", err)
++			continue
++		}
++		if err := s.store.MarkNotified(checkCtx, task.ID); err != nil {
++			log.Printf("reminders: %v", err)
++		}
++	}
++}
++
++// Moment resolves the task date and time in the given location.
++func Moment(task store.Task, loc *time.Location) (time.Time, bool) {
++	moment, err := time.ParseInLocation("2006-01-02 15:04", task.Date+" "+task.Time, loc)
++	if err != nil {
++		return time.Time{}, false
++	}
++	return moment, true
++}
++
++// ReminderPayload builds the notification shown for a task.
++func ReminderPayload(task store.Task, due, now time.Time) Payload {
++	title := "Starting now: " + shorten(task.What, 60)
++	if minutes := int(math.Ceil(due.Sub(now).Minutes())); minutes > 0 {
++		title = fmt.Sprintf("In %d min: %s", minutes, shorten(task.What, 60))
++	}
++
++	details := []string{due.Format("15:04")}
++	if task.HowMuch != "" {
++		details = append(details, task.HowMuch)
++	}
++	if task.Where != "" {
++		details = append(details, "at "+task.Where)
++	}
++
++	return Payload{
++		Title:  title,
++		Body:   strings.Join(details, " · "),
++		Tag:    fmt.Sprintf("task-%d", task.ID),
++		URL:    "/day/" + task.Date,
++		TaskID: task.ID,
++	}
++}
++
++func shorten(text string, limit int) string {
++	runes := []rune(strings.Join(strings.Fields(text), " "))
++	if len(runes) <= limit {
++		return string(runes)
++	}
++	return string(runes[:limit-1]) + "…"
++}
+diff --git a/internal/push/push_test.go b/internal/push/push_test.go
+new file mode 100644
+index 0000000..44f93ca
+--- /dev/null
++++ b/internal/push/push_test.go
+@@ -0,0 +1,48 @@
++package push
++
++import (
++	"context"
++	"path/filepath"
++	"testing"
++	"time"
++
++	"attackmode/internal/store"
++)
++
++func TestKeysPersist(t *testing.T) {
++	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer st.Close()
++
++	first, err := New(context.Background(), st, "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	second, err := New(context.Background(), st, "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if first.PublicKey() == "" || first.PublicKey() != second.PublicKey() {
++		t.Fatal("vapid key should be generated once and reused")
++	}
++}
++
++func TestMomentAndPayload(t *testing.T) {
++	loc, _ := time.LoadLocation("Asia/Kolkata")
++	task := store.Task{ID: 7, Date: "2026-10-23", Time: "09:30", What: "Write chapter", HowMuch: "1500 words", Where: "Desk"}
++
++	due, ok := Moment(task, loc)
++	if !ok || due.UTC().Format("15:04") != "04:00" {
++		t.Fatalf("due = %v ok = %v", due, ok)
++	}
++
++	payload := ReminderPayload(task, due, due.Add(-10*time.Minute))
++	if payload.Title != "In 10 min: Write chapter" || payload.URL != "/day/2026-10-23" {
++		t.Fatalf("unexpected payload: %+v", payload)
++	}
++	if payload.Body != "09:30 · 1500 words · at Desk" {
++		t.Fatalf("unexpected body: %q", payload.Body)
++	}
++}
+diff --git a/internal/store/migrations/002_reminders.sql b/internal/store/migrations/002_reminders.sql
+new file mode 100644
+index 0000000..bb58b07
+--- /dev/null
++++ b/internal/store/migrations/002_reminders.sql
+@@ -0,0 +1,18 @@
++ALTER TABLE tasks ADD COLUMN remind_time TEXT NOT NULL DEFAULT '';
++ALTER TABLE tasks ADD COLUMN remind_before INTEGER NOT NULL DEFAULT 10 CHECK (remind_before BETWEEN 0 AND 1440);
++ALTER TABLE tasks ADD COLUMN notified INTEGER NOT NULL DEFAULT 0 CHECK (notified IN (0, 1));
++
++CREATE INDEX IF NOT EXISTS idx_tasks_reminders ON tasks (task_date, notified, completed);
++
++CREATE TABLE IF NOT EXISTS push_subscriptions (
++    endpoint TEXT PRIMARY KEY,
++    p256dh TEXT NOT NULL,
++    auth TEXT NOT NULL,
++    timezone TEXT NOT NULL DEFAULT 'UTC',
++    created_at TEXT NOT NULL
++);
++
++CREATE TABLE IF NOT EXISTS settings (
++    key TEXT PRIMARY KEY,
++    value TEXT NOT NULL
++);
+diff --git a/internal/store/models.go b/internal/store/models.go
+index c71854c..888e5b7 100644
+--- a/internal/store/models.go
++++ b/internal/store/models.go
+@@ -41,6 +41,8 @@ type Task struct {
+ 	CompletedAt         *time.Time `json:"completedAt"`
+ 	CreatedAt           time.Time  `json:"createdAt"`
+ 	UpdatedAt           time.Time  `json:"updatedAt"`
++	Time                string     `json:"time"`
++	RemindBefore        int        `json:"remindBefore"`
+ }
+ 
+ // CreateTaskInput is the payload accepted when creating a task.
+@@ -51,6 +53,8 @@ type CreateTaskInput struct {
+ 	When                string `json:"when"`
+ 	Where               string `json:"where"`
+ 	PerceivedDifficulty int    `json:"perceivedDifficulty"`
++	Time                string `json:"time"`
++	RemindBefore        *int   `json:"remindBefore"`
+ }
+ 
+ // UpdateTaskInput is a partial task update. Nil fields are left untouched.
+@@ -62,6 +66,8 @@ type UpdateTaskInput struct {
+ 	PerceivedDifficulty *int    `json:"perceivedDifficulty"`
+ 	ActualDifficulty    *int    `json:"actualDifficulty"`
+ 	Completed           *bool   `json:"completed"`
++	Time                *string `json:"time"`
++	RemindBefore        *int    `json:"remindBefore"`
+ }
+ 
+ // DaySummary is the calendar aggregate for one date.
+diff --git a/internal/store/push.go b/internal/store/push.go
+new file mode 100644
+index 0000000..80e7356
+--- /dev/null
++++ b/internal/store/push.go
+@@ -0,0 +1,138 @@
++package store
++
++import (
++	"context"
++	"database/sql"
++	"errors"
++	"fmt"
++	"strings"
++	"time"
++)
++
++// PushSubscription is one browser push endpoint.
++type PushSubscription struct {
++	Endpoint string `json:"endpoint"`
++	P256dh   string `json:"p256dh"`
++	Auth     string `json:"auth"`
++	Timezone string `json:"timezone"`
++}
++
++// SaveSubscription stores or refreshes a push subscription.
++func (s *Store) SaveSubscription(ctx context.Context, sub PushSubscription) error {
++	sub.Endpoint = strings.TrimSpace(sub.Endpoint)
++	if sub.Endpoint == "" || sub.P256dh == "" || sub.Auth == "" {
++		return validationError("A complete push subscription is required.")
++	}
++	if !strings.HasPrefix(sub.Endpoint, "https://") {
++		return validationError("Push endpoint must use https.")
++	}
++	if _, err := time.LoadLocation(sub.Timezone); err != nil || sub.Timezone == "" {
++		sub.Timezone = "UTC"
++	}
++
++	_, err := s.db.ExecContext(
++		ctx,
++		`INSERT INTO push_subscriptions (endpoint, p256dh, auth, timezone, created_at)
++		VALUES (?, ?, ?, ?, ?)
++		ON CONFLICT(endpoint) DO UPDATE SET
++			p256dh = excluded.p256dh,
++			auth = excluded.auth,
++			timezone = excluded.timezone`,
++		sub.Endpoint, sub.P256dh, sub.Auth, sub.Timezone, formatTime(time.Now().UTC()),
++	)
++	if err != nil {
++		return fmt.Errorf("save subscription: %w", err)
++	}
++	return nil
++}
++
++// DeleteSubscription removes a push subscription by endpoint.
++func (s *Store) DeleteSubscription(ctx context.Context, endpoint string) error {
++	if _, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE endpoint = ?`, endpoint); err != nil {
++		return fmt.Errorf("delete subscription: %w", err)
++	}
++	return nil
++}
++
++// ListSubscriptions returns every stored subscription, newest first.
++func (s *Store) ListSubscriptions(ctx context.Context) ([]PushSubscription, error) {
++	rows, err := s.db.QueryContext(
++		ctx,
++		`SELECT endpoint, p256dh, auth, timezone FROM push_subscriptions ORDER BY created_at DESC`,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("list subscriptions: %w", err)
++	}
++	defer rows.Close()
++
++	subs := make([]PushSubscription, 0)
++	for rows.Next() {
++		var sub PushSubscription
++		if err := rows.Scan(&sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.Timezone); err != nil {
++			return nil, fmt.Errorf("scan subscription: %w", err)
++		}
++		subs = append(subs, sub)
++	}
++	return subs, rows.Err()
++}
++
++// GetSetting reads a stored setting, returning an empty string when unset.
++func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
++	var value string
++	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&value)
++	if errors.Is(err, sql.ErrNoRows) {
++		return "", nil
++	}
++	if err != nil {
++		return "", fmt.Errorf("get setting: %w", err)
++	}
++	return value, nil
++}
++
++// SetSetting stores a setting value.
++func (s *Store) SetSetting(ctx context.Context, key, value string) error {
++	_, err := s.db.ExecContext(
++		ctx,
++		`INSERT INTO settings (key, value) VALUES (?, ?)
++		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
++		key, value,
++	)
++	if err != nil {
++		return fmt.Errorf("set setting: %w", err)
++	}
++	return nil
++}
++
++// PendingReminders returns open, un-notified timed tasks dated within the
++// given range. The caller decides which of them are actually due.
++func (s *Store) PendingReminders(ctx context.Context, fromDate, toDate string) ([]Task, error) {
++	rows, err := s.db.QueryContext(
++		ctx,
++		`SELECT `+taskColumns+` FROM tasks
++		WHERE task_date BETWEEN ? AND ? AND remind_time != '' AND notified = 0 AND completed = 0
++		ORDER BY task_date, remind_time`,
++		fromDate, toDate,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("pending reminders: %w", err)
++	}
++	defer rows.Close()
++
++	tasks := make([]Task, 0)
++	for rows.Next() {
++		task, err := scanTask(rows)
++		if err != nil {
++			return nil, fmt.Errorf("scan reminder: %w", err)
++		}
++		tasks = append(tasks, task)
++	}
++	return tasks, rows.Err()
++}
++
++// MarkNotified flags a task as already reminded.
++func (s *Store) MarkNotified(ctx context.Context, id int64) error {
++	if _, err := s.db.ExecContext(ctx, `UPDATE tasks SET notified = 1 WHERE id = ?`, id); err != nil {
++		return fmt.Errorf("mark notified: %w", err)
++	}
++	return nil
++}
+diff --git a/internal/store/store_test.go b/internal/store/store_test.go
+index 412de7c..74d68ff 100644
+--- a/internal/store/store_test.go
++++ b/internal/store/store_test.go
+@@ -331,3 +331,75 @@ func TestSessions(t *testing.T) {
+ }
+ 
+ func stringPtr(value string) *string { return &value }
++
++func TestTaskReminderTime(t *testing.T) {
++	st := newTestStore(t)
++	ctx := context.Background()
++
++	task, err := st.CreateTask(ctx, CreateTaskInput{
++		Date: "2026-10-23", What: "Deep work", PerceivedDifficulty: 6, Time: "09:30",
++	})
++	if err != nil {
++		t.Fatalf("create task: %v", err)
++	}
++	if task.Time != "09:30" || task.RemindBefore != 10 {
++		t.Fatalf("unexpected reminder fields: %+v", task)
++	}
++
++	if _, err := st.CreateTask(ctx, CreateTaskInput{
++		Date: "2026-10-23", What: "Bad", PerceivedDifficulty: 6, Time: "25:99",
++	}); !errors.Is(err, ErrValidation) {
++		t.Fatalf("expected validation error for bad time, got %v", err)
++	}
++
++	pending, err := st.PendingReminders(ctx, "2026-10-22", "2026-10-24")
++	if err != nil || len(pending) != 1 {
++		t.Fatalf("pending = %d, err = %v", len(pending), err)
++	}
++
++	if err := st.MarkNotified(ctx, task.ID); err != nil {
++		t.Fatalf("mark notified: %v", err)
++	}
++	pending, _ = st.PendingReminders(ctx, "2026-10-22", "2026-10-24")
++	if len(pending) != 0 {
++		t.Fatalf("expected no pending reminders, got %d", len(pending))
++	}
++
++	newTime := "10:00"
++	if _, err := st.UpdateTask(ctx, task.ID, UpdateTaskInput{Time: &newTime}); err != nil {
++		t.Fatalf("update time: %v", err)
++	}
++	pending, _ = st.PendingReminders(ctx, "2026-10-22", "2026-10-24")
++	if len(pending) != 1 {
++		t.Fatalf("rescheduling should re-arm the reminder, got %d", len(pending))
++	}
++}
++
++func TestSubscriptionsAndSettings(t *testing.T) {
++	st := newTestStore(t)
++	ctx := context.Background()
++
++	sub := PushSubscription{Endpoint: "https://push.example/abc", P256dh: "k", Auth: "a", Timezone: "Asia/Kolkata"}
++	if err := st.SaveSubscription(ctx, sub); err != nil {
++		t.Fatalf("save: %v", err)
++	}
++	if err := st.SaveSubscription(ctx, sub); err != nil {
++		t.Fatalf("save twice: %v", err)
++	}
++	subs, _ := st.ListSubscriptions(ctx)
++	if len(subs) != 1 || subs[0].Timezone != "Asia/Kolkata" {
++		t.Fatalf("unexpected subscriptions: %+v", subs)
++	}
++	if err := st.SaveSubscription(ctx, PushSubscription{Endpoint: "http://x", P256dh: "k", Auth: "a"}); !errors.Is(err, ErrValidation) {
++		t.Fatalf("expected validation error, got %v", err)
++	}
++	_ = st.DeleteSubscription(ctx, sub.Endpoint)
++	if subs, _ = st.ListSubscriptions(ctx); len(subs) != 0 {
++		t.Fatalf("expected none, got %d", len(subs))
++	}
++
++	_ = st.SetSetting(ctx, "k", "v")
++	if v, _ := st.GetSetting(ctx, "k"); v != "v" {
++		t.Fatalf("setting = %q", v)
++	}
++}
+diff --git a/internal/store/tasks.go b/internal/store/tasks.go
+index 7695d28..a6156ff 100644
+--- a/internal/store/tasks.go
++++ b/internal/store/tasks.go
+@@ -11,8 +11,14 @@ import (
+ )
+ 
+ const (
+-	maxWhatLength  = 1000
+-	maxFieldLength = 500
++	maxWhatLength       = 1000
++	maxFieldLength      = 500
++	maxRemindBefore     = 1440
++	defaultRemindBefore = 10
++
++	taskColumns = `id, task_date, what, how_much, when_text, where_text,
++		perceived_difficulty, actual_difficulty, completed,
++		completed_at, created_at, updated_at, remind_time, remind_before`
+ )
+ 
+ // CreateTask validates and stores a new task.
+@@ -27,8 +33,8 @@ func (s *Store) CreateTask(ctx context.Context, in CreateTaskInput) (Task, error
+ 		`INSERT INTO tasks (
+ 			task_date, what, how_much, when_text, where_text,
+ 			perceived_difficulty, actual_difficulty, completed,
+-			completed_at, created_at, updated_at
+-		) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?)`,
++			completed_at, created_at, updated_at, remind_time, remind_before, notified
++		) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, 0)`,
+ 		in.Date,
+ 		in.What,
+ 		in.HowMuch,
+@@ -37,6 +43,8 @@ func (s *Store) CreateTask(ctx context.Context, in CreateTaskInput) (Task, error
+ 		in.PerceivedDifficulty,
+ 		formatTime(now),
+ 		formatTime(now),
++		in.Time,
++		*in.RemindBefore,
+ 	)
+ 	if err != nil {
+ 		return Task{}, fmt.Errorf("insert task: %w", err)
+@@ -53,9 +61,7 @@ func (s *Store) CreateTask(ctx context.Context, in CreateTaskInput) (Task, error
+ // GetTask returns one task by id.
+ func (s *Store) GetTask(ctx context.Context, id int64) (Task, error) {
+ 	row := s.db.QueryRowContext(ctx, `SELECT
+-		id, task_date, what, how_much, when_text, where_text,
+-		perceived_difficulty, actual_difficulty, completed,
+-		completed_at, created_at, updated_at
++		`+taskColumns+`
+ 	FROM tasks WHERE id = ?`, id)
+ 
+ 	task, err := scanTask(row)
+@@ -75,9 +81,7 @@ func (s *Store) ListTasks(ctx context.Context, date string) ([]Task, error) {
+ 	}
+ 
+ 	rows, err := s.db.QueryContext(ctx, `SELECT
+-		id, task_date, what, how_much, when_text, where_text,
+-		perceived_difficulty, actual_difficulty, completed,
+-		completed_at, created_at, updated_at
++		`+taskColumns+`
+ 	FROM tasks WHERE task_date = ? ORDER BY id ASC`, date)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("list tasks: %w", err)
+@@ -126,6 +130,16 @@ func (s *Store) UpdateTask(ctx context.Context, id int64, in UpdateTaskInput) (T
+ 	if in.Completed != nil {
+ 		current.Completed = *in.Completed
+ 	}
++	scheduleChanged := false
++	if in.Time != nil {
++		next := strings.TrimSpace(*in.Time)
++		scheduleChanged = scheduleChanged || next != current.Time
++		current.Time = next
++	}
++	if in.RemindBefore != nil {
++		scheduleChanged = scheduleChanged || *in.RemindBefore != current.RemindBefore
++		current.RemindBefore = *in.RemindBefore
++	}
+ 
+ 	if err := validateTask(current); err != nil {
+ 		return Task{}, err
+@@ -150,7 +164,8 @@ func (s *Store) UpdateTask(ctx context.Context, id int64, in UpdateTaskInput) (T
+ 		`UPDATE tasks SET
+ 			what = ?, how_much = ?, when_text = ?, where_text = ?,
+ 			perceived_difficulty = ?, actual_difficulty = ?, completed = ?,
+-			completed_at = ?, updated_at = ?
++			completed_at = ?, updated_at = ?, remind_time = ?, remind_before = ?,
++			notified = CASE WHEN ? THEN 0 ELSE notified END
+ 		WHERE id = ?`,
+ 		current.What,
+ 		current.HowMuch,
+@@ -161,6 +176,9 @@ func (s *Store) UpdateTask(ctx context.Context, id int64, in UpdateTaskInput) (T
+ 		boolToInt(current.Completed),
+ 		nullableTimeValue(current.CompletedAt),
+ 		formatTime(current.UpdatedAt),
++		current.Time,
++		current.RemindBefore,
++		scheduleChanged,
+ 		current.ID,
+ 	)
+ 	if err != nil {
+@@ -209,10 +227,10 @@ func (s *Store) CloneTasks(ctx context.Context, from, to string) (int64, error)
+ 		`INSERT INTO tasks (
+ 			task_date, what, how_much, when_text, where_text,
+ 			perceived_difficulty, actual_difficulty, completed,
+-			completed_at, created_at, updated_at
++			completed_at, created_at, updated_at, remind_time, remind_before, notified
+ 		)
+ 		SELECT ?, what, how_much, when_text, where_text,
+-			perceived_difficulty, NULL, 0, NULL, ?, ?
++			perceived_difficulty, NULL, 0, NULL, ?, ?, remind_time, remind_before, 0
+ 		FROM tasks
+ 		WHERE task_date = ?
+ 		ORDER BY id ASC`,
+@@ -238,6 +256,11 @@ func normalizeCreate(in *CreateTaskInput) error {
+ 	in.HowMuch = strings.TrimSpace(in.HowMuch)
+ 	in.When = strings.TrimSpace(in.When)
+ 	in.Where = strings.TrimSpace(in.Where)
++	in.Time = strings.TrimSpace(in.Time)
++	if in.RemindBefore == nil {
++		fallback := defaultRemindBefore
++		in.RemindBefore = &fallback
++	}
+ 
+ 	task := Task{
+ 		Date:                in.Date,
+@@ -246,6 +269,8 @@ func normalizeCreate(in *CreateTaskInput) error {
+ 		When:                in.When,
+ 		Where:               in.Where,
+ 		PerceivedDifficulty: in.PerceivedDifficulty,
++		Time:                in.Time,
++		RemindBefore:        *in.RemindBefore,
+ 	}
+ 	return validateTask(task)
+ }
+@@ -269,6 +294,14 @@ func validateTask(task Task) error {
+ 	if utf8.RuneCountInString(task.Where) > maxFieldLength {
+ 		return validationError(fmt.Sprintf("Where must be %d characters or fewer.", maxFieldLength))
+ 	}
++	if task.Time != "" {
++		if parsed, err := time.Parse("15:04", task.Time); err != nil || parsed.Format("15:04") != task.Time {
++			return validationError("Time must be a valid HH:MM value.")
++		}
++	}
++	if task.RemindBefore < 0 || task.RemindBefore > maxRemindBefore {
++		return validationError("Reminder lead time must be between 0 and 1440 minutes.")
++	}
+ 	if task.PerceivedDifficulty < 1 || task.PerceivedDifficulty > 10 {
+ 		return validationError("Perceived difficulty must be between 1 and 10.")
+ 	}
+@@ -339,6 +372,8 @@ func scanTask(scanner rowScanner) (Task, error) {
+ 		&completedAt,
+ 		&createdAt,
+ 		&updatedAt,
++		&task.Time,
++		&task.RemindBefore,
+ 	)
+ 	if err != nil {
+ 		return Task{}, err
+diff --git a/main.go b/main.go
+index 70bee9c..5c1ab31 100644
+--- a/main.go
++++ b/main.go
+@@ -15,6 +15,7 @@ import (
+ 	"attackmode/internal/api"
+ 	"attackmode/internal/auth"
+ 	"attackmode/internal/config"
++	"attackmode/internal/push"
+ 	"attackmode/internal/store"
+ )
+ 
+@@ -41,9 +42,15 @@ func main() {
+ 		log.Fatalf("auth: %v", err)
+ 	}
+ 
++	pushService, err := push.New(context.Background(), st, cfg.VAPIDSubject)
++	if err != nil {
++		log.Fatalf("push: %v", err)
++	}
++
+ 	assets, hasAssets := webAssets()
+ 	router := api.NewRouter(api.Deps{
+ 		Store:          st,
++		Push:           pushService,
+ 		Auth:           authService,
+ 		Env:            cfg.Env,
+ 		Assets:         assets,
+@@ -64,6 +71,7 @@ func main() {
+ 	defer stop()
+ 
+ 	go cleanupSessions(ctx, st)
++	go pushService.Run(ctx)
+ 
+ 	serverErr := make(chan error, 1)
+ 	go func() {
+diff --git a/web/public/sw.js b/web/public/sw.js
+index 754eb3a..75c07ac 100644
+--- a/web/public/sw.js
++++ b/web/public/sw.js
+@@ -1,5 +1,3 @@
+-// Minimal service worker. It exists so the app meets the browser's
+-// installability requirements; requests continue to use the network normally.
+ self.addEventListener("install", () => {
+   self.skipWaiting();
+ });
+@@ -8,6 +6,43 @@ self.addEventListener("activate", (event) => {
+   event.waitUntil(self.clients.claim());
+ });
+ 
+-self.addEventListener("fetch", () => {
+-  // Intentionally empty: the browser handles the request over the network.
++self.addEventListener("fetch", () => {});
++
++self.addEventListener("push", (event) => {
++  let data = {};
++  try {
++    data = event.data ? event.data.json() : {};
++  } catch {
++    data = { body: event.data ? event.data.text() : "" };
++  }
++
++  const title = data.title || "Attack Mode";
++  event.waitUntil(
++    self.registration.showNotification(title, {
++      body: data.body || "",
++      tag: data.tag || "attack-mode",
++      icon: "/icons/icon-192.png",
++      badge: "/icons/icon-192.png",
++      vibrate: [200, 100, 200],
++      requireInteraction: true,
++      renotify: true,
++      data: { url: data.url || "/today" },
++    }),
++  );
++});
++
++self.addEventListener("notificationclick", (event) => {
++  event.notification.close();
++  const target = new URL(event.notification.data?.url || "/today", self.location.origin).href;
++
++  event.waitUntil(
++    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
++      for (const client of clients) {
++        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
++          return client.focus().then((focused) => ("navigate" in focused ? focused.navigate(target) : focused));
++        }
++      }
++      return self.clients.openWindow(target);
++    }),
++  );
+ });
+diff --git a/web/src/api/types.ts b/web/src/api/types.ts
+index ee149fc..528e81c 100644
+--- a/web/src/api/types.ts
++++ b/web/src/api/types.ts
+@@ -11,6 +11,8 @@ export interface Task {
+   completedAt: string | null;
+   createdAt: string;
+   updatedAt: string;
++  time: string;
++  remindBefore: number;
+ }
+ 
+ export interface CreateTaskInput {
+@@ -20,6 +22,8 @@ export interface CreateTaskInput {
+   when: string;
+   where: string;
+   perceivedDifficulty: number;
++  time: string;
++  remindBefore: number;
+ }
+ 
+ export interface UpdateTaskInput {
+@@ -30,6 +34,8 @@ export interface UpdateTaskInput {
+   perceivedDifficulty?: number;
+   actualDifficulty?: number;
+   completed?: boolean;
++  time?: string;
++  remindBefore?: number;
+ }
+ 
+ export interface CloneTasksInput {
+diff --git a/web/src/components/AppShell.tsx b/web/src/components/AppShell.tsx
+index f1eff0b..61c27c4 100644
+--- a/web/src/components/AppShell.tsx
++++ b/web/src/components/AppShell.tsx
+@@ -9,6 +9,7 @@ import {
+ } from "lucide-react";
+ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+ 
++import { NotificationButton } from "./NotificationButton";
+ import { PageLoader } from "./States";
+ import { useLogout } from "../hooks/useAuth";
+ 
+@@ -56,6 +57,8 @@ export function AppShell() {
+           ))}
+         </nav>
+ 
++        <NotificationButton />
++
+         <button
+           type="button"
+           className="icon-button logout-button"
+diff --git a/web/src/components/NotificationButton.tsx b/web/src/components/NotificationButton.tsx
+new file mode 100644
+index 0000000..c677ca1
+--- /dev/null
++++ b/web/src/components/NotificationButton.tsx
+@@ -0,0 +1,100 @@
++import { useState } from "react";
++import { Bell, BellOff, BellRing } from "lucide-react";
++
++import { errorMessage } from "../api/client";
++import { usePush } from "../hooks/usePush";
++import { Sheet } from "./Sheet";
++import { useToast } from "./Toast";
++
++const messages = {
++  unsupported:
++    "This browser cannot receive push notifications. On Android, open the app in Chrome over HTTPS and install it to the home screen.",
++  denied:
++    "Notifications are blocked for this app. Enable them in Android Settings → Apps → Attack Mode → Notifications, then come back.",
++  off: "Get a notification before each timed task starts, even when the app is closed.",
++  on: "Reminders are on. You will be notified before each timed task starts.",
++} as const;
++
++export function NotificationButton() {
++  const [open, setOpen] = useState(false);
++  const { state, busy, enable, disable, sendTest } = usePush();
++  const { showToast } = useToast();
++
++  async function run(action: () => Promise<unknown>, success: string) {
++    try {
++      await action();
++      showToast(success, "success");
++    } catch (error) {
++      showToast(errorMessage(error));
++    }
++  }
++
++  const Icon = state === "on" ? BellRing : state === "off" ? Bell : BellOff;
++
++  return (
++    <>
++      <button
++        type="button"
++        className="icon-button notify-button"
++        onClick={() => setOpen(true)}
++        aria-label="Reminders"
++        title="Reminders"
++      >
++        <Icon size={18} />
++      </button>
++
++      <Sheet
++        open={open}
++        title="Reminders"
++        subtitle="Task time notifications"
++        onClose={() => setOpen(false)}
++        footer={
++          <>
++            <div />
++            <div className="sheet-footer-actions">
++              <button type="button" className="button ghost" onClick={() => setOpen(false)}>
++                Close
++              </button>
++              {state === "off" ? (
++                <button
++                  type="button"
++                  className="button primary"
++                  disabled={busy}
++                  onClick={() => run(enable, "Reminders enabled.")}
++                >
++                  Enable reminders
++                </button>
++              ) : null}
++              {state === "on" ? (
++                <>
++                  <button
++                    type="button"
++                    className="button ghost"
++                    disabled={busy}
++                    onClick={() => run(disable, "Reminders turned off.")}
++                  >
++                    Turn off
++                  </button>
++                  <button
++                    type="button"
++                    className="button primary"
++                    disabled={busy}
++                    onClick={() => run(sendTest, "Test notification sent.")}
++                  >
++                    Send test
++                  </button>
++                </>
++              ) : null}
++            </div>
++          </>
++        }
++      >
++        <p>{messages[state]}</p>
++        <p className="muted">
++          Set a reminder time on any task. Notifications are skipped for tasks you have already
++          completed.
++        </p>
++      </Sheet>
++    </>
++  );
++}
+diff --git a/web/src/components/TaskForm.tsx b/web/src/components/TaskForm.tsx
+index 1b7d0b8..929b68a 100644
+--- a/web/src/components/TaskForm.tsx
++++ b/web/src/components/TaskForm.tsx
+@@ -16,12 +16,23 @@ interface TaskFormProps {
+   onClose: () => void;
+ }
+ 
++const REMIND_OPTIONS = [
++  { value: 0, label: "At the time" },
++  { value: 5, label: "5 minutes before" },
++  { value: 10, label: "10 minutes before" },
++  { value: 15, label: "15 minutes before" },
++  { value: 30, label: "30 minutes before" },
++  { value: 60, label: "1 hour before" },
++];
++
+ export function TaskForm({ open, dateKey, task, onClose }: TaskFormProps) {
+   const formId = useId();
+   const [what, setWhat] = useState("");
+   const [howMuch, setHowMuch] = useState("");
+   const [when, setWhen] = useState("");
+   const [where, setWhere] = useState("");
++  const [time, setTime] = useState("");
++  const [remindBefore, setRemindBefore] = useState(10);
+   const [perceivedDifficulty, setPerceivedDifficulty] = useState<number | null>(null);
+   const [error, setError] = useState<string | null>(null);
+ 
+@@ -36,6 +47,8 @@ export function TaskForm({ open, dateKey, task, onClose }: TaskFormProps) {
+     setHowMuch(task?.howMuch ?? "");
+     setWhen(task?.when ?? "");
+     setWhere(task?.where ?? "");
++    setTime(task?.time ?? "");
++    setRemindBefore(task?.remindBefore ?? 10);
+     setPerceivedDifficulty(task?.perceivedDifficulty ?? null);
+     setError(null);
+   }, [open, task]);
+@@ -65,6 +78,8 @@ export function TaskForm({ open, dateKey, task, onClose }: TaskFormProps) {
+             howMuch: howMuch.trim(),
+             when: when.trim(),
+             where: where.trim(),
++            time,
++            remindBefore,
+             perceivedDifficulty,
+           },
+         });
+@@ -76,6 +91,8 @@ export function TaskForm({ open, dateKey, task, onClose }: TaskFormProps) {
+           howMuch: howMuch.trim(),
+           when: when.trim(),
+           where: where.trim(),
++          time,
++          remindBefore,
+           perceivedDifficulty,
+         });
+         showToast("Task added.", "success");
+@@ -169,6 +186,30 @@ export function TaskForm({ open, dateKey, task, onClose }: TaskFormProps) {
+           />
+         </label>
+ 
++        <label className="field">
++          <span className="field-label">Reminder time</span>
++          <input
++            type="time"
++            value={time}
++            onChange={(event) => setTime(event.target.value)}
++          />
++        </label>
++
++        <label className="field">
++          <span className="field-label">Notify me</span>
++          <select
++            value={remindBefore}
++            onChange={(event) => setRemindBefore(Number(event.target.value))}
++            disabled={!time}
++          >
++            {REMIND_OPTIONS.map((option) => (
++              <option key={option.value} value={option.value}>
++                {option.label}
++              </option>
++            ))}
++          </select>
++        </label>
++
+         <label className="field field-full">
+           <span className="field-label">Where</span>
+           <input
+diff --git a/web/src/components/TaskList.tsx b/web/src/components/TaskList.tsx
+index 0c88618..d2d271c 100644
+--- a/web/src/components/TaskList.tsx
++++ b/web/src/components/TaskList.tsx
+@@ -11,6 +11,10 @@ interface TaskListProps {
+   onEditAd: (task: Task) => void;
+ }
+ 
++export function whenLabel(task: Task): string {
++  return [task.time, task.when].filter(Boolean).join(" · ");
++}
++
+ function PreviewValue({ value }: { value: string }) {
+   if (!value) {
+     return <span className="muted">—</span>;
+@@ -81,7 +85,7 @@ export function TaskTable({ tasks, pendingId, onToggle, onEdit, onEditAd }: Task
+                   <PreviewValue value={task.howMuch} />
+                 </td>
+                 <td>
+-                  <PreviewValue value={task.when} />
++                  <PreviewValue value={whenLabel(task)} />
+                 </td>
+                 <td>
+                   <PreviewValue value={task.where} />
+@@ -146,7 +150,7 @@ export function TaskCards({ tasks, pendingId, onToggle, onEdit, onEditAd }: Task
+               </button>
+             </div>
+ 
+-            {task.howMuch || task.when || task.where ? (
++            {task.howMuch || whenLabel(task) || task.where ? (
+               <div className="task-card-meta">
+                 {task.howMuch ? (
+                   <span>
+@@ -154,10 +158,10 @@ export function TaskCards({ tasks, pendingId, onToggle, onEdit, onEditAd }: Task
+                     {task.howMuch}
+                   </span>
+                 ) : null}
+-                {task.when ? (
++                {whenLabel(task) ? (
+                   <span>
+                     <Clock3 size={14} aria-hidden="true" />
+-                    {task.when}
++                    {whenLabel(task)}
+                   </span>
+                 ) : null}
+                 {task.where ? (
+diff --git a/web/src/hooks/usePush.ts b/web/src/hooks/usePush.ts
+new file mode 100644
+index 0000000..957e7c5
+--- /dev/null
++++ b/web/src/hooks/usePush.ts
+@@ -0,0 +1,114 @@
++import { useCallback, useEffect, useState } from "react";
++
++import { api } from "../api/client";
++
++export type PushState = "unsupported" | "denied" | "off" | "on";
++
++const supported =
++  typeof window !== "undefined" &&
++  "serviceWorker" in navigator &&
++  "PushManager" in window &&
++  "Notification" in window &&
++  window.isSecureContext;
++
++function timezone(): string {
++  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
++}
++
++function decodeKey(value: string): Uint8Array<ArrayBuffer> {
++  const padded = value + "=".repeat((4 - (value.length % 4)) % 4);
++  const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
++  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
++  for (let index = 0; index < raw.length; index += 1) {
++    bytes[index] = raw.charCodeAt(index);
++  }
++  return bytes;
++}
++
++async function registration(): Promise<ServiceWorkerRegistration> {
++  return navigator.serviceWorker.ready;
++}
++
++async function sync(subscription: PushSubscription) {
++  const json = subscription.toJSON();
++  await api.post("/api/push/subscribe", {
++    endpoint: json.endpoint,
++    keys: json.keys,
++    timezone: timezone(),
++  });
++}
++
++export function usePush() {
++  const [state, setState] = useState<PushState>(supported ? "off" : "unsupported");
++  const [busy, setBusy] = useState(false);
++
++  useEffect(() => {
++    if (!supported) return;
++    if (Notification.permission === "denied") {
++      setState("denied");
++      return;
++    }
++
++    let active = true;
++    registration()
++      .then((reg) => reg.pushManager.getSubscription())
++      .then(async (subscription) => {
++        if (!active || !subscription) return;
++        setState("on");
++        await sync(subscription).catch(() => undefined);
++      })
++      .catch(() => undefined);
++
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  const enable = useCallback(async () => {
++    if (!supported) return;
++    setBusy(true);
++    try {
++      const permission = await Notification.requestPermission();
++      if (permission !== "granted") {
++        setState(permission === "denied" ? "denied" : "off");
++        return;
++      }
++
++      const reg = await registration();
++      const { publicKey } = await api.get<{ publicKey: string }>("/api/push/key");
++      const subscription =
++        (await reg.pushManager.getSubscription()) ??
++        (await reg.pushManager.subscribe({
++          userVisibleOnly: true,
++          applicationServerKey: decodeKey(publicKey),
++        }));
++      await sync(subscription);
++      setState("on");
++    } finally {
++      setBusy(false);
++    }
++  }, []);
++
++  const disable = useCallback(async () => {
++    if (!supported) return;
++    setBusy(true);
++    try {
++      const reg = await registration();
++      const subscription = await reg.pushManager.getSubscription();
++      if (subscription) {
++        await api.post("/api/push/unsubscribe", { endpoint: subscription.endpoint });
++        await subscription.unsubscribe();
++      }
++      setState("off");
++    } finally {
++      setBusy(false);
++    }
++  }, []);
++
++  const sendTest = useCallback(
++    () => api.post<{ delivered: number }>("/api/push/test"),
++    [],
++  );
++
++  return { state, busy, enable, disable, sendTest };
++}
+diff --git a/web/src/index.css b/web/src/index.css
+index 8e83e92..bcf8e39 100644
+--- a/web/src/index.css
++++ b/web/src/index.css
+@@ -205,10 +205,14 @@ p {
+   display: none;
+ }
+ 
+-.logout-button {
++.notify-button {
+   margin-left: auto;
+ }
+ 
++.logout-button {
++  margin-left: 0;
++}
++
+ .app-main {
+   width: 100%;
+   max-width: 1120px;
+@@ -1995,7 +1999,7 @@ textarea::placeholder {
+     color: var(--paper);
+   }
+ 
+-  .logout-button {
++  .notify-button {
+     margin-left: 0;
+   }
+ 
+-- 
+2.43.0
+
