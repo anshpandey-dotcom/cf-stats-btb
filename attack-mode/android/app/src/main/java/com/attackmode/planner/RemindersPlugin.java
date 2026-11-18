@@ -60,6 +60,26 @@ public class RemindersPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void scheduleOne(PluginCall call) {
+        ReminderNotifier.ensureChannel(getContext());
+        ReminderNotifier.scheduleOne(
+            getContext(),
+            call.getInt("id", 0),
+            call.getString("title", ""),
+            call.getString("body", ""),
+            call.getString("url", "/focus"),
+            call.getLong("at", 0L)
+        );
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void cancelOne(PluginCall call) {
+        ReminderNotifier.cancelOne(getContext(), call.getInt("id", 0));
+        call.resolve();
+    }
+
+    @PluginMethod
     public void cancelAll(PluginCall call) {
         ReminderNotifier.cancelAll(getContext());
         call.resolve();

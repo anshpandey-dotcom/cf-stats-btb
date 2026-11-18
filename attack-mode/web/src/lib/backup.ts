@@ -1,9 +1,8 @@
 import { registerPlugin } from "@capacitor/core";
 
 import { isNative } from "./native";
-import { STORAGE_KEY } from "./storage";
 
-interface BackupStatus {
+export interface BackupStatus {
   granted: boolean;
   exists: boolean;
   path: string;
@@ -14,6 +13,13 @@ interface BackupPlugin {
   requestAccess(): Promise<BackupStatus>;
   write(options: { json: string }): Promise<void>;
   read(): Promise<{ exists: boolean; json: string }>;
+  saveFile(options: { folder: string; name: string; base64: string }): Promise<{ bytes: number }>;
+  listFiles(options: { folder: string }): Promise<{ files: string[] }>;
+}
+
+interface Provider {
+  build(): string | null;
+  apply(raw: string): void;
 }
 
 const Backup = registerPlugin<BackupPlugin>("Backup");
@@ -21,24 +27,37 @@ const Backup = registerPlugin<BackupPlugin>("Backup");
 const ASKED_KEY = "attack-mode:backup-asked";
 const WRITE_DELAY_MS = 400;
 
+let provider: Provider | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let pending: string | null = null;
 
-interface StoredSnapshot {
-  nextId: number;
-  savedAt?: string;
-  tasks: unknown[];
+export function setBackupProvider(next: Provider) {
+  provider = next;
 }
 
-function parse(raw: string | null): StoredSnapshot | null {
+interface Stored {
+  savedAt?: string;
+  tasks?: unknown[];
+  extras?: { journal?: object; sessions?: unknown[] };
+}
+
+function parse(raw: string | null | undefined): Stored | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw) as StoredSnapshot;
-    if (Array.isArray(value.tasks) && typeof value.nextId === "number") return value;
+    const value = JSON.parse(raw) as Stored;
+    return value && typeof value === "object" ? value : null;
   } catch {
-    // Ignore a damaged snapshot.
+    return null;
   }
-  return null;
+}
+
+function weight(value: Stored | null): number {
+  if (!value) return 0;
+  return (
+    (value.tasks?.length ?? 0) +
+    Object.keys(value.extras?.journal ?? {}).length +
+    (value.extras?.sessions?.length ?? 0)
+  );
 }
 
 async function flush() {
@@ -61,24 +80,34 @@ export function scheduleBackup(json: string) {
   }
 }
 
+export async function backupStatus(): Promise<BackupStatus> {
+  if (!isNative()) return { granted: false, exists: false, path: "" };
+  return Backup.status();
+}
+
+export async function requestBackupAccess(): Promise<void> {
+  if (!isNative()) return;
+  await Backup.requestAccess();
+}
+
 export async function syncBackup(): Promise<boolean> {
-  if (!isNative()) return false;
+  if (!isNative() || !provider) return false;
 
   try {
     const status = await Backup.status();
     if (!status.granted) return false;
 
-    const local = localStorage.getItem(STORAGE_KEY);
+    const local = provider.build();
     const localSnapshot = parse(local);
 
     if (status.exists) {
       const file = await Backup.read();
       const stored = parse(file.json);
-      if (stored) {
-        const emptyLocally = !localSnapshot || localSnapshot.tasks.length === 0;
+      if (stored && weight(stored) > 0) {
+        const emptyLocally = weight(localSnapshot) === 0;
         const newer = (stored.savedAt ?? "") > (localSnapshot?.savedAt ?? "");
-        if (stored.tasks.length > 0 && (emptyLocally || newer)) {
-          localStorage.setItem(STORAGE_KEY, file.json);
+        if (emptyLocally || newer) {
+          provider.apply(file.json);
           return true;
         }
       }
@@ -100,12 +129,35 @@ export async function askForBackupAccess(): Promise<void> {
     localStorage.setItem(ASKED_KEY, "1");
 
     const allow = window.confirm(
-      `Keep a backup of your tasks in ${status.path.replace(/\/[^/]*$/, "")}? ` +
+      "Keep your tasks, journal and saved sheets in Documents/Attack Mode? " +
         "On the next screen allow access to files for Attack Mode. " +
-        "Your tasks then survive reinstalling the app.",
+        "Your data then survives reinstalling the app.",
     );
     if (allow) await Backup.requestAccess();
   } catch (error) {
     console.warn("Backup access request failed:", error);
+  }
+}
+
+export async function saveFileToDocuments(
+  folder: string,
+  name: string,
+  bytes: Uint8Array,
+): Promise<number> {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  const result = await Backup.saveFile({ folder, name, base64: btoa(binary) });
+  return result.bytes;
+}
+
+export async function listSavedFiles(folder: string): Promise<string[]> {
+  if (!isNative()) return [];
+  try {
+    return (await Backup.listFiles({ folder })).files;
+  } catch {
+    return [];
   }
 }

@@ -1,15 +1,18 @@
 import { Suspense } from "react";
 import {
   BarChart3,
+  BookOpen,
   CalendarDays,
   LogOut,
   Sun,
   Sunrise,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { NotificationButton } from "./NotificationButton";
+import { ProgressPills } from "./ProgressPills";
 import { PageLoader } from "./States";
 import { useLogout } from "../hooks/useAuth";
 import { isNative } from "../lib/native";
@@ -23,6 +26,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/tomorrow", label: "Tomorrow", icon: Sunrise },
+  { to: "/focus", label: "Focus", icon: Timer },
+  { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/stats", label: "Stats", icon: BarChart3 },
 ];
@@ -58,6 +63,7 @@ export function AppShell() {
           ))}
         </nav>
 
+        <ProgressPills />
         <NotificationButton />
 
         {isNative() ? null : (

@@ -145,6 +145,24 @@ final class ReminderNotifier {
         }
     }
 
+    static void scheduleOne(Context context, int id, String title, String body, String url, long at) {
+        AlarmManager alarms = context.getSystemService(AlarmManager.class);
+        PendingIntent fire = firePending(context, id, title, body, url);
+        if (at <= System.currentTimeMillis()) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
+        }
+    }
+
+    static void cancelOne(Context context, int id) {
+        AlarmManager alarms = context.getSystemService(AlarmManager.class);
+        alarms.cancel(firePending(context, id, "", "", ""));
+    }
+
     static void cancelAll(Context context) {
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
         String raw = prefs(context).getString(KEY_ITEMS, "[]");

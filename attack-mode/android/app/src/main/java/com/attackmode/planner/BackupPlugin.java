@@ -131,6 +131,81 @@ public class BackupPlugin extends Plugin {
         call.resolve();
     }
 
+    private static String safe(String value) {
+        return value == null ? "" : value.replaceAll("[^A-Za-z0-9._ -]", "_");
+    }
+
+    @PluginMethod
+    public void saveFile(PluginCall call) {
+        String folderName = safe(call.getString("folder", ""));
+        String name = safe(call.getString("name"));
+        String data = call.getString("base64");
+        if (name.isEmpty() || data == null || !hasAccess()) {
+            call.reject("Saving is not available.");
+            return;
+        }
+
+        File root = backupFile().getParentFile();
+        File folder = folderName.isEmpty() ? root : new File(root, folderName);
+        if (!folder.isDirectory() && !folder.mkdirs()) {
+            call.reject("Could not create the folder.");
+            return;
+        }
+
+        byte[] bytes;
+        try {
+            bytes = android.util.Base64.decode(data, android.util.Base64.DEFAULT);
+        } catch (IllegalArgumentException error) {
+            call.reject("Invalid file data.");
+            return;
+        }
+
+        File target = new File(folder, name);
+        File temp = new File(folder, name + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(temp)) {
+            out.write(bytes);
+            out.getFD().sync();
+        } catch (IOException error) {
+            call.reject("Could not write the file.");
+            return;
+        }
+        if (!temp.renameTo(target)) {
+            target.delete();
+            if (!temp.renameTo(target)) {
+                call.reject("Could not save the file.");
+                return;
+            }
+        }
+
+        android.media.MediaScannerConnection.scanFile(
+            getContext(), new String[] {target.getAbsolutePath()}, null, null
+        );
+        JSObject result = new JSObject();
+        result.put("bytes", bytes.length);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void listFiles(PluginCall call) {
+        String folderName = safe(call.getString("folder", ""));
+        File root = backupFile().getParentFile();
+        File folder = folderName.isEmpty() ? root : new File(root, folderName);
+        com.getcapacitor.JSArray names = new com.getcapacitor.JSArray();
+        if (hasAccess() && folder.isDirectory()) {
+            File[] files = folder.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile() && !file.getName().endsWith(".tmp")) {
+                        names.put(file.getName());
+                    }
+                }
+            }
+        }
+        JSObject result = new JSObject();
+        result.put("files", names);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void read(PluginCall call) {
         JSObject result = new JSObject();

@@ -9,6 +9,7 @@ import type {
   Task,
   UpdateTaskInput,
 } from "./types";
+import { combinedBackupJson } from "../lib/extras";
 import { scheduleBackup } from "../lib/backup";
 import { rescheduleReminders } from "../lib/reminders";
 import { STORAGE_KEY } from "../lib/storage";
@@ -38,7 +39,9 @@ function save(snapshot: Snapshot) {
   snapshot.savedAt = new Date().toISOString();
   const raw = JSON.stringify(snapshot);
   localStorage.setItem(STORAGE_KEY, raw);
-  scheduleBackup(raw);
+  const combined = combinedBackupJson();
+  if (combined) scheduleBackup(combined);
+  window.dispatchEvent(new Event("attack:data-changed"));
 }
 
 export function allTasks(): Task[] {

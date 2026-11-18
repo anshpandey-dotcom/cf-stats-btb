@@ -7,6 +7,8 @@ import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ToastProvider } from "./components/Toast";
 import { DayPage } from "./pages/DayPage";
+import { FocusPage } from "./pages/FocusPage";
+import { JournalPage } from "./pages/JournalPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import "./index.css";
@@ -66,6 +68,8 @@ export function App() {
                 <Route path="today" element={<DayPage mode="today" />} />
                 <Route path="tomorrow" element={<DayPage mode="tomorrow" />} />
                 <Route path="day/:date" element={<DayPage mode="date" />} />
+                <Route path="focus" element={<FocusPage />} />
+                <Route path="journal" element={<JournalPage />} />
                 <Route path="calendar" element={<CalendarPage />} />
                 <Route path="stats" element={<StatsPage />} />
                 <Route path="*" element={<NotFoundPage />} />

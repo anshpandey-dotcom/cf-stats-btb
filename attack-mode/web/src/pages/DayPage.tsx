@@ -7,6 +7,7 @@ import type { Task } from "../api/types";
 import { AdSheet } from "../components/AdSheet";
 import { CloneTasksSheet } from "../components/CloneTasksSheet";
 import { NextGoalCard } from "../components/NextGoalCard";
+import { XpCard } from "../components/XpCard";
 import { EmptyState, ErrorState, PageLoader } from "../components/States";
 import { TaskForm } from "../components/TaskForm";
 import { TaskCards, TaskTable } from "../components/TaskList";
@@ -207,6 +208,8 @@ export function DayPage({ mode }: { mode: DayMode }) {
       )}
 
       <NextGoalCard tasks={tasks} />
+
+      {isToday ? <XpCard /> : null}
 
       {isToday && !tasksQuery.isLoading ? <WeekSummaryCard today={today} /> : null}
 

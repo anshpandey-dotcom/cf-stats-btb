@@ -19,6 +19,8 @@ interface RemindersPlugin {
   check(): Promise<RemindersStatus>;
   request(): Promise<RemindersStatus>;
   schedule(options: { items: ReminderItem[] }): Promise<void>;
+  scheduleOne(options: { id: number; title: string; body: string; at: number; url: string }): Promise<void>;
+  cancelOne(options: { id: number }): Promise<void>;
   cancelAll(): Promise<void>;
   test(): Promise<void>;
   consumeUrl(): Promise<{ url: string }>;
@@ -138,4 +140,24 @@ export async function listenForTaps(): Promise<void> {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void openPendingUrl();
   });
+}
+
+const TIMER_ALARM_ID = 2_100_000_001;
+
+export async function scheduleTimerAlarm(at: number, title: string, body: string): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Reminders.scheduleOne({ id: TIMER_ALARM_ID, title, body, at, url: "/focus" });
+  } catch (error) {
+    console.warn("Could not schedule the timer alarm:", error);
+  }
+}
+
+export async function cancelTimerAlarm(): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Reminders.cancelOne({ id: TIMER_ALARM_ID });
+  } catch {
+    // Nothing to cancel.
+  }
 }
