@@ -44,20 +44,66 @@ jobs:
 
       - run: bunx cap sync android
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: attack-mode/android
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleRelease
 
       - name: Name the APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk attack-mode.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk attack-mode.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: attack-mode-apk
           path: attack-mode/attack-mode.apk
+
+  smoke:
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: attack-mode-apk
+          path: dl
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch the app on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: attack-mode
+          script: bash scripts/android-smoke.sh ${{ github.workspace }}/dl/attack-mode.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: attack-mode-smoke
+          path: |
+            attack-mode/smoke*.png
+            attack-mode/smoke*.log
+            attack-mode/smoke*.txt
+
+  publish:
+    needs: [apk, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: attack-mode-apk
+          path: dl
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -65,7 +111,7 @@ jobs:
           tag_name: attack-mode-latest
           name: Attack Mode (latest APK)
           make_latest: true
-          files: attack-mode/attack-mode.apk
+          files: dl/attack-mode.apk
           body: |
             Attack Mode Android app, built from ${{ github.sha }}.
             Download attack-mode.apk below and install it on your phone.
