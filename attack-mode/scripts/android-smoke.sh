@@ -55,11 +55,19 @@ sleep 25
 adb exec-out screencap -p > smoke-restored.png
 adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1
 adb shell cat /sdcard/ui.xml > smoke-ui.txt 2>/dev/null
-if grep -q "Restored smoke task" smoke-ui.txt; then
-  echo "RESTORE OK: the task was loaded from the Documents backup"
+adb shell "cat '/sdcard/Documents/Attack Mode/attack-mode-data.json'" > smoke-backup-after.txt 2>/dev/null
+if grep -q '"extras"' smoke-backup-after.txt && grep -q "Restored smoke task" smoke-backup-after.txt; then
+  echo "RESTORE OK: the app loaded the seeded backup and rewrote the file"
 else
-  echo "RESTORE NOT CONFIRMED: task text not found on screen"
+  echo "RESTORE FAILED: the backup file was not picked up"
+  cat smoke-backup-after.txt
 fi
+if grep -q "Restored smoke task" smoke-ui.txt; then
+  echo "screen reader also sees the restored task"
+else
+  echo "info: restored task text not visible to uiautomator"
+fi
+adb logcat -d | grep -iE "chromium|Capacitor" | tail -30 > smoke-console.log
 adb logcat -d > smoke-restore.log
 if grep -q "FATAL EXCEPTION" smoke-restore.log; then
   echo "app crashed after restore"
