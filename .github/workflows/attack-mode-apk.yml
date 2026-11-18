@@ -39,6 +39,9 @@ jobs:
 
       - run: bun run build:web
 
+      - name: Drop precompressed copies
+        run: find web/dist \( -name '*.gz' -o -name '*.br' \) -delete
+
       - run: bunx cap sync android
 
       - name: Build debug APK
