@@ -1,0 +1,402 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+const (
+	maxWhatLength       = 1000
+	maxFieldLength      = 500
+	maxRemindBefore     = 1440
+	defaultRemindBefore = 10
+
+	taskColumns = `id, task_date, what, how_much, when_text, where_text,
+		perceived_difficulty, actual_difficulty, completed,
+		completed_at, created_at, updated_at, remind_time, remind_before`
+)
+
+// CreateTask validates and stores a new task.
+func (s *Store) CreateTask(ctx context.Context, in CreateTaskInput) (Task, error) {
+	if err := normalizeCreate(&in); err != nil {
+		return Task{}, err
+	}
+
+	now := time.Now().UTC()
+	result, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO tasks (
+			task_date, what, how_much, when_text, where_text,
+			perceived_difficulty, actual_difficulty, completed,
+			completed_at, created_at, updated_at, remind_time, remind_before, notified
+		) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?, ?, 0)`,
+		in.Date,
+		in.What,
+		in.HowMuch,
+		in.When,
+		in.Where,
+		in.PerceivedDifficulty,
+		formatTime(now),
+		formatTime(now),
+		in.Time,
+		*in.RemindBefore,
+	)
+	if err != nil {
+		return Task{}, fmt.Errorf("insert task: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Task{}, fmt.Errorf("read inserted task id: %w", err)
+	}
+
+	return s.GetTask(ctx, id)
+}
+
+// GetTask returns one task by id.
+func (s *Store) GetTask(ctx context.Context, id int64) (Task, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT
+		`+taskColumns+`
+	FROM tasks WHERE id = ?`, id)
+
+	task, err := scanTask(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Task{}, ErrNotFound
+	}
+	if err != nil {
+		return Task{}, fmt.Errorf("get task: %w", err)
+	}
+	return task, nil
+}
+
+// ListTasks returns all tasks for a calendar date in creation order.
+func (s *Store) ListTasks(ctx context.Context, date string) ([]Task, error) {
+	if err := validateDate(date); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT
+		`+taskColumns+`
+	FROM tasks WHERE task_date = ? ORDER BY id ASC`, date)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]Task, 0)
+	for rows.Next() {
+		task, err := scanTask(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan task: %w", err)
+		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tasks: %w", err)
+	}
+	return tasks, nil
+}
+
+// UpdateTask applies a partial update and returns the resulting task.
+func (s *Store) UpdateTask(ctx context.Context, id int64, in UpdateTaskInput) (Task, error) {
+	current, err := s.GetTask(ctx, id)
+	if err != nil {
+		return Task{}, err
+	}
+
+	if in.What != nil {
+		current.What = strings.TrimSpace(*in.What)
+	}
+	if in.HowMuch != nil {
+		current.HowMuch = strings.TrimSpace(*in.HowMuch)
+	}
+	if in.When != nil {
+		current.When = strings.TrimSpace(*in.When)
+	}
+	if in.Where != nil {
+		current.Where = strings.TrimSpace(*in.Where)
+	}
+	if in.PerceivedDifficulty != nil {
+		current.PerceivedDifficulty = *in.PerceivedDifficulty
+	}
+	if in.ActualDifficulty != nil {
+		current.ActualDifficulty = in.ActualDifficulty
+	}
+	if in.Completed != nil {
+		current.Completed = *in.Completed
+	}
+	scheduleChanged := false
+	if in.Time != nil {
+		next := strings.TrimSpace(*in.Time)
+		scheduleChanged = scheduleChanged || next != current.Time
+		current.Time = next
+	}
+	if in.RemindBefore != nil {
+		scheduleChanged = scheduleChanged || *in.RemindBefore != current.RemindBefore
+		current.RemindBefore = *in.RemindBefore
+	}
+
+	if err := validateTask(current); err != nil {
+		return Task{}, err
+	}
+	if current.Completed && current.ActualDifficulty == nil {
+		return Task{}, validationError("Choose the actual difficulty before marking this task complete.")
+	}
+
+	now := time.Now().UTC()
+	if current.Completed {
+		if current.CompletedAt == nil {
+			completedAt := now
+			current.CompletedAt = &completedAt
+		}
+	} else {
+		current.CompletedAt = nil
+	}
+	current.UpdatedAt = now
+
+	_, err = s.db.ExecContext(
+		ctx,
+		`UPDATE tasks SET
+			what = ?, how_much = ?, when_text = ?, where_text = ?,
+			perceived_difficulty = ?, actual_difficulty = ?, completed = ?,
+			completed_at = ?, updated_at = ?, remind_time = ?, remind_before = ?,
+			notified = CASE WHEN ? THEN 0 ELSE notified END
+		WHERE id = ?`,
+		current.What,
+		current.HowMuch,
+		current.When,
+		current.Where,
+		current.PerceivedDifficulty,
+		nullableIntValue(current.ActualDifficulty),
+		boolToInt(current.Completed),
+		nullableTimeValue(current.CompletedAt),
+		formatTime(current.UpdatedAt),
+		current.Time,
+		current.RemindBefore,
+		scheduleChanged,
+		current.ID,
+	)
+	if err != nil {
+		return Task{}, fmt.Errorf("update task: %w", err)
+	}
+
+	return s.GetTask(ctx, id)
+}
+
+// DeleteTask removes a task.
+func (s *Store) DeleteTask(ctx context.Context, id int64) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete task: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete task rows affected: %w", err)
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CloneTasks copies every task on one date to another as a fresh,
+// uncompleted task. Plan fields are preserved; completion and actual
+// difficulty are reset. The source day is left untouched.
+func (s *Store) CloneTasks(ctx context.Context, from, to string) (int64, error) {
+	from = strings.TrimSpace(from)
+	to = strings.TrimSpace(to)
+
+	if err := validateDate(from); err != nil {
+		return 0, err
+	}
+	if err := validateDate(to); err != nil {
+		return 0, err
+	}
+	if from == to {
+		return 0, validationError("Choose a different date to clone to.")
+	}
+
+	now := formatTime(time.Now().UTC())
+	result, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO tasks (
+			task_date, what, how_much, when_text, where_text,
+			perceived_difficulty, actual_difficulty, completed,
+			completed_at, created_at, updated_at, remind_time, remind_before, notified
+		)
+		SELECT ?, what, how_much, when_text, where_text,
+			perceived_difficulty, NULL, 0, NULL, ?, ?, remind_time, remind_before, 0
+		FROM tasks
+		WHERE task_date = ?
+		ORDER BY id ASC`,
+		to,
+		now,
+		now,
+		from,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("clone tasks: %w", err)
+	}
+
+	cloned, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clone tasks rows affected: %w", err)
+	}
+	return cloned, nil
+}
+
+func normalizeCreate(in *CreateTaskInput) error {
+	in.Date = strings.TrimSpace(in.Date)
+	in.What = strings.TrimSpace(in.What)
+	in.HowMuch = strings.TrimSpace(in.HowMuch)
+	in.When = strings.TrimSpace(in.When)
+	in.Where = strings.TrimSpace(in.Where)
+	in.Time = strings.TrimSpace(in.Time)
+	if in.RemindBefore == nil {
+		fallback := defaultRemindBefore
+		in.RemindBefore = &fallback
+	}
+
+	task := Task{
+		Date:                in.Date,
+		What:                in.What,
+		HowMuch:             in.HowMuch,
+		When:                in.When,
+		Where:               in.Where,
+		PerceivedDifficulty: in.PerceivedDifficulty,
+		Time:                in.Time,
+		RemindBefore:        *in.RemindBefore,
+	}
+	return validateTask(task)
+}
+
+func validateTask(task Task) error {
+	if err := validateDate(task.Date); err != nil {
+		return err
+	}
+	if task.What == "" {
+		return validationError("What is required.")
+	}
+	if utf8.RuneCountInString(task.What) > maxWhatLength {
+		return validationError(fmt.Sprintf("What must be %d characters or fewer.", maxWhatLength))
+	}
+	if utf8.RuneCountInString(task.HowMuch) > maxFieldLength {
+		return validationError(fmt.Sprintf("How much must be %d characters or fewer.", maxFieldLength))
+	}
+	if utf8.RuneCountInString(task.When) > maxFieldLength {
+		return validationError(fmt.Sprintf("When must be %d characters or fewer.", maxFieldLength))
+	}
+	if utf8.RuneCountInString(task.Where) > maxFieldLength {
+		return validationError(fmt.Sprintf("Where must be %d characters or fewer.", maxFieldLength))
+	}
+	if task.Time != "" {
+		if parsed, err := time.Parse("15:04", task.Time); err != nil || parsed.Format("15:04") != task.Time {
+			return validationError("Time must be a valid HH:MM value.")
+		}
+	}
+	if task.RemindBefore < 0 || task.RemindBefore > maxRemindBefore {
+		return validationError("Reminder lead time must be between 0 and 1440 minutes.")
+	}
+	if task.PerceivedDifficulty < 1 || task.PerceivedDifficulty > 10 {
+		return validationError("Perceived difficulty must be between 1 and 10.")
+	}
+	if task.ActualDifficulty != nil && (*task.ActualDifficulty < 1 || *task.ActualDifficulty > 10) {
+		return validationError("Actual difficulty must be between 1 and 10.")
+	}
+	return nil
+}
+
+func validateDate(date string) error {
+	if date == "" {
+		return validationError("A date is required.")
+	}
+	parsed, err := time.Parse("2006-01-02", date)
+	if err != nil || parsed.Format("2006-01-02") != date {
+		return validationError("Date must be a valid YYYY-MM-DD date.")
+	}
+	return nil
+}
+
+func validateRange(from, to string) error {
+	if from == "" || to == "" {
+		return validationError("Both from and to dates are required.")
+	}
+	if err := validateDate(from); err != nil {
+		return validationError("The start date must be a valid YYYY-MM-DD date.")
+	}
+	if err := validateDate(to); err != nil {
+		return validationError("The end date must be a valid YYYY-MM-DD date.")
+	}
+	if from > to {
+		return validationError("The start date must be on or before the end date.")
+	}
+	return nil
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTask(scanner rowScanner) (Task, error) {
+	var (
+		task        Task
+		actual      sql.NullInt64
+		completed   int
+		completedAt sql.NullString
+		createdAt   string
+		updatedAt   string
+	)
+
+	err := scanner.Scan(
+		&task.ID,
+		&task.Date,
+		&task.What,
+		&task.HowMuch,
+		&task.When,
+		&task.Where,
+		&task.PerceivedDifficulty,
+		&actual,
+		&completed,
+		&completedAt,
+		&createdAt,
+		&updatedAt,
+		&task.Time,
+		&task.RemindBefore,
+	)
+	if err != nil {
+		return Task{}, err
+	}
+
+	task.Completed = completed == 1
+	if actual.Valid {
+		value := int(actual.Int64)
+		task.ActualDifficulty = &value
+	}
+
+	task.CompletedAt, err = parseNullableTime(completedAt)
+	if err != nil {
+		return Task{}, fmt.Errorf("parse completed_at: %w", err)
+	}
+	task.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return Task{}, fmt.Errorf("parse created_at: %w", err)
+	}
+	task.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return Task{}, fmt.Errorf("parse updated_at: %w", err)
+	}
+
+	return task, nil
+}
