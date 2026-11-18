@@ -2210,3 +2210,16 @@ html.native textarea {
   user-select: text;
   -webkit-user-select: text;
 }
+
+html.native a,
+html.native img {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+html.native button,
+html.native a,
+html.native label {
+  -webkit-user-select: none;
+  user-select: none;
+}

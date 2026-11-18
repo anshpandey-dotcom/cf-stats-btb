@@ -48,6 +48,7 @@ jobs:
         working-directory: attack-mode/android
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
+          export VERSION_CODE=$((GITHUB_RUN_NUMBER + 10))
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
 

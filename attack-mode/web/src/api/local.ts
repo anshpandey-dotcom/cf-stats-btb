@@ -9,12 +9,13 @@ import type {
   Task,
   UpdateTaskInput,
 } from "./types";
+import { scheduleBackup } from "../lib/backup";
 import { rescheduleReminders } from "../lib/reminders";
-
-const STORAGE_KEY = "attack-mode:tasks:v1";
+import { STORAGE_KEY } from "../lib/storage";
 
 interface Snapshot {
   nextId: number;
+  savedAt?: string;
   tasks: Task[];
 }
 
@@ -34,7 +35,10 @@ function load(): Snapshot {
 }
 
 function save(snapshot: Snapshot) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  snapshot.savedAt = new Date().toISOString();
+  const raw = JSON.stringify(snapshot);
+  localStorage.setItem(STORAGE_KEY, raw);
+  scheduleBackup(raw);
 }
 
 export function allTasks(): Task[] {
