@@ -2,13 +2,14 @@
   "appId": "com.attackmode.planner",
   "appName": "Attack Mode",
   "webDir": "web/dist",
+  "backgroundColor": "#f3efe6",
   "android": {
     "backgroundColor": "#f3efe6"
   },
   "plugins": {
-    "LocalNotifications": {
-      "smallIcon": "ic_stat_attack",
-      "iconColor": "#b83b1e"
+    "SystemBars": {
+      "style": "LIGHT",
+      "insetsHandling": "css"
     }
   }
 }

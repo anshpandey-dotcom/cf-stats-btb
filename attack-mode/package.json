@@ -22,7 +22,6 @@
     "@capacitor/cli": "^8.6.2"
   },
   "dependencies": {
-    "@capacitor/core": "^8.6.2",
-    "@capacitor/local-notifications": "^8.3.1"
+    "@capacitor/core": "^8.6.2"
   }
 }

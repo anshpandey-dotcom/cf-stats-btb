@@ -27,7 +27,7 @@
   --font-display: Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --nav-height: 64px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
 }
 
 *,
@@ -136,7 +136,7 @@ p {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: max(11px, env(safe-area-inset-top)) 16px 11px;
+  padding: max(11px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 16px 11px;
   border-bottom: 1px solid rgba(185, 174, 156, 0.6);
   background: rgba(243, 239, 230, 0.88);
   backdrop-filter: blur(14px);
@@ -2192,4 +2192,21 @@ textarea::placeholder {
   margin: 4px 0 0;
   font-size: 13px;
   opacity: 0.7;
+}
+
+html.native {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.native body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html.native input,
+html.native textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
