@@ -41,11 +41,12 @@ echo "---- reinstall and restore from Documents/Attack Mode ----"
 adb uninstall "$package" > /dev/null
 today=$(adb shell date +%F | tr -d '\r')
 adb root > /dev/null 2>&1 || true
-adb shell mkdir -p "/sdcard/Documents/Attack Mode"
+adb shell "mkdir -p '/sdcard/Documents/Attack Mode'"
 adb shell "cat > '/sdcard/Documents/Attack Mode/attack-mode-data.json'" <<JSON
 {"nextId":2,"savedAt":"2099-01-01T00:00:00.000Z","tasks":[{"id":1,"date":"$today","what":"Restored smoke task","howMuch":"","when":"","where":"","perceivedDifficulty":7,"actualDifficulty":null,"completed":false,"completedAt":null,"createdAt":"2099-01-01T00:00:00.000Z","updatedAt":"2099-01-01T00:00:00.000Z","time":"","remindBefore":10}]}
 JSON
 adb install -r "$apk" || { echo "reinstall failed"; exit 1; }
+adb shell ls -la "/sdcard/Documents/Attack\\ Mode/" || true
 adb shell appops set "$package" MANAGE_EXTERNAL_STORAGE allow
 adb shell pm grant "$package" android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
