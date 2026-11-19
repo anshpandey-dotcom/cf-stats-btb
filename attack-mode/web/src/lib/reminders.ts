@@ -16,6 +16,7 @@ interface ReminderItem {
   at: number;
   url: string;
   repeat?: number;
+  habit?: string;
   hour?: number;
   minute?: number;
 }
@@ -103,6 +104,7 @@ function habitReminderItems(): ReminderItem[] {
             body: "Time to check in.",
             at: at.getTime(),
             url: "/habits",
+            habit: habit.id,
             repeat: reminderMask(reminder.days),
             hour,
             minute,

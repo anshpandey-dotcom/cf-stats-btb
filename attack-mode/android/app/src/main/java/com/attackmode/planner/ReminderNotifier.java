@@ -26,6 +26,7 @@ final class ReminderNotifier {
     static final String EXTRA_ID = "attackmode.id";
     static final String EXTRA_TITLE = "attackmode.title";
     static final String EXTRA_BODY = "attackmode.body";
+    static final String EXTRA_HABIT = "attackmode.habit";
     static final String ACTION_FIRE = "com.attackmode.planner.REMINDER";
 
     private static final String PREFS = "attackmode_reminders";
@@ -67,6 +68,10 @@ final class ReminderNotifier {
     }
 
     static void show(Context context, int id, String title, String body, String url) {
+        show(context, id, title, body, url, "");
+    }
+
+    static void show(Context context, int id, String title, String body, String url, String habit) {
         if (!canNotify(context)) {
             return;
         }
@@ -92,21 +97,53 @@ final class ReminderNotifier {
             .setAutoCancel(true)
             .setContentIntent(contentIntent);
 
+        if (habit != null && !habit.isEmpty()) {
+            builder.addAction(0, "Done", actionIntent(
+                context, WidgetActionReceiver.ACTION_CHECK, id ^ 0x10000000, id, title, body, url, habit
+            ));
+            builder.addAction(0, "Snooze 10 min", actionIntent(
+                context, WidgetActionReceiver.ACTION_SNOOZE, id ^ 0x20000000, id, title, body, url, habit
+            ));
+        }
+
         try {
             NotificationManagerCompat.from(context).notify(id, builder.build());
         } catch (SecurityException ignored) {
         }
     }
 
+    private static PendingIntent actionIntent(
+        Context context, String action, int requestCode, int id,
+        String title, String body, String url, String habit
+    ) {
+        Intent intent = new Intent(context, WidgetActionReceiver.class);
+        intent.setAction(action);
+        intent.putExtra(EXTRA_ID, id);
+        intent.putExtra(EXTRA_TITLE, title);
+        intent.putExtra(EXTRA_BODY, body);
+        intent.putExtra(EXTRA_URL, url);
+        intent.putExtra(EXTRA_HABIT, habit);
+        return PendingIntent.getBroadcast(
+            context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
     private static PendingIntent firePending(Context context, int id, String title, String body, String url) {
+        return firePending(context, id, id, title, body, url, "");
+    }
+
+    private static PendingIntent firePending(
+        Context context, int requestCode, int id, String title, String body, String url, String habit
+    ) {
         Intent intent = new Intent(context, ReminderReceiver.class);
         intent.setAction(ACTION_FIRE);
         intent.putExtra(EXTRA_ID, id);
         intent.putExtra(EXTRA_TITLE, title);
         intent.putExtra(EXTRA_BODY, body);
         intent.putExtra(EXTRA_URL, url);
+        intent.putExtra(EXTRA_HABIT, habit);
         return PendingIntent.getBroadcast(
-            context, id, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
     }
 
@@ -138,8 +175,9 @@ final class ReminderNotifier {
             String title = item.optString("title");
             String body = item.optString("body");
             String url = item.optString("url", "/today");
+            String habit = item.optString("habit", "");
 
-            PendingIntent fire = firePending(context, id, title, body, url);
+            PendingIntent fire = firePending(context, id, id, title, body, url, habit);
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
             } else {
@@ -190,8 +228,8 @@ final class ReminderNotifier {
                 prefs(context).edit().putString(KEY_ITEMS, stored.toString()).apply();
                 if (next > now) {
                     scheduleOne(
-                        context, id, item.optString("title"), item.optString("body"),
-                        item.optString("url", "/today"), next
+                        context, id, id, item.optString("title"), item.optString("body"),
+                        item.optString("url", "/today"), item.optString("habit", ""), next
                     );
                 }
                 return;
@@ -201,8 +239,21 @@ final class ReminderNotifier {
     }
 
     static void scheduleOne(Context context, int id, String title, String body, String url, long at) {
+        scheduleOne(context, id, id, title, body, url, "", at);
+    }
+
+    static void snooze(
+        Context context, int id, String title, String body, String url, String habit, long at
+    ) {
+        scheduleOne(context, -id, id, title, body, url, habit, at);
+    }
+
+    static void scheduleOne(
+        Context context, int requestCode, int id, String title, String body,
+        String url, String habit, long at
+    ) {
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
-        PendingIntent fire = firePending(context, id, title, body, url);
+        PendingIntent fire = firePending(context, requestCode, id, title, body, url, habit);
         if (at <= System.currentTimeMillis()) {
             return;
         }

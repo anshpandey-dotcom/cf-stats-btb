@@ -60,39 +60,54 @@ export function frequencyLabel(num: number, den: number): string {
   return `${num} times in ${den} days`;
 }
 
-function windowCount(checks: Checks, day: string, den: number): number {
-  let count = 0;
-  for (let offset = 0; offset < den; offset += 1) {
-    if (checks[shiftDay(day, -offset)] === "y") count += 1;
-  }
-  return count;
-}
-
-function dayValue(habit: Habit, checks: Checks, day: string): number {
-  if (habit.den === 1) return checks[day] === "y" ? 1 : 0;
-  return Math.min(1, windowCount(checks, day, habit.den) / habit.num);
-}
-
 export function firstCheckDay(checks: Checks): string | null {
   const days = Object.keys(checks).sort();
   return days[0] ?? null;
 }
 
+/*
+ * Habit strength, adapted from Loop Habit Tracker (GPLv3, https://github.com/iSoron/uhabits).
+ * Each day moves the score toward the share of the target met in a rolling window, with an
+ * exponential smoothing factor of 0.5^(sqrt(frequency)/13). Skipped days leave the score alone.
+ * Habits below one repetition a day double the target and the window to smooth uneven schedules.
+ */
 export function scoreSeries(habit: Habit, checks: Checks, to: string): Map<string, number> {
   const series = new Map<string, number>();
   const start = firstCheckDay(checks);
   if (!start || start > to) return series;
 
   const frequency = habit.num / habit.den;
+  let numerator = habit.num;
+  let denominator = habit.den;
+  if (frequency < 1) {
+    numerator *= 2;
+    denominator *= 2;
+  }
+
   const multiplier = 0.5 ** (Math.sqrt(frequency) / 13);
+  const window: number[] = [];
+  let rolling = 0;
   let score = 0;
   for (const day of dayRange(start, to)) {
     if (checks[day] !== "s") {
-      score = score * multiplier + dayValue(habit, checks, day) * (1 - multiplier);
+      const value = checks[day] === "y" ? 1 : 0;
+      window.push(value);
+      rolling += value;
+      if (window.length > denominator) rolling -= window.shift()!;
+      const done = Math.min(1, rolling / numerator);
+      score = score * multiplier + done * (1 - multiplier);
     }
     series.set(day, score);
   }
   return series;
+}
+
+function windowCount(checks: Checks, day: string, den: number): number {
+  let count = 0;
+  for (let offset = 0; offset < den; offset += 1) {
+    if (checks[shiftDay(day, -offset)] === "y") count += 1;
+  }
+  return count;
 }
 
 export function currentScore(habit: Habit, checks: Checks, today: string): number {

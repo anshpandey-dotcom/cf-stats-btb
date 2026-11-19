@@ -26,11 +26,16 @@ if (isNative()) {
 
     await reminders.listenForTaps();
     await reminders.rescheduleReminders(allTasks());
+    const widgets = await import("./lib/widgets");
+    await widgets.refreshWidgets();
     await backup.askForBackupAccess();
     sheets.scheduleAutoSave(1500);
     let remindTimer: ReturnType<typeof setTimeout> | undefined;
+    let widgetTimer: ReturnType<typeof setTimeout> | undefined;
     window.addEventListener("attack:data-changed", () => {
       sheets.scheduleAutoSave();
+      clearTimeout(widgetTimer);
+      widgetTimer = setTimeout(() => void widgets.syncWidgets(), 800);
       clearTimeout(remindTimer);
       remindTimer = setTimeout(() => void reminders.rescheduleReminders(allTasks()), 1200);
     });
@@ -41,6 +46,7 @@ if (isNative()) {
         if (restored) window.location.reload();
         else sheets.scheduleAutoSave(1500);
       });
+      void widgets.refreshWidgets();
     });
   })();
 }

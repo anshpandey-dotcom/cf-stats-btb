@@ -59,10 +59,22 @@ describe("habit score", () => {
     expect(b).toBeCloseTo(a, 10);
   });
 
-  test("a weekly habit counts checks inside its window", () => {
-    const checks = days("2026-03-02", "y..y..y");
-    const score = currentScore(habit(3, 7), checks, "2026-03-08");
-    expect(score).toBeGreaterThan(0.1);
+  test("a weekly habit scores higher the longer the target is met", () => {
+    const week = days("2026-03-02", "y..y..y");
+    const twoWeeks = days("2026-03-02", "y..y..yy..y..y");
+    const one = currentScore(habit(3, 7), week, "2026-03-08");
+    const two = currentScore(habit(3, 7), twoWeeks, "2026-03-15");
+    expect(one).toBeGreaterThan(0.03);
+    expect(two).toBeGreaterThan(one);
+    expect(two).toBeLessThanOrEqual(1);
+  });
+
+  test("matches the Loop formula for a daily habit", () => {
+    const multiplier = 0.5 ** (1 / 13);
+    let expected = 0;
+    for (let index = 0; index < 5; index += 1) expected = expected * multiplier + (1 - multiplier);
+    const checks = days("2026-03-01", "yyyyy");
+    expect(currentScore(habit(), checks, "2026-03-05")).toBeCloseTo(expected, 12);
   });
 
   test("an empty history scores zero", () => {

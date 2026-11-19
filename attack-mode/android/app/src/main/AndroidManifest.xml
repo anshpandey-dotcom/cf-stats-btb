@@ -38,6 +38,80 @@
             </intent-filter>
         </receiver>
 
+
+        <receiver
+            android:name=".CheckmarkWidgetProvider"
+            android:exported="true"
+            android:label="Habit check">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_check_info" />
+        </receiver>
+
+        <receiver
+            android:name=".HistoryWidgetProvider"
+            android:exported="true"
+            android:label="Habit history">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_history_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ScoreWidgetProvider"
+            android:exported="true"
+            android:label="Habit score">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_score_info" />
+        </receiver>
+
+        <receiver
+            android:name=".FrequencyWidgetProvider"
+            android:exported="true"
+            android:label="Habit frequency">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_frequency_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ListWidgetProvider"
+            android:exported="true"
+            android:label="Habit list">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_list_info" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetActionReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -108,6 +108,17 @@ export function SettingsPage() {
         <p className="panel-note">Skipped days keep your score and streak safe when you are sick or travelling.</p>
       </section>
 
+      <section className="panel" aria-label="Widgets">
+        <h2 className="panel-title">WIDGETS</h2>
+        <p className="panel-note">
+          Long-press your home screen, open Widgets and pick Attack Mode. Choose a habit check box, a
+          history grid, a score chart, a weekday chart, or a list of today&apos;s habits.
+        </p>
+        <p className="panel-note">
+          Habit reminders also have Done and Snooze buttons right in the notification.
+        </p>
+      </section>
+
       <section className="panel" aria-label="Export">
         <h2 className="panel-title">EXPORT</h2>
         <p className="panel-note">Files go to Documents/Attack Mode/Export on your phone.</p>
@@ -121,6 +132,25 @@ export function SettingsPage() {
             Full backup
           </button>
         </div>
+      </section>
+      <section className="panel credits" aria-label="Credits">
+        <h2 className="panel-title">CREDITS</h2>
+        <p className="panel-note">
+          Habit tracking in Attack Mode is based on{" "}
+          <a href="https://github.com/iSoron/uhabits" target="_blank" rel="noopener noreferrer">
+            Loop Habit Tracker
+          </a>{" "}
+          by Álinson S. Xavier and contributors. The habit strength score, check states, streaks,
+          reminders with actions and widgets follow its design. Thank you.
+        </p>
+        <p className="panel-note">
+          Loop Habit Tracker is free software under the GNU GPL v3. This app contains logic adapted
+          from it, so if you ever share this app you must also share its source under the same
+          license.
+        </p>
+        <p className="panel-note">
+          Pixel font: Silkscreen by Jason Kottke (SIL Open Font License). Built with Capacitor (MIT).
+        </p>
       </section>
     </div>
   );

@@ -4,4 +4,13 @@
     <string name="title_activity_main">Attack Mode</string>
     <string name="package_name">com.attackmode.planner</string>
     <string name="custom_url_scheme">com.attackmode.planner</string>
+    <string name="widget_image_description">Habit widget</string>
+    <string name="widget_check_description">Check</string>
+    <string name="widget_list_title">HABITS</string>
+    <string name="widget_list_empty">Add a habit in Attack Mode</string>
+    <string name="widget_check_desc">Check off one habit for today</string>
+    <string name="widget_history_desc">Weeks of check marks for one habit</string>
+    <string name="widget_score_desc">Habit strength over the last 12 weeks</string>
+    <string name="widget_frequency_desc">Check marks by weekday for one habit</string>
+    <string name="widget_list_desc">Today\'s habits with check boxes</string>
 </resources>
