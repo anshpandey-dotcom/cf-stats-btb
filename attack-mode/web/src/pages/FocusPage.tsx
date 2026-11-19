@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Minus, Pause, Play, Plus, RotateCcw, SkipForward } from "lucide-react";
+import { Maximize2, Minus, Pause, Play, Plus, RotateCcw, SkipForward } from "lucide-react";
 
+import { FocusFullscreen } from "../components/FocusFullscreen";
 import { PixelBar } from "../components/PixelBar";
 import { useToast } from "../components/Toast";
 import { useTasks } from "../hooks/useTasks";
@@ -30,6 +31,7 @@ export function FocusPage() {
   const tasks = useTasks(today).data ?? [];
   const { showToast } = useToast();
   const [starter, setStarter] = useState(false);
+  const [full, setFull] = useState(false);
 
   const left = secondsLeft(focus);
   const elapsed = focus.total - left;
@@ -55,6 +57,7 @@ export function FocusPage() {
 
   return (
     <div className="page focus-page">
+      {full ? <FocusFullscreen onClose={() => setFull(false)} /> : null}
       <header className="page-header">
         <span className="eyebrow">30/10 system</span>
         <h1>Focus</h1>
@@ -104,6 +107,10 @@ export function FocusPage() {
           <button type="button" className="button ghost" onClick={skipFocus}>
             <SkipForward size={16} />
             Skip
+          </button>
+          <button type="button" className="button ghost" onClick={() => setFull(true)}>
+            <Maximize2 size={16} />
+            Full screen
           </button>
         </div>
 

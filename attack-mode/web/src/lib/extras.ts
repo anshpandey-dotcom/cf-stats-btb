@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { scheduleBackup, setBackupProvider } from "./backup";
 import type { Checks, Habit } from "./habits";
 import { DEFAULT_PREFS, starterReminders, type CustomReminder, type Prefs, type Rule, type RuleChecks, type Woop } from "./phase2";
+import { defaultNudges, type Nudge, type NudgeState } from "./nudges";
 import { EXTRAS_KEY, STORAGE_KEY } from "./storage";
 
 export type PngMode = "auto" | "manual" | "off";
@@ -57,6 +58,8 @@ export interface Extras {
   ruleChecks: RuleChecks;
   reminders: CustomReminder[];
   prefs: Prefs;
+  nudges: Nudge[];
+  nudgeState: Record<string, NudgeState>;
   savedAt?: string;
 }
 
@@ -90,6 +93,8 @@ export function emptyExtras(): Extras {
     ruleChecks: {},
     reminders: starterReminders(),
     prefs: { ...DEFAULT_PREFS },
+    nudges: defaultNudges(),
+    nudgeState: {},
   };
 }
 
@@ -117,6 +122,8 @@ function normalize(value: unknown): Extras {
     ruleChecks: { ...(input.ruleChecks ?? {}) },
     reminders: Array.isArray(input.reminders) ? input.reminders : starterReminders(),
     prefs: { ...DEFAULT_PREFS, ...(input.prefs ?? {}) },
+    nudges: Array.isArray(input.nudges) ? input.nudges : defaultNudges(),
+    nudgeState: { ...(input.nudgeState ?? {}) },
     savedAt: input.savedAt,
   };
 }

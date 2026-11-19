@@ -19,6 +19,10 @@ public class ReminderReceiver extends BroadcastReceiver {
             intent.getStringExtra(ReminderNotifier.EXTRA_URL),
             intent.getStringExtra(ReminderNotifier.EXTRA_HABIT)
         );
-        ReminderNotifier.advance(context, intent.getIntExtra(ReminderNotifier.EXTRA_ID, 0));
+        int firedId = intent.getIntExtra(ReminderNotifier.EXTRA_ID, 0);
+        if (firedId == ReminderNotifier.TIMER_ALARM_ID) {
+            ReminderNotifier.cancelTimer(context);
+        }
+        ReminderNotifier.advance(context, firedId);
     }
 }

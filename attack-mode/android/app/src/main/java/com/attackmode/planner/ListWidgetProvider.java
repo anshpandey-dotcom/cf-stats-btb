@@ -52,7 +52,6 @@ public class ListWidgetProvider extends AppWidgetProvider {
         Collections.sort(habits, (a, b) -> Integer.compare(a.optInt("order"), b.optInt("order")));
 
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_list);
-        views.setInt(R.id.list_root, "setBackgroundColor", WidgetDrawing.paper(dark));
         views.setTextColor(R.id.list_title, WidgetDrawing.ink(dark));
         views.setOnClickPendingIntent(R.id.list_title, HabitWidgetProvider.openHabit(context, widgetId, "/habits"));
         views.setViewVisibility(R.id.list_empty, habits.isEmpty() ? View.VISIBLE : View.GONE);

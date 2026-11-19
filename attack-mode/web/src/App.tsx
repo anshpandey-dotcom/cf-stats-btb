@@ -16,6 +16,7 @@ import { HabitsPage } from "./pages/HabitsPage";
 import { JournalPage } from "./pages/JournalPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MorePage } from "./pages/MorePage";
+import { NudgesPage } from "./pages/NudgesPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { RemindersPage } from "./pages/RemindersPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -85,6 +86,7 @@ export function App() {
                 <Route path="woop" element={<WoopPage />} />
                 <Route path="manual" element={<ManualPage />} />
                 <Route path="reminders" element={<RemindersPage />} />
+                <Route path="nudges" element={<NudgesPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="focus" element={<FocusPage />} />
                 <Route path="journal" element={<JournalPage />} />

@@ -4,6 +4,7 @@ import { Flame } from "lucide-react";
 import { useAllTasks } from "../hooks/useAllTasks";
 import { useToday } from "../hooks/useToday";
 import { getExtras, updateExtras } from "../lib/extras";
+import { celebrate } from "../lib/feedback";
 import { isNative } from "../lib/native";
 import { streakInfo, xpInfo } from "../lib/progress";
 import { useToast } from "./Toast";
@@ -18,7 +19,10 @@ export function ProgressPills() {
     if (!isNative()) return;
     const extras = getExtras();
     if (level <= extras.lastLevel) return;
-    if (extras.savedAt) showToast(`LEVEL UP! You reached level ${level}.`, "success");
+    if (extras.savedAt) {
+      showToast(`Level up! You reached level ${level}.`, "success");
+      void celebrate();
+    }
     updateExtras((draft) => {
       draft.lastLevel = level;
     });

@@ -8,6 +8,7 @@ import { AdSheet } from "../components/AdSheet";
 import { CloneTasksSheet } from "../components/CloneTasksSheet";
 import { NextGoalCard } from "../components/NextGoalCard";
 import { Suggestions } from "../components/Suggestions";
+import { celebrate, success } from "../lib/feedback";
 import { TodayHabits } from "../components/TodayHabits";
 import { TodayRules } from "../components/TodayRules";
 import { WoopPlans } from "../components/WoopPlans";
@@ -89,6 +90,11 @@ export function DayPage({ mode }: { mode: DayMode }) {
         input: { completed: !task.completed },
       });
       showToast(task.completed ? "Marked incomplete." : "Task completed.", task.completed ? "info" : "success");
+      if (!task.completed) {
+        const allDone = tasks.length > 0 && tasks.every((item) => item.id === task.id || item.completed);
+        if (allDone) void celebrate();
+        else success();
+      }
     } catch (toggleError) {
       showToast(errorMessage(toggleError));
     } finally {

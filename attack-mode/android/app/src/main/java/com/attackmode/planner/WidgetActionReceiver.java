@@ -28,8 +28,7 @@ public class WidgetActionReceiver extends BroadcastReceiver {
             JSONObject snapshot = HabitData.snapshot(context);
             String today = HabitData.today();
             String current = HabitData.checksFor(snapshot, habit).optString(today, "");
-            boolean skipDays = snapshot.optBoolean("skipDays", true);
-            HabitData.apply(context, habit, today, HabitData.nextState(current, skipDays));
+            HabitData.apply(context, habit, today, current.equals("y") ? "n" : "y");
             WidgetUpdater.updateAll(context);
             return;
         }

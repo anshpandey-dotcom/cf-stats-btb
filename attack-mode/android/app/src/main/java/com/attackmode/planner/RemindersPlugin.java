@@ -60,6 +60,33 @@ public class RemindersPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void startTimer(PluginCall call) {
+        ReminderNotifier.showTimer(
+            getContext(), call.getString("title", "Focus"), call.getString("text", ""), call.getLong("endAt", 0L)
+        );
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopTimer(PluginCall call) {
+        ReminderNotifier.cancelTimer(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (on) {
+                getActivity().getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            } else {
+                getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        });
+        call.resolve();
+    }
+
+    @PluginMethod
     public void scheduleOne(PluginCall call) {
         ReminderNotifier.ensureChannel(getContext());
         ReminderNotifier.scheduleOne(

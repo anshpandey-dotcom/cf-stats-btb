@@ -238,6 +238,59 @@ final class ReminderNotifier {
         }
     }
 
+    static final int TIMER_ALARM_ID = 2100000001;
+    static final int TIMER_NOTIFICATION_ID = 2100000002;
+    static final String TIMER_CHANNEL_ID = "attack_timer";
+
+    static void showTimer(Context context, String title, String text, long endAt) {
+        if (!canNotify(context)) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager manager = context.getSystemService(NotificationManager.class);
+            if (manager.getNotificationChannel(TIMER_CHANNEL_ID) == null) {
+                NotificationChannel channel = new NotificationChannel(
+                    TIMER_CHANNEL_ID, "Focus timer", NotificationManager.IMPORTANCE_LOW
+                );
+                channel.setDescription("Shows the running focus timer.");
+                channel.setShowBadge(false);
+                manager.createNotificationChannel(channel);
+            }
+        }
+
+        Intent open = new Intent(context, MainActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        open.putExtra(EXTRA_URL, "/focus");
+        PendingIntent contentIntent = PendingIntent.getActivity(
+            context, TIMER_NOTIFICATION_ID, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, TIMER_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_attack)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setColor(0xFFFF6B3D)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(true)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
+            .setWhen(endAt)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(contentIntent);
+
+        try {
+            NotificationManagerCompat.from(context).notify(TIMER_NOTIFICATION_ID, builder.build());
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    static void cancelTimer(Context context) {
+        NotificationManagerCompat.from(context).cancel(TIMER_NOTIFICATION_ID);
+    }
+
     static void scheduleOne(Context context, int id, String title, String body, String url, long at) {
         scheduleOne(context, id, id, title, body, url, "", at);
     }

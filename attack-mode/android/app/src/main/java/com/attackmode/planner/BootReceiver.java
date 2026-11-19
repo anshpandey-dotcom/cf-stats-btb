@@ -12,6 +12,9 @@ public class BootReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)
             || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             ReminderNotifier.restore(context);
+            if (NudgeNotifier.anyUnlock(context)) {
+                NudgeService.start(context);
+            }
         }
     }
 }

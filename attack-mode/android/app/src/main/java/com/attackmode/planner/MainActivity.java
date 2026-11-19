@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RemindersPlugin.class);
         registerPlugin(BackupPlugin.class);
         registerPlugin(WidgetsPlugin.class);
+        registerPlugin(NudgesPlugin.class);
         super.onCreate(savedInstanceState);
         tuneWebView();
         captureUrl(getIntent());

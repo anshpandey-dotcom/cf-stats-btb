@@ -1,7 +1,8 @@
 import { registerPlugin } from "@capacitor/core";
 
 import type { Task } from "../api/types";
-import { getExtras } from "./extras";
+import { getExtras, updateExtras } from "./extras";
+import { ensurePlans, nudgeItems } from "./nudges";
 import { nextReminderAt, reminderMask, reminderNumericId } from "./habits";
 import { isNative } from "./native";
 
@@ -27,6 +28,9 @@ interface RemindersPlugin {
   schedule(options: { items: ReminderItem[] }): Promise<void>;
   scheduleOne(options: { id: number; title: string; body: string; at: number; url: string }): Promise<void>;
   cancelOne(options: { id: number }): Promise<void>;
+  startTimer(options: { title: string; text: string; endAt: number }): Promise<void>;
+  stopTimer(): Promise<void>;
+  keepAwake(options: { on: boolean }): Promise<void>;
   cancelAll(): Promise<void>;
   test(): Promise<void>;
   consumeUrl(): Promise<{ url: string }>;
@@ -82,6 +86,17 @@ export async function reminderPermission(): Promise<ReminderPermission> {
 export async function requestReminderPermission(): Promise<ReminderPermission> {
   const status = await Reminders.request();
   return status.notifications ? "granted" : "denied";
+}
+
+function nudgeScheduleItems(): ReminderItem[] {
+  const extras = getExtras();
+  const { states, changed } = ensurePlans(extras.nudges, extras.nudgeState, new Date());
+  if (changed) {
+    updateExtras((draft) => {
+      draft.nudgeState = states;
+    });
+  }
+  return nudgeItems(extras.nudges, states, Date.now());
 }
 
 function customReminderItems(): ReminderItem[] {
@@ -172,7 +187,7 @@ export async function rescheduleReminders(tasks: Task[]): Promise<void> {
       .sort((a, b) => a.at - b.at)
       .slice(0, MAX_SCHEDULED);
 
-    const fixed = [...habitReminderItems(), ...customReminderItems()];
+    const fixed = [...habitReminderItems(), ...customReminderItems(), ...nudgeScheduleItems()];
     await Reminders.schedule({ items: [...fixed, ...items].slice(0, MAX_SCHEDULED + fixed.length) });
   } catch (error) {
     console.warn("Could not schedule reminders:", error);
@@ -219,5 +234,32 @@ export async function cancelTimerAlarm(): Promise<void> {
     await Reminders.cancelOne({ id: TIMER_ALARM_ID });
   } catch {
     // Nothing to cancel.
+  }
+}
+
+export async function showTimerNotification(endAt: number, title: string, text: string): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Reminders.startTimer({ title, text, endAt });
+  } catch (error) {
+    console.warn("Could not show the timer notification:", error);
+  }
+}
+
+export async function hideTimerNotification(): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Reminders.stopTimer();
+  } catch {
+    // Nothing to hide.
+  }
+}
+
+export async function keepScreenOn(on: boolean): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Reminders.keepAwake({ on });
+  } catch {
+    // Not available in the browser.
   }
 }

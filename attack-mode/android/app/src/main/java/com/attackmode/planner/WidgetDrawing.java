@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.text.TextUtils;
 import android.text.TextPaint;
@@ -57,9 +58,12 @@ final class WidgetDrawing {
     }
 
     private static void frame(Canvas canvas, int width, int height, boolean dark) {
-        float edge = Math.max(2f, width / 150f);
-        canvas.drawRect(0, 0, width, height, fill(dark ? 0xFF3A372F : 0xFF191816));
-        canvas.drawRect(edge, edge, width - edge, height - edge, fill(paper(dark)));
+        float radius = Math.min(width, height) * 0.14f;
+        RectF outer = new RectF(0, 0, width, height);
+        canvas.drawRoundRect(outer, radius, radius, fill(0xFF2A2A30));
+        float edge = Math.max(1.5f, width / 220f);
+        RectF inner = new RectF(edge, edge, width - edge, height - edge);
+        canvas.drawRoundRect(inner, radius - edge, radius - edge, fill(0xFF0E0E11));
     }
 
     private static String fit(String value, TextPaint paint, float width) {
@@ -99,19 +103,60 @@ final class WidgetDrawing {
         canvas.drawPath(path, stroke);
     }
 
+    static void ringTile(Canvas canvas, RectF tile, String state, int doneColor, String label) {
+        boolean done = "y".equals(state);
+        float size = tile.width();
+        float radius = size * 0.24f;
+        canvas.drawRoundRect(tile, radius, radius, fill(done ? doneColor : 0xFF48484D));
+
+        float cx = tile.centerX();
+        float cy = label == null ? tile.centerY() : tile.top + size * 0.43f;
+        float ringRadius = size * (label == null ? 0.27f : 0.24f);
+        Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ring.setStyle(Paint.Style.STROKE);
+        ring.setStrokeWidth(Math.max(2f, size * 0.05f));
+        ring.setColor(done ? 0xFFFFFFFF : 0xB3FFFFFF);
+        canvas.drawCircle(cx, cy, ringRadius, ring);
+
+        Paint mark = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mark.setStyle(Paint.Style.STROKE);
+        mark.setStrokeWidth(Math.max(2.5f, size * 0.055f));
+        mark.setStrokeCap(Paint.Cap.ROUND);
+        mark.setStrokeJoin(Paint.Join.ROUND);
+        mark.setColor(done ? 0xFFFFFFFF : 0xB3FFFFFF);
+        Path path = new Path();
+        float k = ringRadius * 0.42f;
+        if (done) {
+            path.moveTo(cx - k * 1.0f, cy + k * 0.05f);
+            path.lineTo(cx - k * 0.25f, cy + k * 0.8f);
+            path.lineTo(cx + k * 1.1f, cy - k * 0.75f);
+        } else {
+            path.moveTo(cx - k * 0.8f, cy - k * 0.8f);
+            path.lineTo(cx + k * 0.8f, cy + k * 0.8f);
+            path.moveTo(cx + k * 0.8f, cy - k * 0.8f);
+            path.lineTo(cx - k * 0.8f, cy + k * 0.8f);
+        }
+        canvas.drawPath(path, mark);
+
+        if (label != null) {
+            TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+            text.setColor(0xFFFFFFFF);
+            text.setTextSize(size * 0.125f);
+            text.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            String shown = TextUtils.ellipsize(label, text, size * 0.82f, TextUtils.TruncateAt.END).toString();
+            canvas.drawText(shown, cx - text.measureText(shown) / 2f, tile.bottom - size * 0.1f, text);
+        }
+    }
+
     static Bitmap check(int width, int height, JSONObject snapshot, JSONObject habit, String state) {
-        boolean dark = HabitData.isDark(snapshot);
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        frame(canvas, width, height, dark);
-
-        float pad = Math.min(width, height) * 0.12f;
-        TextPaint label = text(ink(dark), Math.max(14f, height * 0.13f));
-        float labelHeight = label.getTextSize() * 1.4f;
-        float size = Math.min(width - pad * 2, height - pad * 2 - labelHeight);
-        float left = (width - size) / 2f;
-        checkmark(canvas, left, pad, size, state, habitColor(habit), dark);
-        canvas.drawText(fit(habit.optString("name"), label, width - pad * 2), pad, height - pad * 0.7f, label);
+        float size = Math.min(width, height);
+        float pad = size * 0.03f;
+        float left = (width - size) / 2f + pad;
+        float top = (height - size) / 2f + pad;
+        RectF tile = new RectF(left, top, left + size - pad * 2, top + size - pad * 2);
+        ringTile(canvas, tile, state, habitColor(habit), habit.optString("name"));
         return bitmap;
     }
 
@@ -233,10 +278,10 @@ final class WidgetDrawing {
     }
 
     static Bitmap rowCheck(int size, JSONObject snapshot, JSONObject habit, String state) {
-        boolean dark = HabitData.isDark(snapshot);
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-        checkmark(canvas, size * 0.06f, size * 0.06f, size * 0.88f, state, habitColor(habit), dark);
+        float pad = size * 0.04f;
+        ringTile(canvas, new RectF(pad, pad, size - pad, size - pad), state, habitColor(habit), null);
         return bitmap;
     }
 

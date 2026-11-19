@@ -41,6 +41,7 @@ const MORE_PATHS = [
   "/woop",
   "/manual",
   "/reminders",
+  "/nudges",
 ];
 
 function itemActive(to: string, pathname: string): boolean {

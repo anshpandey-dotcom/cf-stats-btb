@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 
 import { getExtras, updateExtras } from "./extras";
-import { cancelTimerAlarm, scheduleTimerAlarm } from "./reminders";
+import { Haptics, NotificationType } from "@capacitor/haptics";
+
+import { hideTimerNotification, showTimerNotification, cancelTimerAlarm, scheduleTimerAlarm } from "./reminders";
+import { isNative } from "./native";
 
 export type FocusMode = "work" | "break";
 
@@ -25,13 +28,61 @@ function initial(): FocusState {
   return { mode: "work", running: false, endAt: 0, left: work, total: work, cycle: 1, task: "", now: Date.now() };
 }
 
-let state = initial();
+function restore(): FocusState {
+  const base = initial();
+  try {
+    const raw = localStorage.getItem("attack-mode:focus:v1");
+    if (!raw) return base;
+    const saved = JSON.parse(raw) as Partial<FocusState>;
+    if (saved.mode !== "work" && saved.mode !== "break") return base;
+    const restored: FocusState = {
+      ...base,
+      mode: saved.mode,
+      total: Number(saved.total) > 0 ? Number(saved.total) : base.total,
+      left: Number(saved.left) > 0 ? Number(saved.left) : base.left,
+      cycle: Number(saved.cycle) > 0 ? Number(saved.cycle) : 1,
+      task: typeof saved.task === "string" ? saved.task : "",
+    };
+    if (saved.running && Number(saved.endAt) > Date.now()) {
+      return { ...restored, running: true, endAt: Number(saved.endAt) };
+    }
+    if (saved.running) {
+      const timer = getExtras().timer;
+      const nextMode: FocusMode = restored.mode === "work" ? "break" : "work";
+      const length = seconds(nextMode === "work" ? timer.work : timer.brk);
+      return {
+        ...restored,
+        mode: nextMode,
+        left: length,
+        total: length,
+        cycle: restored.mode === "break" ? restored.cycle + 1 : restored.cycle,
+      };
+    }
+    return restored;
+  } catch {
+    return base;
+  }
+}
+
+let state = restore();
 const listeners = new Set<() => void>();
 let ticker: ReturnType<typeof setInterval> | undefined;
 let audio: AudioContext | undefined;
 
+const STORE_KEY = "attack-mode:focus:v1";
+
+function persist() {
+  try {
+    const { mode, running, endAt, left, total, cycle, task } = state;
+    localStorage.setItem(STORE_KEY, JSON.stringify({ mode, running, endAt, left, total, cycle, task }));
+  } catch {
+    // Storage is unavailable; the timer still runs in memory.
+  }
+}
+
 function emit(next: Partial<FocusState>) {
   state = { ...state, ...next, now: Date.now() };
+  persist();
   listeners.forEach((listener) => listener());
 }
 
@@ -115,7 +166,9 @@ function finish() {
   const length = seconds(nextMode === "work" ? timer.work : timer.brk);
   stopTicker();
   void cancelTimerAlarm();
+  void hideTimerNotification();
   beep(finished === "work" ? 3 : 2);
+  if (isNative()) void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
   emit({
     mode: nextMode,
     running: false,
@@ -126,12 +179,21 @@ function finish() {
   });
 }
 
+if (state.running) {
+  queueMicrotask(() => startTicker());
+}
+
 export function startFocus() {
   if (state.running) return;
   const endAt = Date.now() + state.left * 1000;
   emit({ running: true, endAt });
   const copy = alarmCopy(state.mode);
   void scheduleTimerAlarm(endAt, copy.title, copy.body);
+  void showTimerNotification(
+    endAt,
+    state.mode === "work" ? "Focus block" : "Break",
+    state.task || (state.mode === "work" ? "Stay on one thing." : "Step away from the screen."),
+  );
   startTicker();
 }
 
@@ -140,6 +202,7 @@ export function pauseFocus() {
   const left = Math.max(1, Math.ceil((state.endAt - Date.now()) / 1000));
   stopTicker();
   void cancelTimerAlarm();
+  void hideTimerNotification();
   emit({ running: false, left });
 }
 
@@ -148,6 +211,7 @@ export function resetFocus(mode: FocusMode = state.mode, minutes?: number) {
   const length = seconds(minutes ?? (mode === "work" ? timer.work : timer.brk));
   stopTicker();
   void cancelTimerAlarm();
+  void hideTimerNotification();
   emit({ mode, running: false, endAt: 0, left: length, total: length });
 }
 

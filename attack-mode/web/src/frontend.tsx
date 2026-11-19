@@ -27,7 +27,9 @@ if (isNative()) {
     await reminders.listenForTaps();
     await reminders.rescheduleReminders(allTasks());
     const widgets = await import("./lib/widgets");
+    const nudgeNative = await import("./lib/nudgeNative");
     await widgets.refreshWidgets();
+    void nudgeNative.syncUnlockNudges();
     await backup.askForBackupAccess();
     sheets.scheduleAutoSave(1500);
     let remindTimer: ReturnType<typeof setTimeout> | undefined;
@@ -35,9 +37,20 @@ if (isNative()) {
     window.addEventListener("attack:data-changed", () => {
       sheets.scheduleAutoSave();
       clearTimeout(widgetTimer);
-      widgetTimer = setTimeout(() => void widgets.syncWidgets(), 800);
+      widgetTimer = setTimeout(() => {
+        void widgets.syncWidgets();
+        void nudgeNative.syncUnlockNudges();
+      }, 800);
       clearTimeout(remindTimer);
       remindTimer = setTimeout(() => void reminders.rescheduleReminders(allTasks()), 1200);
+    });
+
+    const { App: NativeApp } = await import("@capacitor/app");
+    void NativeApp.addListener("backButton", () => {
+      const depth = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+      if (depth > 0) window.history.back();
+      else if (window.location.pathname !== "/today") window.location.replace("/today");
+      else void NativeApp.exitApp();
     });
 
     document.addEventListener("visibilitychange", () => {

@@ -1,4 +1,4 @@
-import { AlarmClock, BarChart3, BookMarked, CalendarDays, History, LineChart, Settings, Sunrise, Target, type LucideIcon } from "lucide-react";
+import { AlarmClock, BarChart3, BellRing, BookMarked, CalendarDays, History, LineChart, Settings, Sunrise, Target, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const ITEMS: { to: string; label: string; hint: string; icon: LucideIcon }[] = [
@@ -6,7 +6,8 @@ const ITEMS: { to: string; label: string; hint: string; icon: LucideIcon }[] = [
   { to: "/insights", label: "Insights", hint: "Charts, best days and what moves your day", icon: LineChart },
   { to: "/woop", label: "WOOP", hint: "Turn a wish into an if-then plan", icon: Target },
   { to: "/manual", label: "Company manual", hint: "Your rules and daily compliance", icon: BookMarked },
-  { to: "/reminders", label: "Reminders", hint: "Daily nudges that ring when the app is closed", icon: AlarmClock },
+  { to: "/nudges", label: "Nudges", hint: "Random reminders, also when you unlock your phone", icon: BellRing },
+  { to: "/reminders", label: "Reminders", hint: "Fixed-time alarms that ring when the app is closed", icon: AlarmClock },
   { to: "/history", label: "History", hint: "Every day and journal entry", icon: History },
   { to: "/calendar", label: "Calendar", hint: "Every day at a glance", icon: CalendarDays },
   { to: "/stats", label: "Calibration", hint: "Perceived vs actual difficulty", icon: BarChart3 },

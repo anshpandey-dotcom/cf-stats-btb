@@ -43,7 +43,7 @@ today=$(adb shell date +%F | tr -d '\r')
 adb root > /dev/null 2>&1 || true
 adb shell "mkdir -p '/sdcard/Documents/Attack Mode'"
 adb shell "cat > '/sdcard/Documents/Attack Mode/attack-mode-data.json'" <<JSON
-{"nextId":2,"savedAt":"2099-01-01T00:00:00.000Z","tasks":[{"id":1,"date":"$today","what":"Restored smoke task","howMuch":"","when":"","where":"","perceivedDifficulty":7,"actualDifficulty":null,"completed":false,"completedAt":null,"createdAt":"2099-01-01T00:00:00.000Z","updatedAt":"2099-01-01T00:00:00.000Z","time":"","remindBefore":10}],"extras":{"habits":[{"id":"smoke1","name":"Smoke habit","note":"","color":"#e4572e","num":1,"den":1,"reminders":[],"archived":false,"createdAt":"2020-01-01T00:00:00.000Z","order":0}],"checks":{},"journal":{},"sessions":[],"saved":{},"pngMode":"manual","timer":{"work":30,"brk":10},"lastLevel":1,"theme":"light","weekStart":1,"skipDays":true,"savedAt":"2099-01-01T00:00:00.000Z"}}
+{"nextId":2,"savedAt":"2099-01-01T00:00:00.000Z","tasks":[{"id":1,"date":"$today","what":"Restored smoke task","howMuch":"","when":"","where":"","perceivedDifficulty":7,"actualDifficulty":null,"completed":false,"completedAt":null,"createdAt":"2099-01-01T00:00:00.000Z","updatedAt":"2099-01-01T00:00:00.000Z","time":"","remindBefore":10}],"extras":{"habits":[{"id":"smoke1","name":"Smoke habit","note":"","color":"#e4572e","num":1,"den":1,"reminders":[],"archived":false,"createdAt":"2020-01-01T00:00:00.000Z","order":0}],"checks":{},"journal":{},"sessions":[],"saved":{},"pngMode":"manual","timer":{"work":30,"brk":10},"lastLevel":1,"theme":"light","weekStart":1,"skipDays":true,"nudges":[{"id":"smoke-n","name":"Smoke nudge","messages":["Smoke nudge message"],"on":true,"perDay":3,"from":"00:00","to":"23:59","minGap":30,"days":[0,1,2,3,4,5,6],"onUnlock":true,"unlockMax":5,"unlockGap":30,"url":"/today"}],"savedAt":"2099-01-01T00:00:00.000Z"}}
 JSON
 adb install -r "$apk" || { echo "reinstall failed"; exit 1; }
 adb shell ls -la "/sdcard/Documents/Attack\\ Mode/" || true
@@ -79,6 +79,21 @@ if grep -q '"smoke1":{"' smoke-backup-after.txt && grep -q '"y"' smoke-backup-af
   echo "HABIT ACTION OK: the Done action reached the app and was saved"
 else
   echo "HABIT ACTION NOT CONFIRMED: no check found for the seeded habit"
+fi
+echo "---- unlock nudge service ----"
+adb shell dumpsys activity services com.attackmode.planner | grep -E "NudgeService" | head -3
+adb shell am broadcast -a android.intent.action.USER_PRESENT > smoke-unlock.txt 2>&1
+sleep 4
+cat smoke-unlock.txt | head -3
+if adb shell dumpsys notification --noredact | grep -q "Smoke nudge message"; then
+  echo "UNLOCK NUDGE OK: a nudge was shown after unlock"
+else
+  echo "UNLOCK NUDGE NOT CONFIRMED (the emulator may refuse a fake unlock broadcast)"
+fi
+if adb shell dumpsys notification --noredact | grep -q "attack_nudge_service"; then
+  echo "NUDGE SERVICE OK: the foreground service notification is posted"
+else
+  echo "NUDGE SERVICE NOT CONFIRMED"
 fi
 adb logcat -d | grep -iE "chromium|Capacitor" | tail -30 > smoke-console.log
 adb logcat -d > smoke-restore.log
