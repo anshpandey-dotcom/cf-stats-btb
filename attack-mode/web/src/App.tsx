@@ -6,11 +6,16 @@ import { ApiError } from "./api/client";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ToastProvider } from "./components/Toast";
+import { useThemeEffect } from "./lib/theme";
 import { DayPage } from "./pages/DayPage";
 import { FocusPage } from "./pages/FocusPage";
+import { HabitDetailPage } from "./pages/HabitDetailPage";
+import { HabitsPage } from "./pages/HabitsPage";
 import { JournalPage } from "./pages/JournalPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MorePage } from "./pages/MorePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import "./index.css";
 
 const CalendarPage = lazy(() =>
@@ -55,6 +60,7 @@ function AuthExpiryListener() {
 }
 
 export function App() {
+  useThemeEffect();
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
@@ -68,6 +74,10 @@ export function App() {
                 <Route path="today" element={<DayPage mode="today" />} />
                 <Route path="tomorrow" element={<DayPage mode="tomorrow" />} />
                 <Route path="day/:date" element={<DayPage mode="date" />} />
+                <Route path="habits" element={<HabitsPage />} />
+                <Route path="habits/:id" element={<HabitDetailPage />} />
+                <Route path="more" element={<MorePage />} />
+                <Route path="settings" element={<SettingsPage />} />
                 <Route path="focus" element={<FocusPage />} />
                 <Route path="journal" element={<JournalPage />} />
                 <Route path="calendar" element={<CalendarPage />} />

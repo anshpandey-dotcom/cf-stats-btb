@@ -1,15 +1,14 @@
 import { Suspense } from "react";
 import {
-  BarChart3,
   BookOpen,
-  CalendarDays,
+  ListChecks,
+  Menu,
   LogOut,
   Sun,
-  Sunrise,
   Timer,
   type LucideIcon,
 } from "lucide-react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { NotificationButton } from "./NotificationButton";
 import { ProgressPills } from "./ProgressPills";
@@ -25,16 +24,24 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: "/today", label: "Today", icon: Sun },
-  { to: "/tomorrow", label: "Tomorrow", icon: Sunrise },
+  { to: "/habits", label: "Habits", icon: ListChecks },
   { to: "/focus", label: "Focus", icon: Timer },
   { to: "/journal", label: "Journal", icon: BookOpen },
-  { to: "/calendar", label: "Calendar", icon: CalendarDays },
-  { to: "/stats", label: "Stats", icon: BarChart3 },
+  { to: "/more", label: "More", icon: Menu },
 ];
+
+const MORE_PATHS = ["/more", "/tomorrow", "/calendar", "/stats", "/settings"];
+
+function itemActive(to: string, pathname: string): boolean {
+  if (to === "/today") return pathname === "/" || pathname.startsWith("/today") || pathname.startsWith("/day/");
+  if (to === "/more") return MORE_PATHS.some((path) => pathname.startsWith(path));
+  return pathname.startsWith(to);
+}
 
 export function AppShell() {
   const logout = useLogout();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -55,7 +62,7 @@ export function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
-              className={({ isActive }) => `desktop-nav-link${isActive ? " active" : ""}`}
+              className={`desktop-nav-link${itemActive(item.to, pathname) ? " active" : ""}`}
             >
               <item.icon size={16} aria-hidden="true" />
               {item.label}
@@ -91,7 +98,7 @@ export function AppShell() {
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) => `bottom-nav-link${isActive ? " active" : ""}`}
+            className={`bottom-nav-link${itemActive(item.to, pathname) ? " active" : ""}`}
           >
             <item.icon size={20} aria-hidden="true" />
             <span>{item.label}</span>

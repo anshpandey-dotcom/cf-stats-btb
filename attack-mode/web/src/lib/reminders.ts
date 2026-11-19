@@ -1,6 +1,8 @@
 import { registerPlugin } from "@capacitor/core";
 
 import type { Task } from "../api/types";
+import { getExtras } from "./extras";
+import { nextReminderAt, reminderMask, reminderNumericId } from "./habits";
 import { isNative } from "./native";
 
 interface RemindersStatus {
@@ -13,6 +15,9 @@ interface ReminderItem {
   body: string;
   at: number;
   url: string;
+  repeat?: number;
+  hour?: number;
+  minute?: number;
 }
 
 interface RemindersPlugin {
@@ -78,6 +83,35 @@ export async function requestReminderPermission(): Promise<ReminderPermission> {
   return status.notifications ? "granted" : "denied";
 }
 
+function habitReminderItems(): ReminderItem[] {
+  const extras = getExtras();
+  const now = new Date();
+  const today = now.toLocaleDateString("en-CA");
+
+  return extras.habits
+    .filter((habit) => !habit.archived)
+    .flatMap((habit) =>
+      habit.reminders.flatMap((reminder) => {
+        const doneToday = extras.checks[habit.id]?.[today] === "y";
+        const at = nextReminderAt(reminder, now, doneToday);
+        if (!at) return [];
+        const [hour, minute] = reminder.time.split(":").map(Number) as [number, number];
+        return [
+          {
+            id: reminderNumericId(reminder.id),
+            title: habit.name,
+            body: "Time to check in.",
+            at: at.getTime(),
+            url: "/habits",
+            repeat: reminderMask(reminder.days),
+            hour,
+            minute,
+          },
+        ];
+      }),
+    );
+}
+
 export async function rescheduleReminders(tasks: Task[]): Promise<void> {
   if (!isNative()) return;
 
@@ -113,7 +147,8 @@ export async function rescheduleReminders(tasks: Task[]): Promise<void> {
       .sort((a, b) => a.at - b.at)
       .slice(0, MAX_SCHEDULED);
 
-    await Reminders.schedule({ items });
+    const habitItems = habitReminderItems();
+    await Reminders.schedule({ items: [...habitItems, ...items].slice(0, MAX_SCHEDULED + habitItems.length) });
   } catch (error) {
     console.warn("Could not schedule reminders:", error);
   }

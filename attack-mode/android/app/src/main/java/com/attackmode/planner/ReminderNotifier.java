@@ -123,6 +123,14 @@ final class ReminderNotifier {
                 continue;
             }
             long at = item.optLong("at");
+            int repeat = item.optInt("repeat", 0);
+            if (repeat != 0 && at <= now) {
+                at = nextOccurrence(repeat, item.optInt("hour"), item.optInt("minute"), now);
+                try {
+                    item.put("at", at);
+                } catch (JSONException ignored) {
+                }
+            }
             if (at <= now) {
                 continue;
             }
@@ -142,6 +150,53 @@ final class ReminderNotifier {
 
         if (persist) {
             prefs(context).edit().putString(KEY_ITEMS, kept.toString()).apply();
+        }
+    }
+
+    static long nextOccurrence(int mask, int hour, int minute, long after) {
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        for (int offset = 0; offset < 8; offset++) {
+            calendar.setTimeInMillis(after);
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, offset);
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, hour);
+            calendar.set(java.util.Calendar.MINUTE, minute);
+            calendar.set(java.util.Calendar.SECOND, 0);
+            calendar.set(java.util.Calendar.MILLISECOND, 0);
+            if (calendar.getTimeInMillis() <= after) {
+                continue;
+            }
+            int weekday = calendar.get(java.util.Calendar.DAY_OF_WEEK) - 1;
+            if ((mask & (1 << weekday)) != 0) {
+                return calendar.getTimeInMillis();
+            }
+        }
+        return 0L;
+    }
+
+    static void advance(Context context, int id) {
+        String raw = prefs(context).getString(KEY_ITEMS, "[]");
+        try {
+            JSONArray stored = new JSONArray(raw);
+            long now = System.currentTimeMillis();
+            for (int index = 0; index < stored.length(); index++) {
+                JSONObject item = stored.optJSONObject(index);
+                if (item == null || item.optInt("id") != id || item.optInt("repeat", 0) == 0) {
+                    continue;
+                }
+                long next = nextOccurrence(
+                    item.optInt("repeat"), item.optInt("hour"), item.optInt("minute"), now
+                );
+                item.put("at", next);
+                prefs(context).edit().putString(KEY_ITEMS, stored.toString()).apply();
+                if (next > now) {
+                    scheduleOne(
+                        context, id, item.optString("title"), item.optString("body"),
+                        item.optString("url", "/today"), next
+                    );
+                }
+                return;
+            }
+        } catch (JSONException ignored) {
         }
     }
 

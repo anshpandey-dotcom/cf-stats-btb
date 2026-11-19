@@ -2,6 +2,9 @@ import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
 import { isNative } from "./lib/native";
+import { initTheme } from "./lib/theme";
+
+initTheme();
 
 if (isNative()) {
   document.addEventListener("contextmenu", (event) => {
@@ -25,7 +28,12 @@ if (isNative()) {
     await reminders.rescheduleReminders(allTasks());
     await backup.askForBackupAccess();
     sheets.scheduleAutoSave(1500);
-    window.addEventListener("attack:data-changed", () => sheets.scheduleAutoSave());
+    let remindTimer: ReturnType<typeof setTimeout> | undefined;
+    window.addEventListener("attack:data-changed", () => {
+      sheets.scheduleAutoSave();
+      clearTimeout(remindTimer);
+      remindTimer = setTimeout(() => void reminders.rescheduleReminders(allTasks()), 1200);
+    });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;

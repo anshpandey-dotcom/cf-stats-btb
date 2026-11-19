@@ -38,7 +38,7 @@ export function setBackupProvider(next: Provider) {
 interface Stored {
   savedAt?: string;
   tasks?: unknown[];
-  extras?: { journal?: object; sessions?: unknown[] };
+  extras?: { journal?: object; sessions?: unknown[]; habits?: unknown[] };
 }
 
 function parse(raw: string | null | undefined): Stored | null {
@@ -56,7 +56,8 @@ function weight(value: Stored | null): number {
   return (
     (value.tasks?.length ?? 0) +
     Object.keys(value.extras?.journal ?? {}).length +
-    (value.extras?.sessions?.length ?? 0)
+    (value.extras?.sessions?.length ?? 0) +
+    (value.extras?.habits?.length ?? 0)
   );
 }
 

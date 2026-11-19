@@ -7,6 +7,7 @@ import type { Task } from "../api/types";
 import { AdSheet } from "../components/AdSheet";
 import { CloneTasksSheet } from "../components/CloneTasksSheet";
 import { NextGoalCard } from "../components/NextGoalCard";
+import { TodayHabits } from "../components/TodayHabits";
 import { XpCard } from "../components/XpCard";
 import { EmptyState, ErrorState, PageLoader } from "../components/States";
 import { TaskForm } from "../components/TaskForm";
@@ -208,6 +209,8 @@ export function DayPage({ mode }: { mode: DayMode }) {
       )}
 
       <NextGoalCard tasks={tasks} />
+
+      {isToday ? <TodayHabits day={dateKey} /> : null}
 
       {isToday ? <XpCard /> : null}
 

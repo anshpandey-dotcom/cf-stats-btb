@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from "react";
 
 import { scheduleBackup, setBackupProvider } from "./backup";
+import type { Checks, Habit } from "./habits";
 import { EXTRAS_KEY, STORAGE_KEY } from "./storage";
 
 export type PngMode = "auto" | "manual" | "off";
+export type ThemeMode = "light" | "black" | "auto";
 
 export interface Factors {
   sleep?: number;
@@ -44,6 +46,11 @@ export interface Extras {
   pngMode: PngMode;
   timer: TimerSettings;
   lastLevel: number;
+  habits: Habit[];
+  checks: Record<string, Checks>;
+  theme: ThemeMode;
+  weekStart: 0 | 1;
+  skipDays: boolean;
   savedAt?: string;
 }
 
@@ -67,6 +74,11 @@ export function emptyExtras(): Extras {
     pngMode: "auto",
     timer: { work: 30, brk: 10 },
     lastLevel: 1,
+    habits: [],
+    checks: {},
+    theme: "auto",
+    weekStart: 1,
+    skipDays: true,
   };
 }
 
@@ -84,6 +96,11 @@ function normalize(value: unknown): Extras {
       brk: clampMinutes(input.timer?.brk, base.timer.brk),
     },
     lastLevel: typeof input.lastLevel === "number" && input.lastLevel > 0 ? input.lastLevel : 1,
+    habits: Array.isArray(input.habits) ? input.habits : [],
+    checks: { ...(input.checks ?? {}) },
+    theme: input.theme === "light" || input.theme === "black" ? input.theme : "auto",
+    weekStart: input.weekStart === 0 ? 0 : 1,
+    skipDays: input.skipDays !== false,
     savedAt: input.savedAt,
   };
 }
@@ -120,6 +137,7 @@ export function combinedBackupJson(): string | null {
   const hasExtras =
     Object.keys(extras.journal).length > 0 ||
     extras.sessions.length > 0 ||
+    extras.habits.length > 0 ||
     Object.keys(extras.saved).length > 0;
   if (!tasks && !hasExtras) return null;
 
