@@ -2,14 +2,10 @@ import { Download } from "lucide-react";
 
 import { errorMessage } from "../api/client";
 import { useToast } from "../components/Toast";
-import { updateExtras, useExtras, type ThemeMode } from "../lib/extras";
+import { Switch } from "../components/Switch";
+import { updateExtras, useExtras } from "../lib/extras";
+import { updatePrefs } from "../lib/phase2Store";
 import { exportFullBackup, exportHabitsCsv } from "../lib/exportData";
-
-const THEMES: { id: ThemeMode; label: string }[] = [
-  { id: "light", label: "LIGHT" },
-  { id: "black", label: "BLACK" },
-  { id: "auto", label: "AUTO" },
-];
 
 export function SettingsPage() {
   const extras = useExtras();
@@ -28,29 +24,48 @@ export function SettingsPage() {
     <div className="page settings-page">
       <header className="page-header">
         <span className="eyebrow">Make it yours</span>
-        <h1>SETTINGS</h1>
+        <h1>Settings</h1>
       </header>
 
-      <section className="panel" aria-label="Theme">
-        <h2 className="panel-title">THEME</h2>
-        <div className="mode-pick" role="group" aria-label="Theme">
-          {THEMES.map((theme) => (
-            <button
-              key={theme.id}
-              type="button"
-              className={extras.theme === theme.id ? "on" : ""}
-              aria-pressed={extras.theme === theme.id}
-              onClick={() =>
-                updateExtras((draft) => {
-                  draft.theme = theme.id;
-                })
-              }
-            >
-              {theme.label}
-            </button>
-          ))}
-        </div>
-        <p className="panel-note">Black is pure black for OLED screens. Auto follows your phone.</p>
+      <section className="panel" aria-label="Planning">
+        <h2 className="panel-title">Planning</h2>
+        {(
+          [
+            ["Target difficulty", "targetDifficulty", 5, 9, 1, "/10"],
+            ["Tolerance", "tolerance", 0, 2, 1, ""],
+            ["Overload step", "overloadStep", 10, 50, 5, "%"],
+            ["Win threshold", "winThreshold", 40, 100, 10, "%"],
+            ["Compliance target", "complianceTarget", 50, 95, 5, "%"],
+          ] as const
+        ).map(([label, key, min, max, step, unit]) => (
+          <div className="stepper-row" key={key}>
+            <span>{label}</span>
+            <div className="stepper">
+              <button
+                type="button"
+                aria-label={`Lower ${label}`}
+                onClick={() => updatePrefs({ [key]: Math.max(min, extras.prefs[key] - step) })}
+              >
+                −
+              </button>
+              <b>
+                {extras.prefs[key]}
+                {unit}
+              </b>
+              <button
+                type="button"
+                aria-label={`Raise ${label}`}
+                onClick={() => updatePrefs({ [key]: Math.min(max, extras.prefs[key] + step) })}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+        <p className="panel-note">
+          Aim for about {extras.prefs.targetDifficulty}/10 actual difficulty. A day counts as won at{" "}
+          {extras.prefs.winThreshold}% of tasks done.
+        </p>
       </section>
 
       <section className="panel" aria-label="Habits">
@@ -80,30 +95,17 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
-        <div className="factor-row">
+        <div className="switch-row">
           <span>Skip days</span>
-          <div className="scale-pick" role="group" aria-label="Skip days">
-            {(
-              [
-                [true, "ON"],
-                [false, "OFF"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={label}
-                type="button"
-                className={extras.skipDays === value ? "on" : ""}
-                aria-pressed={extras.skipDays === value}
-                onClick={() =>
-                  updateExtras((draft) => {
-                    draft.skipDays = value;
-                  })
-                }
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Switch
+            label="Skip days"
+            checked={extras.skipDays}
+            onCheckedChange={(checked) =>
+              updateExtras((draft) => {
+                draft.skipDays = checked;
+              })
+            }
+          />
         </div>
         <p className="panel-note">Skipped days keep your score and streak safe when you are sick or travelling.</p>
       </section>
@@ -149,7 +151,8 @@ export function SettingsPage() {
           license.
         </p>
         <p className="panel-note">
-          Pixel font: Silkscreen by Jason Kottke (SIL Open Font License). Built with Capacitor (MIT).
+          Typeface: Inter by Rasmus Andersson (SIL Open Font License). Built with Capacitor, Recharts,
+          Vaul, Sonner, Radix UI and Lucide (all MIT or ISC licensed).
         </p>
       </section>
     </div>

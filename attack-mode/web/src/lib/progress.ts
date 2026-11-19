@@ -24,12 +24,12 @@ function shiftDate(key: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function dayWon(tasks: Task[]): boolean {
+export function dayWon(tasks: Task[], threshold = WIN_THRESHOLD): boolean {
   if (tasks.length === 0) return false;
-  return tasks.filter((task) => task.completed).length / tasks.length >= WIN_THRESHOLD;
+  return tasks.filter((task) => task.completed).length / tasks.length >= threshold;
 }
 
-export function streakInfo(tasks: Task[], today: string) {
+export function streakInfo(tasks: Task[], today: string, threshold = WIN_THRESHOLD) {
   const byDate = new Map<string, Task[]>();
   for (const task of tasks) {
     const list = byDate.get(task.date) ?? [];
@@ -37,7 +37,7 @@ export function streakInfo(tasks: Task[], today: string) {
     byDate.set(task.date, list);
   }
 
-  const won = (key: string) => dayWon(byDate.get(key) ?? []);
+  const won = (key: string) => dayWon(byDate.get(key) ?? [], threshold);
   let cursor = won(today) ? today : shiftDate(today, -1);
   let current = 0;
   while (won(cursor)) {

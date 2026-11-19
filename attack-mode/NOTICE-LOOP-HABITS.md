@@ -25,5 +25,6 @@ Keeping the app for your own use does not trigger that requirement.
 
 ## Other notices
 
-- Silkscreen font, by Jason Kottke, SIL Open Font License 1.1 (`@fontsource/silkscreen`).
-- Capacitor, MIT License.
+- Inter typeface, by Rasmus Andersson, SIL Open Font License 1.1 (`@fontsource-variable/inter`).
+- Capacitor, Recharts, Vaul, Sonner, Radix UI, Lucide and TanStack Query, all under MIT or ISC licenses.
+- WOOP is the goal-setting method of Gabriele Oettingen; the "7/10" planning system follows the Analog Attack Mode course notes.

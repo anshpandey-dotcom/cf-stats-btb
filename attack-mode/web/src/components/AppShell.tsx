@@ -30,7 +30,18 @@ const navItems: NavItem[] = [
   { to: "/more", label: "More", icon: Menu },
 ];
 
-const MORE_PATHS = ["/more", "/tomorrow", "/calendar", "/stats", "/settings"];
+const MORE_PATHS = [
+  "/more",
+  "/tomorrow",
+  "/calendar",
+  "/stats",
+  "/settings",
+  "/insights",
+  "/history",
+  "/woop",
+  "/manual",
+  "/reminders",
+];
 
 function itemActive(to: string, pathname: string): boolean {
   if (to === "/today") return pathname === "/" || pathname.startsWith("/today") || pathname.startsWith("/day/");

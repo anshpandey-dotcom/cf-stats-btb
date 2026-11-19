@@ -7,7 +7,10 @@ import type { Task } from "../api/types";
 import { AdSheet } from "../components/AdSheet";
 import { CloneTasksSheet } from "../components/CloneTasksSheet";
 import { NextGoalCard } from "../components/NextGoalCard";
+import { Suggestions } from "../components/Suggestions";
 import { TodayHabits } from "../components/TodayHabits";
+import { TodayRules } from "../components/TodayRules";
+import { WoopPlans } from "../components/WoopPlans";
 import { XpCard } from "../components/XpCard";
 import { EmptyState, ErrorState, PageLoader } from "../components/States";
 import { TaskForm } from "../components/TaskForm";
@@ -100,7 +103,7 @@ export function DayPage({ mode }: { mode: DayMode }) {
           <span className="eyebrow">
             {isToday ? "Today" : isTomorrow ? "Tomorrow" : dayOfWeekLabel(dateKey)}
           </span>
-          <h1>{isToday ? "ATTACK TODAY" : isTomorrow ? "ATTACK TOMORROW" : "ATTACK DAY"}</h1>
+          <h1>{isToday ? "Attack today" : isTomorrow ? "Attack tomorrow" : "Attack day"}</h1>
           <p className="day-date">{longDayLabel(dateKey)}</p>
         </div>
 
@@ -210,7 +213,13 @@ export function DayPage({ mode }: { mode: DayMode }) {
 
       <NextGoalCard tasks={tasks} />
 
+      {isTomorrow ? <Suggestions dateKey={dateKey} /> : null}
+
+      {isTomorrow ? <WoopPlans /> : null}
+
       {isToday ? <TodayHabits day={dateKey} /> : null}
+
+      {isToday ? <TodayRules day={dateKey} /> : null}
 
       {isToday ? <XpCard /> : null}
 

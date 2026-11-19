@@ -43,7 +43,7 @@ export function HabitsPage() {
     <div className="page habits-page">
       <header className="page-header">
         <span className="eyebrow">Build the streak</span>
-        <h1>HABITS</h1>
+        <h1>Habits</h1>
       </header>
 
       <div className="list-toolbar">

@@ -136,7 +136,7 @@ export function StatsPage() {
       <header className="page-header">
         <div>
           <span className="eyebrow">Stats</span>
-          <h1>CALIBRATION</h1>
+          <h1>Calibration</h1>
           <p className="page-subtitle">Perceived difficulty vs. what the work actually took.</p>
         </div>
       </header>

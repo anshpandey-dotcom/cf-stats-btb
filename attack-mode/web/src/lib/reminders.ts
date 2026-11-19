@@ -84,6 +84,29 @@ export async function requestReminderPermission(): Promise<ReminderPermission> {
   return status.notifications ? "granted" : "denied";
 }
 
+function customReminderItems(): ReminderItem[] {
+  const now = new Date();
+  return getExtras()
+    .reminders.filter((reminder) => reminder.on)
+    .flatMap((reminder) => {
+      const at = nextReminderAt({ id: reminder.id, time: reminder.time, days: reminder.days }, now, false);
+      if (!at) return [];
+      const [hour, minute] = reminder.time.split(":").map(Number) as [number, number];
+      return [
+        {
+          id: reminderNumericId(reminder.id),
+          title: reminder.title,
+          body: reminder.note || "Tap to open Attack Mode.",
+          at: at.getTime(),
+          url: reminder.go || "/today",
+          repeat: reminderMask(reminder.days),
+          hour,
+          minute,
+        },
+      ];
+    });
+}
+
 function habitReminderItems(): ReminderItem[] {
   const extras = getExtras();
   const now = new Date();
@@ -149,8 +172,8 @@ export async function rescheduleReminders(tasks: Task[]): Promise<void> {
       .sort((a, b) => a.at - b.at)
       .slice(0, MAX_SCHEDULED);
 
-    const habitItems = habitReminderItems();
-    await Reminders.schedule({ items: [...habitItems, ...items].slice(0, MAX_SCHEDULED + habitItems.length) });
+    const fixed = [...habitReminderItems(), ...customReminderItems()];
+    await Reminders.schedule({ items: [...fixed, ...items].slice(0, MAX_SCHEDULED + fixed.length) });
   } catch (error) {
     console.warn("Could not schedule reminders:", error);
   }

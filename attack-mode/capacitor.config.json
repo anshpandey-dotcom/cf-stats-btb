@@ -2,13 +2,13 @@
   "appId": "com.attackmode.planner",
   "appName": "Attack Mode",
   "webDir": "web/dist",
-  "backgroundColor": "#f3efe6",
+  "backgroundColor": "#000000",
   "android": {
-    "backgroundColor": "#f3efe6"
+    "backgroundColor": "#000000"
   },
   "plugins": {
     "SystemBars": {
-      "style": "LIGHT",
+      "style": "DARK",
       "insetsHandling": "css"
     }
   }

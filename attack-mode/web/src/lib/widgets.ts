@@ -16,7 +16,7 @@ const Widgets = registerPlugin<WidgetsPlugin>("Widgets");
 export function widgetSnapshot(): string {
   const extras = getExtras();
   return JSON.stringify({
-    theme: resolveTheme(extras.theme),
+    theme: resolveTheme(),
     weekStart: extras.weekStart,
     skipDays: extras.skipDays,
     habits: extras.habits.map((habit) => ({

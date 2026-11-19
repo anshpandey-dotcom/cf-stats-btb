@@ -1,18 +1,21 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { cycleCheck } from "../lib/habitStore";
-import {
-  scoreSeries,
-  shiftDay,
-  weekdayCounts,
-  type Checks,
-  type Habit,
-} from "../lib/habits";
+import { scoreSeries, shiftDay, weekdayCounts, type Checks, type Habit } from "../lib/habits";
 import { CheckCell } from "./CheckCell";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
+
+const tooltipStyle = {
+  background: "#16161a",
+  border: "1px solid #2e2e35",
+  borderRadius: 10,
+  color: "#f5f5f7",
+  fontSize: 12,
+};
 
 function monthStart(key: string): string {
   return `${key.slice(0, 7)}-01`;
@@ -20,8 +23,7 @@ function monthStart(key: string): string {
 
 function shiftMonth(key: string, delta: number): string {
   const [year, month] = key.split("-").map(Number) as [number, number];
-  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
-  return date.toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month - 1 + delta, 1)).toISOString().slice(0, 10);
 }
 
 function daysInMonth(key: string): number {
@@ -32,48 +34,53 @@ function daysInMonth(key: string): number {
 export function ScoreChart({ habit, checks, today }: { habit: Habit; checks: Checks; today: string }) {
   const [mode, setMode] = useState<"week" | "month">("week");
 
-  const bars = useMemo(() => {
+  const data = useMemo(() => {
     const series = scoreSeries(habit, checks, today);
-    const points: { label: string; value: number }[] = [];
+    const points: { label: string; score: number }[] = [];
     if (mode === "week") {
       for (let index = 11; index >= 0; index -= 1) {
         const end = shiftDay(today, -index * 7);
-        points.push({
-          label: index % 2 === 0 ? `${Number(end.slice(8))}/${Number(end.slice(5, 7))}` : "",
-          value: series.get(end) ?? 0,
-        });
+        points.push({ label: `${Number(end.slice(8))}/${Number(end.slice(5, 7))}`, score: Math.round((series.get(end) ?? 0) * 100) });
       }
     } else {
       for (let index = 11; index >= 0; index -= 1) {
         const first = shiftMonth(monthStart(today), -index);
         const last = shiftDay(shiftMonth(first, 1), -1);
         const end = last > today ? today : last;
-        points.push({ label: MONTHS[Number(first.slice(5, 7)) - 1]!, value: series.get(end) ?? 0 });
+        points.push({ label: MONTHS[Number(first.slice(5, 7)) - 1]!, score: Math.round((series.get(end) ?? 0) * 100) });
       }
     }
     return points;
   }, [habit, checks, today, mode]);
 
+  const gradient = `grad-${habit.id}`;
+
   return (
     <div>
       <div className="mode-pick" role="group" aria-label="Chart range">
         <button type="button" className={mode === "week" ? "on" : ""} aria-pressed={mode === "week"} onClick={() => setMode("week")}>
-          WEEKS
+          Weeks
         </button>
         <button type="button" className={mode === "month" ? "on" : ""} aria-pressed={mode === "month"} onClick={() => setMode("month")}>
-          MONTHS
+          Months
         </button>
       </div>
-      <div className="bar-chart" style={{ "--habit": habit.color } as React.CSSProperties} role="img" aria-label="Habit score over time">
-        {bars.map((bar, index) => (
-          <div className="bar-col" key={`${bar.label}-${index}`}>
-            <span className="bar-value">{Math.round(bar.value * 100)}</span>
-            <div className="bar-track">
-              <i style={{ height: `${Math.max(2, Math.round(bar.value * 100))}%` }} />
-            </div>
-            <span className="bar-label">{bar.label}</span>
-          </div>
-        ))}
+      <div className="chart-box" role="img" aria-label="Habit score over time">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 4 }}>
+            <defs>
+              <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={habit.color} stopOpacity={0.45} />
+                <stop offset="100%" stopColor={habit.color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#1f1f24" vertical={false} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis domain={[0, 100]} tickLine={false} axisLine={false} width={46} ticks={[0, 50, 100]} unit="%" />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value}%`, "Score"]} cursor={{ stroke: "#2e2e35" }} />
+            <Area type="monotone" dataKey="score" stroke={habit.color} strokeWidth={2.5} fill={`url(#${gradient})`} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -151,18 +158,19 @@ export function HistoryCalendar({
 export function WeekdayChart({ habit, checks, today, weekStart }: { habit: Habit; checks: Checks; today: string; weekStart: 0 | 1 }) {
   const counts = weekdayCounts(checks, today);
   const order = weekStart === 1 ? [1, 2, 3, 4, 5, 6, 0] : [0, 1, 2, 3, 4, 5, 6];
-  const max = Math.max(1, ...counts);
+  const data = order.map((day) => ({ label: LETTERS[day]!, count: counts[day] ?? 0 }));
+
   return (
-    <div className="bar-chart weekday-chart" style={{ "--habit": habit.color } as React.CSSProperties} role="img" aria-label="Checks by weekday">
-      {order.map((day) => (
-        <div className="bar-col" key={day}>
-          <span className="bar-value">{counts[day]}</span>
-          <div className="bar-track">
-            <i style={{ height: `${Math.max(2, Math.round(((counts[day] ?? 0) / max) * 100))}%` }} />
-          </div>
-          <span className="bar-label">{LETTERS[day]}</span>
-        </div>
-      ))}
+    <div className="chart-box" role="img" aria-label="Checks by weekday">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 6, bottom: 0, left: 4 }}>
+          <CartesianGrid stroke="#1f1f24" vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+          <YAxis tickLine={false} axisLine={false} width={46} allowDecimals={false} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#16161a" }} formatter={(value) => [value, "Checks"]} />
+          <Bar dataKey="count" fill={habit.color} radius={[6, 6, 0, 0]} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

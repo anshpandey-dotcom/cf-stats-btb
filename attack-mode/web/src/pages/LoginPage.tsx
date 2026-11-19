@@ -54,7 +54,7 @@ export function LoginPage() {
 
         <div className="login-heading">
           <span className="eyebrow">Private planner</span>
-          <h1>ATTACK TODAY</h1>
+          <h1>Attack today</h1>
           <p>Enter your password to open your plan.</p>
         </div>
 

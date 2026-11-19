@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import { scheduleBackup, setBackupProvider } from "./backup";
 import type { Checks, Habit } from "./habits";
+import { DEFAULT_PREFS, starterReminders, type CustomReminder, type Prefs, type Rule, type RuleChecks, type Woop } from "./phase2";
 import { EXTRAS_KEY, STORAGE_KEY } from "./storage";
 
 export type PngMode = "auto" | "manual" | "off";
@@ -51,6 +52,11 @@ export interface Extras {
   theme: ThemeMode;
   weekStart: 0 | 1;
   skipDays: boolean;
+  woops: Woop[];
+  rules: Rule[];
+  ruleChecks: RuleChecks;
+  reminders: CustomReminder[];
+  prefs: Prefs;
   savedAt?: string;
 }
 
@@ -79,6 +85,11 @@ export function emptyExtras(): Extras {
     theme: "auto",
     weekStart: 1,
     skipDays: true,
+    woops: [],
+    rules: [],
+    ruleChecks: {},
+    reminders: starterReminders(),
+    prefs: { ...DEFAULT_PREFS },
   };
 }
 
@@ -101,6 +112,11 @@ function normalize(value: unknown): Extras {
     theme: input.theme === "light" || input.theme === "black" ? input.theme : "auto",
     weekStart: input.weekStart === 0 ? 0 : 1,
     skipDays: input.skipDays !== false,
+    woops: Array.isArray(input.woops) ? input.woops : [],
+    rules: Array.isArray(input.rules) ? input.rules : [],
+    ruleChecks: { ...(input.ruleChecks ?? {}) },
+    reminders: Array.isArray(input.reminders) ? input.reminders : starterReminders(),
+    prefs: { ...DEFAULT_PREFS, ...(input.prefs ?? {}) },
     savedAt: input.savedAt,
   };
 }
@@ -138,6 +154,8 @@ export function combinedBackupJson(): string | null {
     Object.keys(extras.journal).length > 0 ||
     extras.sessions.length > 0 ||
     extras.habits.length > 0 ||
+    extras.woops.length > 0 ||
+    extras.rules.length > 0 ||
     Object.keys(extras.saved).length > 0;
   if (!tasks && !hasExtras) return null;
 

@@ -142,7 +142,7 @@ export function JournalPage() {
       <header className="day-header">
         <div className="day-header-main">
           <span className="eyebrow">{isToday ? "Today" : "Feedback"}</span>
-          <h1>JOURNAL</h1>
+          <h1>Journal</h1>
           <p className="day-date">{longDayLabel(date)}</p>
         </div>
         <div className="day-controls">

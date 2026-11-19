@@ -26,7 +26,7 @@ export function ProgressPills() {
 
   if (!isNative()) return null;
 
-  const { current } = streakInfo(tasks, today);
+  const { current } = streakInfo(tasks, today, getExtras().prefs.winThreshold / 100);
 
   return (
     <div className="progress-pills" aria-label="Your progress">

@@ -43,7 +43,7 @@ export function CalendarPage() {
       <header className="page-header calendar-header">
         <div>
           <span className="eyebrow">Calendar</span>
-          <h1>MONTH AT A GLANCE</h1>
+          <h1>Month at a glance</h1>
           <p className="page-subtitle">{monthTitle(month)}</p>
         </div>
 

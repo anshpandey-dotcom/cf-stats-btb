@@ -57,7 +57,7 @@ export function FocusPage() {
     <div className="page focus-page">
       <header className="page-header">
         <span className="eyebrow">30/10 system</span>
-        <h1>FOCUS</h1>
+        <h1>Focus</h1>
         <p className="page-subtitle">
           Work in a timed block, then take a real break. Phone face down until it ends.
         </p>
