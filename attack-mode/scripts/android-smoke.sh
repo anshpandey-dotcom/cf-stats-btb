@@ -57,7 +57,7 @@ adb shell am broadcast -n "$package/.WidgetActionReceiver" -a com.attackmode.pla
   --es attackmode.habit smoke1 --ei attackmode.id 9 --es attackmode.title "Smoke habit" \
   --es attackmode.body "Time to check in." --es attackmode.url /habits
 echo "registered widget providers:"
-adb shell dumpsys appwidget | grep -oE "com.attackmode.planner/\.[A-Za-z]*WidgetProvider" | sort -u
+adb shell dumpsys appwidget | grep -oE "com.attackmode.planner[./A-Za-z]*WidgetProvider" | sort -u
 adb shell am start -W -n "$package/.MainActivity" > /dev/null
 sleep 25
 adb exec-out screencap -p > smoke-restored.png
