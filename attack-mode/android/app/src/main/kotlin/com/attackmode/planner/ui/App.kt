@@ -60,6 +60,11 @@ fun AttackApp(pendingRoute: String?, onRouteHandled: () -> Unit) {
     val state by Store.state.collectAsState()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(state.savedAt) {
+        kotlinx.coroutines.delay(4000)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.attackmode.planner.platform.Sheet.autoSave(context) }
+    }
 
     LaunchedEffect(pendingRoute) {
         if (pendingRoute != null) {
@@ -114,14 +119,17 @@ fun AttackApp(pendingRoute: String?, onRouteHandled: () -> Unit) {
                     HabitFormScreen(state, entry.arguments?.getString("id")) { nav.popBackStack() }
                 }
                 composable("focus") { FocusScreen(state) }
-                composable("journal") { SoonScreen("Journal") }
+                composable("journal") { JournalScreen(state) }
                 composable("more") { MoreScreen { nav.navigate(dayOrRoute(it)) } }
                 composable("settings") { SettingsScreen(state) { nav.popBackStack() } }
                 composable("reminders") { RemindersScreen(state) { nav.popBackStack() } }
                 composable("nudges") { NudgesScreen(state) { nav.popBackStack() } }
-                listOf("insights", "woop", "manual", "history", "calendar", "stats").forEach { route ->
-                    composable(route) { SoonScreen(route.replaceFirstChar { it.uppercase() }) { nav.popBackStack() } }
-                }
+                composable("insights") { InsightsScreen(state) { nav.popBackStack() } }
+                composable("woop") { WoopScreen(state) { nav.popBackStack() } }
+                composable("manual") { ManualScreen(state) { nav.popBackStack() } }
+                composable("history") { HistoryScreen(state, { nav.popBackStack() }) { nav.navigate(dayRoute(it)) } }
+                composable("calendar") { CalendarScreen(state, { nav.popBackStack() }) { nav.navigate(dayRoute(it)) } }
+                composable("stats") { StatsScreen(state) { nav.popBackStack() } }
             }
         }
     }
