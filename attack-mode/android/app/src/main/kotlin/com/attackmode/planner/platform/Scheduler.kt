@@ -117,7 +117,7 @@ object Scheduler {
         val (states, changed) = Nudges.ensurePlans(extras.nudges, extras.nudgeState, LocalDate.now())
         if (changed) Store.updateExtras { it.copy(nudgeState = states) }
         Nudges.items(extras.nudges, states, System.currentTimeMillis()).forEach {
-            result.add(item(it.id, it.title, it.body, it.at, it.url))
+            result.add(item(it.id, it.title, it.body, it.at, it.url) { put("soft", true) })
         }
         return result
     }

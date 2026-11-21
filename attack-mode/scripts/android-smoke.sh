@@ -101,3 +101,21 @@ if grep -q "FATAL EXCEPTION" smoke-restore.log; then
   echo "app crashed after restore"
   exit 1
 fi
+
+echo "---- smart wait: no extra nudge while 2 notifications are in the bar ----"
+adb shell cmd notification cancel_all > /dev/null 2>&1 || adb shell service call notification 1 > /dev/null 2>&1 || true
+for n in 31 32; do
+  adb shell am broadcast -n "$package/.ReminderReceiver" -a com.attackmode.planner.REMINDER \
+    --ei attackmode.id $n --es attackmode.title "Tray filler $n" --es attackmode.body "filler" --es attackmode.url /today > /dev/null
+done
+sleep 2
+adb shell am broadcast -n "$package/.ReminderReceiver" -a com.attackmode.planner.REMINDER \
+  --ei attackmode.id 33 --es attackmode.title "Soft nudge held back" --es attackmode.body "soft" --es attackmode.url /today \
+  --ez attackmode.soft true > /dev/null
+sleep 3
+if adb shell dumpsys notification --noredact | grep -q "Soft nudge held back"; then
+  echo "SMART WAIT FAILED: a nudge was shown over 2 existing notifications"
+else
+  echo "SMART WAIT OK: the nudge was held back while the bar had 2 notifications"
+fi
+adb shell dumpsys notification --noredact | grep -c "pkg=$package" || true

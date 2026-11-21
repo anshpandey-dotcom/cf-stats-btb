@@ -52,9 +52,9 @@ object Nudges {
             to = "21:30",
             minGap = 60,
             days = ALL_DAYS,
-            onUnlock = false,
-            unlockMax = 4,
-            unlockGap = 90,
+            onUnlock = true,
+            unlockMax = 6,
+            unlockGap = 45,
             url = "/today",
         ),
     )

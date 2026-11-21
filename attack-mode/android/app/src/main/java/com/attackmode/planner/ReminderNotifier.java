@@ -28,6 +28,11 @@ final class ReminderNotifier {
     static final String EXTRA_BODY = "attackmode.body";
     static final String EXTRA_HABIT = "attackmode.habit";
     static final String ACTION_FIRE = "com.attackmode.planner.REMINDER";
+    static final String EXTRA_SOFT = "attackmode.soft";
+    static final String EXTRA_TRY = "attackmode.try";
+    static final int TRAY_LIMIT = 2;
+    static final int MAX_DEFERS = 8;
+    static final long DEFER_MS = 10 * 60 * 1000L;
 
     private static final String PREFS = "attackmode_reminders";
     private static final String KEY_ITEMS = "items";
@@ -91,7 +96,7 @@ final class ReminderNotifier {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setColor(0xFFB83B1E)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
@@ -135,6 +140,13 @@ final class ReminderNotifier {
     private static PendingIntent firePending(
         Context context, int requestCode, int id, String title, String body, String url, String habit
     ) {
+        return firePending(context, requestCode, id, title, body, url, habit, false, 0);
+    }
+
+    private static PendingIntent firePending(
+        Context context, int requestCode, int id, String title, String body, String url, String habit,
+        boolean soft, int attempt
+    ) {
         Intent intent = new Intent(context, ReminderReceiver.class);
         intent.setAction(ACTION_FIRE);
         intent.putExtra(EXTRA_ID, id);
@@ -142,6 +154,10 @@ final class ReminderNotifier {
         intent.putExtra(EXTRA_BODY, body);
         intent.putExtra(EXTRA_URL, url);
         intent.putExtra(EXTRA_HABIT, habit);
+        intent.putExtra(EXTRA_SOFT, soft);
+        intent.putExtra(EXTRA_TRY, attempt);
+        intent.putExtra(EXTRA_SOFT, soft);
+        intent.putExtra(EXTRA_TRY, attempt);
         return PendingIntent.getBroadcast(
             context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
@@ -176,8 +192,9 @@ final class ReminderNotifier {
             String body = item.optString("body");
             String url = item.optString("url", "/today");
             String habit = item.optString("habit", "");
+            boolean soft = item.optBoolean("soft", false);
 
-            PendingIntent fire = firePending(context, id, id, title, body, url, habit);
+            PendingIntent fire = firePending(context, id, id, title, body, url, habit, soft, 0);
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
             } else {
@@ -314,6 +331,33 @@ final class ReminderNotifier {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
         } else {
             alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
+        }
+    }
+
+    static void deferSoft(Context context, int id, String title, String body, String url, int attempt) {
+        AlarmManager alarms = context.getSystemService(AlarmManager.class);
+        long at = System.currentTimeMillis() + DEFER_MS;
+        PendingIntent fire = firePending(context, id, id, title, body, url, "", true, attempt);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, fire);
+        }
+    }
+
+    static int trayCount(Context context, int ignoreId) {
+        try {
+            NotificationManager manager = context.getSystemService(NotificationManager.class);
+            int count = 0;
+            for (android.service.notification.StatusBarNotification entry : manager.getActiveNotifications()) {
+                if (entry.getId() == ignoreId || entry.isOngoing()) {
+                    continue;
+                }
+                count++;
+            }
+            return count;
+        } catch (RuntimeException error) {
+            return 0;
         }
     }
 

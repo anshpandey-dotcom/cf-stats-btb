@@ -168,6 +168,34 @@ fun NudgesScreen(state: AppState, onBack: () -> Unit) {
                 )
             }
         }
+        item {
+            val unlockOn = state.extras.nudges.any { it.on && it.onUnlock }
+            Panel {
+                ToggleRow(
+                    "Nudge me when I open my phone",
+                    "Runs a tiny background service. Waits if 2 or more of our notifications are still in your bar.",
+                    unlockOn,
+                ) { on ->
+                    Store.updateExtras { extras ->
+                        val list = extras.nudges.map { if (on) it.copy(onUnlock = true) else it.copy(onUnlock = false) }
+                        val anyOn = list.any { it.on }
+                        extras.copy(
+                            nudges = if (on && !anyOn && list.isNotEmpty()) list.mapIndexed { i, n -> if (i == 0) n.copy(on = true) else n } else list,
+                            nudgeState = emptyMap(),
+                        )
+                    }
+                }
+                Text(
+                    "If nothing arrives after unlocking, let the app run in the background so your phone does not stop the service.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Palette.Muted,
+                )
+                SpacerH(6.dp)
+                OutlinedButton(onClick = {
+                    runCatching { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) { Text("Allow background running") }
+            }
+        }
         items(state.extras.nudges, key = { it.id }) { nudge ->
             Panel(onClick = { editing = nudge }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

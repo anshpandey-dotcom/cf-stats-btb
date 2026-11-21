@@ -97,7 +97,7 @@ final class NudgeNotifier {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setColor(0xFFFF6B3D)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setAutoCancel(true)
             .setContentIntent(content);
 
@@ -117,6 +117,9 @@ final class NudgeNotifier {
     }
 
     static void onUnlock(Context context) {
+        if (ReminderNotifier.trayCount(context, 0) >= ReminderNotifier.TRAY_LIMIT) {
+            return;
+        }
         try {
             JSONArray list = new JSONArray(prefs(context).getString(KEY_CONFIG, "[]"));
             JSONObject state = new JSONObject(prefs(context).getString(KEY_STATE, "{}"));

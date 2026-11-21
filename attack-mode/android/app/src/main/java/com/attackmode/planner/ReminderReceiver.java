@@ -11,6 +11,21 @@ public class ReminderReceiver extends BroadcastReceiver {
         if (!ReminderNotifier.ACTION_FIRE.equals(intent.getAction())) {
             return;
         }
+        int soft = intent.getBooleanExtra(ReminderNotifier.EXTRA_SOFT, false) ? 1 : 0;
+        int attempt = intent.getIntExtra(ReminderNotifier.EXTRA_TRY, 0);
+        int fired = intent.getIntExtra(ReminderNotifier.EXTRA_ID, 0);
+        if (soft == 1 && ReminderNotifier.trayCount(context, fired) >= ReminderNotifier.TRAY_LIMIT) {
+            if (attempt < ReminderNotifier.MAX_DEFERS) {
+                ReminderNotifier.deferSoft(
+                    context, fired,
+                    intent.getStringExtra(ReminderNotifier.EXTRA_TITLE),
+                    intent.getStringExtra(ReminderNotifier.EXTRA_BODY),
+                    intent.getStringExtra(ReminderNotifier.EXTRA_URL),
+                    attempt + 1
+                );
+            }
+            return;
+        }
         ReminderNotifier.show(
             context,
             intent.getIntExtra(ReminderNotifier.EXTRA_ID, 0),
