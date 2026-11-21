@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FlipShelf</string>
+    <string name="add_books">Add books</string>
+    <string name="search_hint">Search your shelf</string>
+    <string name="empty_title">Your shelf is empty</string>
+    <string name="empty_hint">Tap Add books to import PDF, EPUB, CBZ, TXT or image files.</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="delete_title">Delete this book?</string>
+    <string name="delete_message">"%1$s" will be removed from your shelf.</string>
+    <string name="importing">Importing %1$d of %2$d…</string>
+    <string name="import_done">%1$d added</string>
+    <string name="import_failed">Could not import %1$s: %2$s</string>
+    <string name="image_book_title">Image book</string>
+    <string name="open_failed">Cannot open this book: %1$s</string>
+    <string name="read_percent">%1$d%% read</string>
+    <string name="not_started">Not started</string>
+    <string name="pages_count">%1$d pages</string>
+    <string name="page_of">%1$d / %2$d</string>
+    <string name="larger_text">Larger text</string>
+    <string name="smaller_text">Smaller text</string>
+    <string name="night_mode">Night mode</string>
+    <string name="page_sound">Page flip sound</string>
+    <string name="go_to_page">Go to page</string>
+    <string name="page_number">Page number</string>
+    <string name="back">Back</string>
+    <string name="loading_book">Preparing pages…</string>
+</resources>

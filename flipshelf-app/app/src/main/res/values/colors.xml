@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#3B5BDB</color>
+    <color name="brand_light">#5C7CFA</color>
+    <color name="reader_bg">#2B2B2B</color>
+    <color name="scrim">#CC000000</color>
+    <color name="white">#FFFFFF</color>
+</resources>

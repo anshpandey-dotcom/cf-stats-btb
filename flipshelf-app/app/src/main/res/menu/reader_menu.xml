@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_goto"
+        android:title="@string/go_to_page"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_larger"
+        android:title="@string/larger_text"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_smaller"
+        android:title="@string/smaller_text"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_night"
+        android:checkable="true"
+        android:title="@string/night_mode"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_sound"
+        android:checkable="true"
+        android:title="@string/page_sound"
+        app:showAsAction="never" />
+</menu>

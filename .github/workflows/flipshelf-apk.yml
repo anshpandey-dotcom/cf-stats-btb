@@ -1,0 +1,62 @@
+name: Build FlipShelf APK
+
+on:
+  push:
+    paths:
+      - 'flipshelf-app/**'
+      - '.github/workflows/flipshelf-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flipshelf-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run unit tests
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Build release APK
+        env:
+          KEYSTORE_B64: ${{ secrets.FLIPSHELF_KEYSTORE_B64 }}
+          FLIPSHELF_KEYSTORE_PASSWORD: ${{ secrets.FLIPSHELF_KEYSTORE_PASSWORD }}
+          FLIPSHELF_KEY_ALIAS: ${{ secrets.FLIPSHELF_KEY_ALIAS }}
+          FLIPSHELF_KEY_PASSWORD: ${{ secrets.FLIPSHELF_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/flipshelf.jks"
+            export FLIPSHELF_KEYSTORE="$RUNNER_TEMP/flipshelf.jks"
+          fi
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk FlipShelf.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlipShelf-apk
+          path: flipshelf-app/FlipShelf.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: flipshelf-latest
+          name: FlipShelf (latest build)
+          prerelease: false
+          make_latest: false
+          files: flipshelf-app/FlipShelf.apk
+          body: |
+            FlipShelf Android app, built from ${{ github.sha }}.
+            Download FlipShelf.apk below and install it on your phone.
