@@ -1,6 +1,13 @@
 package com.fleetmc.flipshelf.library
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import android.widget.Button
+import android.widget.Toast
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -19,7 +26,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.fleetmc.flipshelf.R
 import com.fleetmc.flipshelf.core.Book
 import com.fleetmc.flipshelf.core.Importer
+import com.fleetmc.flipshelf.core.Format
 import com.fleetmc.flipshelf.core.Library
+import com.fleetmc.flipshelf.translate.TranslateService
+import com.fleetmc.flipshelf.translate.TranslationState
 import com.fleetmc.flipshelf.reader.ReaderActivity
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -39,6 +49,30 @@ class MainActivity : AppCompatActivity() {
     private var query = ""
     private var spans = 2
 
+    private var pendingTranslate: Book? = null
+    private lateinit var banner: View
+    private lateinit var bannerText: TextView
+    private lateinit var bannerProgress: LinearProgressIndicator
+    private val translateListener = TranslationState.Listener { job ->
+        if (job == null) {
+            banner.visibility = View.GONE
+        } else if (job.finished) {
+            banner.visibility = View.GONE
+            refresh()
+            job.error?.let { Snackbar.make(list, it, Snackbar.LENGTH_LONG).show() }
+        } else {
+            banner.visibility = View.VISIBLE
+            bannerText.text = if (job.indeterminate) "${job.phase}  ${job.title}" else "${job.phase} ${job.percent}%  ${job.title}"
+            bannerProgress.isIndeterminate = job.indeterminate
+            if (!job.indeterminate) bannerProgress.setProgressCompat(job.percent, true)
+        }
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pendingTranslate?.let { launchTranslate(it) }
+        pendingTranslate = null
+    }
+
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) importUris(uris, false)
     }
@@ -53,6 +87,10 @@ class MainActivity : AppCompatActivity() {
         list = findViewById(R.id.list)
         empty = findViewById(R.id.empty)
         fab = findViewById(R.id.fab)
+        banner = findViewById(R.id.translateBanner)
+        bannerText = findViewById(R.id.translateText)
+        bannerProgress = findViewById(R.id.translateProgress)
+        findViewById<Button>(R.id.translateCancel).setOnClickListener { TranslateService.cancel(this) }
 
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         spans = max(2, (widthDp / 160f).toInt())
@@ -108,9 +146,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        TranslationState.add(translateListener)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        TranslationState.remove(translateListener)
+    }
+
     override fun onResume() {
         super.onResume()
         refresh()
+    }
+
+    private fun translate(book: Book) {
+        if (book.format == Format.COMIC || book.format == Format.IMAGES) {
+            Toast.makeText(this, R.string.translate_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingTranslate = book
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        launchTranslate(book)
+    }
+
+    private fun launchTranslate(book: Book) {
+        TranslateService.start(this, book.id)
+        Snackbar.make(list, R.string.translate_started, Snackbar.LENGTH_LONG).show()
     }
 
     private fun refresh() {
@@ -129,11 +197,13 @@ class MainActivity : AppCompatActivity() {
     private fun showMenu(book: Book, anchor: View) {
         val menu = PopupMenu(this, anchor)
         menu.menu.add(0, 1, 0, R.string.rename)
-        menu.menu.add(0, 2, 1, R.string.delete)
+        if (book.format != Format.COMIC && book.format != Format.IMAGES) menu.menu.add(0, 3, 1, R.string.translate_hindi)
+        menu.menu.add(0, 2, 2, R.string.delete)
         menu.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> rename(book)
                 2 -> confirmDelete(book)
+                3 -> translate(book)
             }
             true
         }

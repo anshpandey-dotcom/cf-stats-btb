@@ -143,4 +143,66 @@ class CurlRenderTest {
         pump(1200)
         assertEquals(2, view.index)
     }
+
+    @Test
+    fun landscapeSpread() {
+        val ctx = ApplicationProvider.getApplicationContext<Application>()
+        val view = PageCurlView(ctx)
+        val source = FakeSource(10)
+        lateinit var cache: PageCache
+        view.host = object : PageCurlView.Host {
+            override fun onPageChanged(index: Int) = Unit
+            override fun onCenterTap() = Unit
+            override fun onPageSizeChanged(width: Int, height: Int) {
+                cache.reset(width, height)
+                view.setPageCount(10, 0)
+            }
+        }
+        cache = PageCache(source, { true }, { view.invalidate() })
+        view.cache = cache
+        view.measure(View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY))
+        view.layout(0, 0, 2000, 1000)
+        view.aspect = 0.7f
+        assertTrue(view.spreadMode)
+        pump(800)
+        snap(view, "L1_cover")
+        view.flipNext()
+        pump(1200)
+        assertEquals(1, view.index)
+        snap(view, "L2_spread_1_2")
+
+        val t0 = SystemClock.uptimeMillis()
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 1500f, 800f, t0))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 1450f, 780f, t0 + 16))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 1250f, 740f, t0 + 32))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 1050f, 700f, t0 + 48))
+        pump(150)
+        snap(view, "L3_turn_right_mid")
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 600f, 650f, t0 + 64))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 500f, 640f, t0 + 80))
+        pump(1200)
+        assertEquals(3, view.index)
+        snap(view, "L4_spread_3_4")
+
+        val t1 = SystemClock.uptimeMillis() + 6000
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 500f, 800f, t1))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 560f, 780f, t1 + 16))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 800f, 740f, t1 + 32))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 1000f, 700f, t1 + 48))
+        pump(150)
+        snap(view, "L5_turn_left_mid")
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 1500f, 650f, t1 + 64))
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 1600f, 640f, t1 + 80))
+        pump(1200)
+        assertEquals(1, view.index)
+        snap(view, "L6_back_to_1_2")
+
+        view.goTo(9)
+        pump(500)
+        assertEquals(9, view.index)
+        snap(view, "L7_last_spread")
+        view.goTo(0)
+        pump(300)
+        assertEquals(0, view.index)
+    }
 }

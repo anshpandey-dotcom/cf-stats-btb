@@ -110,13 +110,7 @@ class ReflowSource private constructor(
         override fun load(index: Int, maxImageWidth: Int, maxImageHeight: Int): CharSequence {
             val path = parser.spine[index]
             val raw = parser.readChapter(zip, path) ?: return ""
-            val bodyStart = Regex("<body[^>]*>", RegexOption.IGNORE_CASE).find(raw)
-            val bodyEnd = raw.lastIndexOf("</body>", ignoreCase = true)
-            var html = if (bodyStart != null) {
-                raw.substring(bodyStart.range.last + 1, if (bodyEnd > bodyStart.range.last) bodyEnd else raw.length)
-            } else raw
-            html = html.replace(Regex("<script[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("<style[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "")
+            val html = EpubParser.bodyOf(raw)
             val base = path.substringBeforeLast('/', "")
             val getter = Html.ImageGetter { src -> imageFor(base, src, maxImageWidth, maxImageHeight) }
             val spanned = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY, getter, null)

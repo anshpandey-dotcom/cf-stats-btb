@@ -6,15 +6,21 @@ import android.os.Looper
 import android.util.LruCache
 import com.fleetmc.flipshelf.core.BookSource
 import java.util.concurrent.Executors
+import kotlin.math.max
+import kotlin.math.min
 
 class PageCache(
     private val source: BookSource,
     private val isWanted: (Int) -> Boolean,
-    private val onReady: () -> Unit
+    private val onReady: () -> Unit,
+    private val quality: Float = 1.5f
 ) {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "page-render").apply { priority = Thread.NORM_PRIORITY - 1 } }
     private val main = Handler(Looper.getMainLooper())
-    private val lru = LruCache<Int, Bitmap>(7)
+    private val maxBytes = min(120L * 1024 * 1024, (Runtime.getRuntime().maxMemory() * 0.4).toLong()).toInt()
+    private val lru = object : LruCache<Int, Bitmap>(maxBytes) {
+        override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
+    }
     private val pending = HashSet<Int>()
     private var generation = 0
     private var hiIndex = -1
@@ -44,8 +50,9 @@ class PageCache(
         if (width <= 0 || index < 0 || index >= source.pageCount) return
         if (lru.get(index) != null || !pending.add(index)) return
         val gen = generation
-        val w = width
-        val h = height
+        val q = min(quality, 2400f / max(width, height)).coerceAtLeast(1f)
+        val w = (width * q).toInt()
+        val h = (height * q).toInt()
         worker.execute {
             if (gen != generation || !isWanted(index)) {
                 main.post { pending.remove(index) }

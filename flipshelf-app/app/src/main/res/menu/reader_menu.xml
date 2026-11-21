@@ -6,6 +6,10 @@
         android:title="@string/go_to_page"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_translate"
+        android:title="@string/translate_hindi"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_larger"
         android:title="@string/larger_text"
         app:showAsAction="never" />

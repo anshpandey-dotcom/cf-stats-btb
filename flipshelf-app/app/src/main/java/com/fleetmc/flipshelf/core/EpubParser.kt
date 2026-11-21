@@ -115,6 +115,19 @@ class EpubParser(private val file: File) {
     }
 
     companion object {
+        private val bodyTag = Regex("<body[^>]*>", RegexOption.IGNORE_CASE)
+        private val scriptTag = Regex("<script[\\s\\S]*?</script>", RegexOption.IGNORE_CASE)
+        private val styleTag = Regex("<style[\\s\\S]*?</style>", RegexOption.IGNORE_CASE)
+
+        fun bodyOf(raw: String): String {
+            val start = bodyTag.find(raw)
+            val end = raw.lastIndexOf("</body>", ignoreCase = true)
+            val html = if (start != null) {
+                raw.substring(start.range.last + 1, if (end > start.range.last) end else raw.length)
+            } else raw
+            return html.replace(scriptTag, "").replace(styleTag, "")
+        }
+
         fun resolve(base: String, href: String): String {
             val clean = URLDecoder.decode(href.substringBefore('#'), "UTF-8")
             val parts = ArrayList<String>()

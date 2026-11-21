@@ -13,6 +13,13 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.fleetmc.flipshelf.core.Format
+import com.fleetmc.flipshelf.translate.TranslateService
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -49,6 +56,29 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     private val prefs by lazy { getSharedPreferences("reader", Context.MODE_PRIVATE) }
     private val hideChrome = Runnable { setChrome(false) }
     private val saveRunnable = Runnable { saveProgress() }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        startTranslation()
+    }
+
+    private fun translateBook() {
+        if (book.format == Format.COMIC || book.format == Format.IMAGES) {
+            Toast.makeText(this, R.string.translate_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            startTranslation()
+        }
+    }
+
+    private fun startTranslation() {
+        TranslateService.start(this, book.id)
+        Toast.makeText(this, R.string.translate_started, Toast.LENGTH_LONG).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -200,7 +230,14 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     }
 
     private fun updateLabel() {
-        pageLabel.text = getString(R.string.page_of, curl.index + 1, curl.pageCount)
+        val total = curl.pageCount
+        val first = curl.leftPage().coerceAtLeast(0) + 1
+        val last = (curl.rightPage() + 1).coerceAtMost(total)
+        pageLabel.text = if (curl.spreadMode && last > first) {
+            getString(R.string.page_range_of, first, last, total)
+        } else {
+            getString(R.string.page_of, first, total)
+        }
     }
 
     private fun setChrome(visible: Boolean) {
@@ -220,6 +257,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     private fun onMenu(id: Int): Boolean {
         when (id) {
             R.id.action_goto -> askPage()
+            R.id.action_translate -> translateBook()
             R.id.action_larger -> changeText(0.1f)
             R.id.action_smaller -> changeText(-0.1f)
             R.id.action_night -> {

@@ -20,6 +20,7 @@
     <string name="not_started">Not started</string>
     <string name="pages_count">%1$d pages</string>
     <string name="page_of">%1$d / %2$d</string>
+    <string name="page_range_of">%1$d–%2$d / %3$d</string>
     <string name="larger_text">Larger text</string>
     <string name="smaller_text">Smaller text</string>
     <string name="night_mode">Night mode</string>
@@ -28,4 +29,20 @@
     <string name="page_number">Page number</string>
     <string name="back">Back</string>
     <string name="loading_book">Preparing pages…</string>
+    <string name="translate_hindi">Translate to Hindi</string>
+    <string name="translate_channel">Translation</string>
+    <string name="translate_title">Translating to Hindi</string>
+    <string name="translate_starting">Starting…</string>
+    <string name="translate_reading">Reading text…</string>
+    <string name="translate_downloading">Getting Hindi language pack (first time only)…</string>
+    <string name="translate_working">Translating</string>
+    <string name="translate_saving">Building Hindi book…</string>
+    <string name="translate_done">Hindi book is ready</string>
+    <string name="translate_failed">Translation stopped</string>
+    <string name="translate_cancelled">Translation cancelled</string>
+    <string name="translate_already_hindi">This book is already in Hindi</string>
+    <string name="translate_unsupported">Could not recognise a supported language in this book</string>
+    <string name="translate_network_hint">%1$s. The first translation needs internet to download the language pack.</string>
+    <string name="translate_started">Translating in the background. The Hindi copy will appear on your shelf.</string>
+    <string name="translate_unavailable">Images only, nothing to translate</string>
 </resources>

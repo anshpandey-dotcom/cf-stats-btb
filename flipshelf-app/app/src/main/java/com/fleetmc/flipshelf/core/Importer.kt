@@ -109,6 +109,18 @@ class Importer(private val context: Context, private val library: Library) {
         }
     }
 
+    fun addGenerated(file: File, title: String, coverSource: File?): Book {
+        val id = UUID.randomUUID().toString().substring(0, 12)
+        val target = File(library.booksDir, "$id.epub")
+        if (!file.renameTo(target)) throw ImportException("Cannot store file")
+        val book = Book(id, title, Format.EPUB, target.name)
+        val result = finish(book)
+        if (coverSource != null && coverSource.exists()) {
+            coverSource.copyTo(library.coverOf(result), overwrite = true)
+        }
+        return result
+    }
+
     private fun finish(book: Book): Book {
         val file = library.fileOf(book)
         try {
@@ -139,17 +151,17 @@ class Importer(private val context: Context, private val library: Library) {
     }
 
     private fun saveCover(book: Book, bitmap: Bitmap) {
-        val flat = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.RGB_565)
+        val flat = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(flat)
         canvas.drawColor(Color.WHITE)
         canvas.drawBitmap(bitmap, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
-        FileOutputStream(library.coverOf(book)).use { flat.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        FileOutputStream(library.coverOf(book)).use { flat.compress(Bitmap.CompressFormat.JPEG, 92, it) }
     }
 
     companion object {
-        const val COVER_W = 360
-        const val COVER_H = 520
+        const val COVER_W = 720
+        const val COVER_H = 1040
         const val COVER_LAYOUT_W = 720
-        const val COVER_LAYOUT_H = 1060
+        const val COVER_LAYOUT_H = 1040
     }
 }
