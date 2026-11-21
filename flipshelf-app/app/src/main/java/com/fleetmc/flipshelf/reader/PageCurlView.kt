@@ -59,6 +59,13 @@ class PageCurlView @JvmOverloads constructor(context: Context, attrs: AttributeS
             invalidate()
         }
 
+    var fillScreen = false
+        set(value) {
+            field = value
+            computePageRect()
+            invalidate()
+        }
+
     var pageCount = 0
         private set
     var index = 0
@@ -235,10 +242,15 @@ class PageCurlView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     private fun computePageRect() {
         if (width == 0 || height == 0) return
-        val availW = width - 2 * 12f * density
-        val availH = height - 2 * 28f * density
-        val pw = min(availW, availH * aspect)
-        val ph = pw / aspect
+        val pw: Float
+        val ph: Float
+        if (fillScreen) {
+            pw = width.toFloat()
+            ph = height.toFloat()
+        } else {
+            pw = min(width.toFloat(), height * aspect)
+            ph = pw / aspect
+        }
         pageLeft = (width - pw) / 2f
         pageTop = (height - ph) / 2f
         val newW = pw.toInt()
@@ -636,13 +648,8 @@ class PageCurlView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private fun drawCurl(c: Canvas, a: Bitmap?, b: Bitmap?, pw: Float, ph: Float) {
         val g = geo
         if (!g.valid) {
-            if (forward) {
-                drawFlat(c, a, pw, ph)
-                drawSpine(c, pw, ph)
-            } else {
-                drawFlat(c, b, pw, ph)
-                drawSpine(c, pw, ph)
-            }
+            drawFlat(c, a, pw, ph)
+            drawSpine(c, pw, ph)
             return
         }
 

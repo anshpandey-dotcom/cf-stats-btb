@@ -1,1 +1,4 @@
 -keep class com.fleetmc.flipshelf.** { *; }
+-keep class io.legere.pdfiumandroid.** { *; }
+-keep class com.shockwave.pdfium.** { *; }
+-dontwarn com.google.common.**

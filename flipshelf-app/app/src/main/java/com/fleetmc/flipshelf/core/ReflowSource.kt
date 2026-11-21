@@ -32,6 +32,8 @@ class ReflowSource private constructor(
     private var layoutWidth = 1
     private var layoutHeight = 1
     private var scale = 1f
+    private var marginX = 0f
+    private var marginY = 0f
 
     override val pageCount: Int get() = pages.size
     override val aspect = 0.68f
@@ -43,14 +45,15 @@ class ReflowSource private constructor(
         this.layoutHeight = layoutHeight
         this.scale = textScale
         pages.clear()
-        val marginX = (layoutWidth * 0.075f).toInt()
-        val marginY = (layoutHeight * 0.05f).toInt()
-        val contentW = layoutWidth - marginX * 2
-        val contentH = layoutHeight - marginY * 2
+        val textSize = min(layoutWidth, layoutHeight) * 0.043f * textScale
+        val contentW = min(layoutWidth * 0.85f, textSize * 26f).toInt().coerceAtLeast(1)
+        marginX = (layoutWidth - contentW) / 2f
+        marginY = layoutHeight * 0.06f
+        val contentH = (layoutHeight - marginY * 2f).toInt().coerceAtLeast(1)
         val paint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply {
             color = Color.rgb(28, 28, 30)
             typeface = Typeface.SERIF
-            textSize = layoutWidth * 0.043f * textScale
+            this.textSize = textSize
         }
         for (c in 0 until loader.chapterCount) {
             val text = try {
@@ -91,10 +94,8 @@ class ReflowSource private constructor(
         val slice = pages[index]
         val canvas = Canvas(bitmap)
         canvas.scale(width / layoutWidth.toFloat(), height / layoutHeight.toFloat())
-        val marginX = layoutWidth * 0.075f
-        val marginY = layoutHeight * 0.05f
         canvas.translate(marginX, marginY)
-        canvas.clipRect(0f, 0f, layoutWidth - marginX * 2, (slice.bottom - slice.top).toFloat())
+        canvas.clipRect(0f, 0f, layoutWidth - marginX * 2f, (slice.bottom - slice.top).toFloat())
         canvas.translate(0f, -slice.top.toFloat())
         slice.layout.draw(canvas)
         return bitmap

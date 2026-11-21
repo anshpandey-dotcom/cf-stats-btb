@@ -112,7 +112,7 @@ class Importer(private val context: Context, private val library: Library) {
     private fun finish(book: Book): Book {
         val file = library.fileOf(book)
         try {
-            val source = BookSources.openFile(book.format, file)
+            val source = BookSources.openFile(context, book.format, file)
             source.use { src ->
                 src.prepare(COVER_LAYOUT_W, COVER_LAYOUT_H, 1f)
                 book.pages = src.pageCount

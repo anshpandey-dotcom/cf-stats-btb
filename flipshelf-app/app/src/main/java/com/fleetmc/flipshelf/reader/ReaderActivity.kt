@@ -48,6 +48,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     private var restoreFraction = 0f
     private val prefs by lazy { getSharedPreferences("reader", Context.MODE_PRIVATE) }
     private val hideChrome = Runnable { setChrome(false) }
+    private val saveRunnable = Runnable { saveProgress() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,7 +82,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         textScale = prefs.getFloat("text_scale", 1f)
         curl.night = prefs.getBoolean("night", false)
         curl.soundEnabled = prefs.getBoolean("sound", true)
-        curl.sound = FlipSound()
+        curl.sound = FlipSound(this)
         curl.keepScreenOn = true
         curl.host = this
 
@@ -114,7 +115,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
 
         Thread {
             try {
-                val s = BookSources.open(library, book)
+                val s = BookSources.open(applicationContext, library, book)
                 runOnUiThread { if (isDestroyed) s.close() else start(s) }
             } catch (e: Throwable) {
                 runOnUiThread { showError(e.message ?: e.javaClass.simpleName) }
@@ -136,6 +137,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         toolbar.menu.findItem(R.id.action_larger).isVisible = s.reflowable
         toolbar.menu.findItem(R.id.action_smaller).isVisible = s.reflowable
         cache = PageCache(s, { curl.isWanted(it) }, { curl.invalidate() }).also { curl.cache = it }
+        curl.fillScreen = s.reflowable
         curl.aspect = s.aspect
         if (curl.pageWidth > 0) layoutBook(curl.pageWidth, curl.pageHeight)
     }
@@ -152,7 +154,8 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         val key = "$w x $h x $textScale"
         if (key == layoutKey) return
         layoutKey = key
-        val fraction = if (curl.pageCount > 0) curl.index / curl.pageCount.toFloat() else restoreFraction
+        val resuming = curl.pageCount == 0
+        val fraction = if (!resuming) curl.index / curl.pageCount.toFloat() else restoreFraction
         c.reset(w, h)
         loading.visibility = View.VISIBLE
         c.submit {
@@ -162,7 +165,11 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
                 runOnUiThread {
                     if (key != layoutKey || isDestroyed) return@runOnUiThread
                     loading.visibility = View.GONE
-                    curl.setPageCount(count, (fraction * count).roundToInt())
+                    val start = when {
+                        resuming && !s.reflowable && book.pages == count -> book.lastPage
+                        else -> (fraction * count).roundToInt()
+                    }
+                    curl.setPageCount(count, start)
                     seek.max = (count - 1).coerceAtLeast(0)
                     seek.progress = curl.index
                     updateLabel()
@@ -180,6 +187,8 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     override fun onPageChanged(index: Int) {
         seek.progress = index
         updateLabel()
+        curl.removeCallbacks(saveRunnable)
+        curl.postDelayed(saveRunnable, 700)
         if (chromeVisible) {
             handlerRemove()
             curl.postDelayed(hideChrome, 1800)
@@ -277,6 +286,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         book.progress = if (curl.pageCount > 1) curl.index / curl.pageCount.toFloat() else 0f
         if (curl.index >= curl.pageCount - 1) book.progress = 1f
         book.pages = curl.pageCount
+        book.lastPage = curl.index
         book.openedAt = System.currentTimeMillis()
         library.update(book)
     }
@@ -290,6 +300,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         super.onDestroy()
         if (!::curl.isInitialized) return
         curl.removeCallbacks(hideChrome)
+        curl.removeCallbacks(saveRunnable)
         curl.sound?.release()
         val c = cache
         val s = source
