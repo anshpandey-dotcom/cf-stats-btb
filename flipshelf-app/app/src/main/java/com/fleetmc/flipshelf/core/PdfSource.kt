@@ -53,6 +53,51 @@ class PdfSource(context: Context, file: File) : BookSource {
         return bitmap
     }
 
+    private fun pageText(index: Int): String = synchronized(lock) {
+        val page = document.openPage(index)
+        try {
+            val textPage = page.openTextPage()
+            try {
+                val count = textPage.textPageCountChars()
+                if (count > 0) textPage.textPageGetText(0, count) ?: "" else ""
+            } finally {
+                textPage.close()
+            }
+        } finally {
+            page.close()
+        }
+    }
+
+    override fun outline(): List<OutlineEntry> {
+        val out = ArrayList<OutlineEntry>()
+        fun walk(list: List<PdfDocument.Bookmark>, level: Int) {
+            for (b in list) {
+                val title = (b.title ?: "").trim()
+                if (title.isNotEmpty()) out.add(OutlineEntry(title, b.pageIdx.toInt().coerceIn(0, pageCount - 1), level))
+                walk(b.children, level + 1)
+            }
+        }
+        try {
+            walk(synchronized(lock) { document.getTableOfContents() }, 0)
+        } catch (_: Throwable) {
+            out.clear()
+        }
+        if (out.size >= 2) return out
+        out.clear()
+        for (i in 0 until min(pageCount, 3000)) {
+            val lines = try {
+                pageText(i).replace("\r\n", "\n").split('\n').map { it.trim() }.filter { it.isNotEmpty() }.take(8)
+            } catch (_: Throwable) {
+                continue
+            }
+            val at = lines.indexOfFirst { Headings.isStrong(it) }
+            if (at < 0) continue
+            val (title, _) = Headings.mergeChapterTitle(lines[at], lines.getOrNull(at + 1))
+            if (out.isEmpty() || out.last().title != title) out.add(OutlineEntry(title, i))
+        }
+        return out
+    }
+
     override fun close() {
         synchronized(lock) {
             try {

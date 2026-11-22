@@ -9,4 +9,5 @@ interface BookSource : Closeable {
     val reflowable: Boolean
     fun prepare(layoutWidth: Int, layoutHeight: Int, textScale: Float)
     fun render(index: Int, width: Int, height: Int): Bitmap
+    fun outline(): List<OutlineEntry> = emptyList()
 }

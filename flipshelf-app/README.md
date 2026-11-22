@@ -11,7 +11,9 @@ Native Android (Kotlin) book library with a real page-curl reader. No WebView, n
 - Pinch or double-tap to zoom with panning (high resolution re-render while zoomed)
 - Reflowable text for EPUB and TXT with adjustable text size, night mode, page flip sound, volume keys to turn pages, page slider and go-to-page
 - Landscape shows a two-page book spread: the cover sits alone, pages turn from either side and the back of a turning page is the real next page
-- One-tap Hindi translation for text EPUB, PDF and TXT books (on-device ML Kit, language detected automatically). The result is a new Hindi EPUB on your shelf. The language pack downloads once, so internet is needed the first time. Scanned PDFs have no text and cannot be translated
+- One-tap Hindi translation for text EPUB, PDF and TXT books. It uses Google's free web translation (no key, several requests in parallel, retries) and falls back to the offline ML Kit translator if the web service stops answering. Headings and chapters are detected and kept, and the result is a new Hindi EPUB on your shelf. Scanned PDFs have no text and cannot be translated
+- Contents list for EPUB (nav or NCX, nested), PDF (bookmarks, or chapters found by scanning the text) and TXT; tap an entry to jump
+- Chapter and section headings are drawn as real headings (bold, larger, centred)
 - Resumes where you stopped
 
 ## Build

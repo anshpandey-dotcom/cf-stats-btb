@@ -37,8 +37,14 @@ object EpubWriter {
                 spine.append("""<itemref idref="c${i + 1}"/>""")
                 nav.append("""<li><a href="$name">${escape(chapter.heading ?: "${i + 1}")}</a></li>""")
                 val body = StringBuilder()
-                if (chapter.heading != null) body.append("<h2>").append(escape(chapter.heading)).append("</h2>\n")
-                for (p in chapter.paragraphs) body.append("<p>").append(escape(p)).append("</p>\n")
+                if (chapter.heading != null) body.append("<h1>").append(escape(chapter.heading)).append("</h1>\n")
+                for (b in chapter.blocks) {
+                    when (b.level) {
+                        0 -> body.append("<p>").append(escape(b.text)).append("</p>\n")
+                        1, 2 -> body.append("<h2>").append(escape(b.text)).append("</h2>\n")
+                        else -> body.append("<h3>").append(escape(b.text)).append("</h3>\n")
+                    }
+                }
                 put(zip, "OEBPS/$name", page(language, chapter.heading ?: title, body.toString()))
             }
             put(zip, "OEBPS/nav.xhtml", """<?xml version="1.0" encoding="UTF-8"?>

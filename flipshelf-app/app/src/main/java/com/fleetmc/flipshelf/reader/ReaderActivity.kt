@@ -19,6 +19,12 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.fleetmc.flipshelf.core.Format
+import com.fleetmc.flipshelf.core.OutlineEntry
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.fleetmc.flipshelf.translate.TranslateService
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -53,6 +59,8 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
     private var textScale = 1f
     private var layoutKey = ""
     private var restoreFraction = 0f
+    private var outline: List<OutlineEntry>? = null
+    private var loadingOutline = false
     private val prefs by lazy { getSharedPreferences("reader", Context.MODE_PRIVATE) }
     private val hideChrome = Runnable { setChrome(false) }
     private val saveRunnable = Runnable { saveProgress() }
@@ -187,6 +195,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
         val resuming = curl.pageCount == 0
         val fraction = if (!resuming) curl.index / curl.pageCount.toFloat() else restoreFraction
         c.reset(w, h)
+        outline = null
         loading.visibility = View.VISIBLE
         c.submit {
             try {
@@ -256,6 +265,7 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
 
     private fun onMenu(id: Int): Boolean {
         when (id) {
+            R.id.action_contents -> showContents()
             R.id.action_goto -> askPage()
             R.id.action_translate -> translateBook()
             R.id.action_larger -> changeText(0.1f)
@@ -273,6 +283,71 @@ class ReaderActivity : AppCompatActivity(), PageCurlView.Host {
             else -> return false
         }
         return true
+    }
+
+    private fun showContents() {
+        val ready = outline
+        if (ready != null) {
+            presentContents(ready)
+            return
+        }
+        val s = source ?: return
+        val c = cache ?: return
+        if (loadingOutline) return
+        loadingOutline = true
+        Toast.makeText(this, R.string.finding_chapters, Toast.LENGTH_SHORT).show()
+        val key = layoutKey
+        c.submit {
+            val found = try {
+                s.outline()
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            runOnUiThread {
+                loadingOutline = false
+                if (isDestroyed) return@runOnUiThread
+                if (key == layoutKey) outline = found
+                presentContents(found)
+            }
+        }
+    }
+
+    private fun presentContents(entries: List<OutlineEntry>) {
+        if (entries.isEmpty()) {
+            Toast.makeText(this, R.string.no_contents, Toast.LENGTH_LONG).show()
+            return
+        }
+        val dialog = BottomSheetDialog(this)
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_contents, null)
+        val list = view.findViewById<RecyclerView>(R.id.contentsList)
+        val current = entries.indexOfLast { it.page <= curl.rightPage().coerceAtLeast(curl.index) }.coerceAtLeast(0)
+        list.layoutManager = LinearLayoutManager(this)
+        list.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+                val row = LayoutInflater.from(parent.context).inflate(R.layout.item_contents, parent, false)
+                return object : RecyclerView.ViewHolder(row) {}
+            }
+
+            override fun getItemCount() = entries.size
+
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+                val e = entries[position]
+                val row = holder.itemView
+                val title = row.findViewById<TextView>(R.id.entryTitle)
+                title.text = e.title
+                title.setPadding(dp(e.level.coerceAtMost(3) * 18), title.paddingTop, 0, title.paddingBottom)
+                title.setTypeface(null, if (position == current) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                row.findViewById<TextView>(R.id.entryPage).text = getString(R.string.contents_page, e.page + 1)
+                row.setOnClickListener {
+                    dialog.dismiss()
+                    curl.goTo(e.page)
+                    setChrome(false)
+                }
+            }
+        }
+        dialog.setContentView(view)
+        dialog.setOnShowListener { list.scrollToPosition(current) }
+        dialog.show()
     }
 
     private fun changeText(delta: Float) {

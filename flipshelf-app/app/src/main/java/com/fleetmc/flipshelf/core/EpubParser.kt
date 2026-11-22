@@ -2,6 +2,7 @@ package com.fleetmc.flipshelf.core
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.text.Html
 import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayInputStream
@@ -16,6 +17,13 @@ class EpubParser(private val file: File) {
     var spine: List<String> = emptyList()
         private set
     private var coverPath: String? = null
+    private var navPath: String? = null
+    private var ncxPath: String? = null
+
+    class TocEntry(val title: String, val path: String, val fragment: String?, val level: Int)
+
+    var toc: List<TocEntry> = emptyList()
+        private set
     private val zipNames = HashSet<String>()
 
     init {
@@ -26,6 +34,11 @@ class EpubParser(private val file: File) {
             val opfPath = findRootFile(container) ?: throw IllegalArgumentException("Missing package file")
             val opf = readText(zip, opfPath) ?: throw IllegalArgumentException("Missing package file")
             parseOpf(opf, opfPath.substringBeforeLast('/', ""))
+            toc = try {
+                parseToc(zip)
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
         if (spine.isEmpty()) throw IllegalArgumentException("Empty EPUB")
     }
@@ -60,6 +73,7 @@ class EpubParser(private val file: File) {
         val order = ArrayList<String>()
         var coverId: String? = null
         var coverHref: String? = null
+        var tocId: String? = null
         val p = parser(xml)
         var type = p.eventType
         while (type != XmlPullParser.END_DOCUMENT) {
@@ -73,7 +87,10 @@ class EpubParser(private val file: File) {
                         mediaTypes[id] = p.getAttributeValue(null, "media-type") ?: ""
                         val props = p.getAttributeValue(null, "properties") ?: ""
                         if (props.split(' ').contains("cover-image")) coverHref = href
+                        if (props.split(' ').contains("nav")) navPath = resolve(base, href)
+                        if (p.getAttributeValue(null, "media-type") == "application/x-dtbncx+xml") ncxPath = resolve(base, href)
                     }
+                    "spine" -> tocId = p.getAttributeValue(null, "toc")
                     "itemref" -> p.getAttributeValue(null, "idref")?.let { order.add(it) }
                     "meta" -> if (p.getAttributeValue(null, "name") == "cover") {
                         coverId = p.getAttributeValue(null, "content")
@@ -87,9 +104,73 @@ class EpubParser(private val file: File) {
             val mt = mediaTypes[id] ?: ""
             if (mt.contains("html") || mt.contains("xml") || mt.isEmpty()) resolve(base, href) else null
         }
+        if (ncxPath == null) tocId?.let { id -> manifest[id]?.let { ncxPath = resolve(base, it) } }
         val cover = coverHref ?: coverId?.let { manifest[it] }
         coverPath = cover?.let { resolve(base, it) }
     }
+
+    private fun plain(html: String): String = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString().replace('\u00a0', ' ').trim()
+
+    private fun parseToc(zip: ZipFile): List<TocEntry> {
+        val nav = navPath?.let { readText(zip, it) }
+        if (nav != null) {
+            val entries = parseNav(nav, navPath!!.substringBeforeLast('/', ""))
+            if (entries.isNotEmpty()) return entries
+        }
+        val ncx = ncxPath?.let { readText(zip, it) }
+        if (ncx != null) return parseNcx(ncx, ncxPath!!.substringBeforeLast('/', ""))
+        return emptyList()
+    }
+
+    private fun parseNav(xml: String, base: String): List<TocEntry> {
+        val section = Regex("<nav\\b[^>]*epub:type=\"toc\"[^>]*>([\\s\\S]*?)</nav>", RegexOption.IGNORE_CASE).find(xml)?.groupValues?.get(1)
+            ?: Regex("<nav\\b[^>]*>([\\s\\S]*?)</nav>", RegexOption.IGNORE_CASE).find(xml)?.groupValues?.get(1)
+            ?: return emptyList()
+        val token = Regex("<ol\\b[^>]*>|</ol>|<a\\b[^>]*?href=\"([^\"]*)\"[^>]*>([\\s\\S]*?)</a>", RegexOption.IGNORE_CASE)
+        val out = ArrayList<TocEntry>()
+        var depth = 0
+        for (m in token.findAll(section)) {
+            val t = m.value.lowercase()
+            when {
+                t.startsWith("<ol") -> depth++
+                t.startsWith("</ol") -> depth = (depth - 1).coerceAtLeast(0)
+                else -> addEntry(out, plain(m.groupValues[2]), m.groupValues[1], base, (depth - 1).coerceAtLeast(0))
+            }
+        }
+        return out
+    }
+
+    private fun parseNcx(xml: String, base: String): List<TocEntry> {
+        val token = Regex("<navPoint\\b[^>]*>|</navPoint>|<navLabel[^>]*>\\s*<text[^>]*>([\\s\\S]*?)</text>|<content\\b[^>]*?src=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        val out = ArrayList<TocEntry>()
+        var depth = 0
+        var label: String? = null
+        for (m in token.findAll(xml)) {
+            val t = m.value.lowercase()
+            when {
+                t.startsWith("<navpoint") -> {
+                    depth++
+                    label = null
+                }
+                t.startsWith("</navpoint") -> depth = (depth - 1).coerceAtLeast(0)
+                t.startsWith("<navlabel") -> label = plain(m.groupValues[1])
+                else -> {
+                    val l = label
+                    if (l != null) addEntry(out, l, m.groupValues[2], base, (depth - 1).coerceAtLeast(0))
+                    label = null
+                }
+            }
+        }
+        return out
+    }
+
+    private fun addEntry(out: MutableList<TocEntry>, title: String, href: String, base: String, level: Int) {
+        if (title.isBlank() || href.isBlank()) return
+        val fragment = href.substringAfter('#', "").ifEmpty { null }
+        out.add(TocEntry(title.replace(Regex("\\s+"), " "), resolve(base, href), fragment, level))
+    }
+
+    fun titleFor(path: String): String? = toc.firstOrNull { it.path == path }?.title
 
     fun readChapter(zip: ZipFile, path: String): String? {
         val entry = zip.getEntry(path) ?: return null

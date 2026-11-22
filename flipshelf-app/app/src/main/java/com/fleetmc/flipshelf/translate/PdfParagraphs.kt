@@ -1,10 +1,13 @@
 package com.fleetmc.flipshelf.translate
 
+import com.fleetmc.flipshelf.core.Headings
+
 object PdfParagraphs {
 
     private const val PAGE_END = "\u0000"
     private val pageNumber = Regex("^[\\s\\-–—]*\\d{1,4}[\\s\\-–—]*$")
     private val sentenceEnd = Regex("[.!?:।\"'”’)\\]]$")
+    private const val CHAPTER_LIMIT = 14000
 
     fun build(pages: List<String>): List<Chapter> {
         val pageLines = pages.map { page ->
@@ -24,6 +27,7 @@ object PdfParagraphs {
         val paragraphs = ArrayList<String>()
         val current = StringBuilder()
         var last = ""
+        var afterHeading = false
         fun flush() {
             if (current.isNotBlank()) paragraphs.add(current.toString().trim())
             current.setLength(0)
@@ -33,6 +37,22 @@ object PdfParagraphs {
             if (line.isEmpty()) {
                 flush()
                 last = ""
+                continue
+            }
+            if (afterHeading) {
+                afterHeading = false
+                if (Headings.isTitleLike(line) && !Headings.isStrong(line)) {
+                    paragraphs.add(line)
+                    last = ""
+                    continue
+                }
+            }
+            val headingLine = Headings.isStrong(line) || (Headings.isAllCaps(line) && line.length <= 50)
+            if (headingLine) {
+                flush()
+                paragraphs.add(line)
+                last = ""
+                afterHeading = true
                 continue
             }
             if (current.isNotEmpty()) {
@@ -49,7 +69,42 @@ object PdfParagraphs {
             last = line
         }
         flush()
-        return group(paragraphs)
+        return assemble(paragraphs)
+    }
+
+    private fun assemble(paragraphs: List<String>): List<Chapter> {
+        val chapters = ArrayList<Chapter>()
+        var heading: String? = null
+        var blocks = ArrayList<Block>()
+        var size = 0
+        fun close() {
+            if (blocks.isNotEmpty() || heading != null) chapters.add(Chapter(heading, blocks))
+            blocks = ArrayList()
+            size = 0
+        }
+        var i = 0
+        while (i < paragraphs.size) {
+            val p = paragraphs[i]
+            if (Headings.isStrong(p)) {
+                close()
+                val (title, merged) = Headings.mergeChapterTitle(p, paragraphs.getOrNull(i + 1))
+                heading = title
+                i += if (merged) 2 else 1
+                continue
+            }
+            if (Headings.isAllCaps(p) && p.length <= 50) {
+                blocks.add(Block(p, 2))
+            } else {
+                blocks.add(Block(p, 0))
+                size += p.length
+                if (size >= CHAPTER_LIMIT && heading == null) {
+                    close()
+                }
+            }
+            i++
+        }
+        close()
+        return chapters
     }
 
     private fun repeatedLines(pageLines: List<List<String>>): Set<String> {
@@ -61,22 +116,5 @@ object PdfParagraphs {
         }
         val limit = pageLines.size * 0.3
         return counts.filter { it.value > limit }.keys
-    }
-
-    private fun group(paragraphs: List<String>): List<Chapter> {
-        val chapters = ArrayList<Chapter>()
-        var bucket = ArrayList<String>()
-        var size = 0
-        for (p in paragraphs) {
-            bucket.add(p)
-            size += p.length
-            if (size >= 9000) {
-                chapters.add(Chapter(null, bucket))
-                bucket = ArrayList()
-                size = 0
-            }
-        }
-        if (bucket.isNotEmpty()) chapters.add(Chapter(null, bucket))
-        return chapters
     }
 }

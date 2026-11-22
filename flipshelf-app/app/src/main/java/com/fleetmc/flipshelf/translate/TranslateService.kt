@@ -118,35 +118,34 @@ class TranslateService : Service() {
         val title = book.title
         fun phase(text: String, percent: Int = 0, indeterminate: Boolean = true) =
             update(TranslationState.Job(bookId, title, text, percent, indeterminate))
-        var translator: MlKitTranslator? = null
+        var translator: FallbackTranslator? = null
         try {
             phase(getString(R.string.translate_reading))
             val chapters = TextExtractor.extract(applicationContext, library, book) { cancelled }
             if (cancelled) throw TranslationPipeline.Cancelled()
 
-            translator = MlKitTranslator()
-            val sample = chapters.flatMap { it.paragraphs }.filter { it.length > 60 }.let { list ->
-                val start = list.size / 3
-                list.drop(start).take(10).joinToString(" ")
-            }.take(1500)
-            val source = translator.detect(sample.ifBlank { chapters.first().paragraphs.joinToString(" ").take(1500) })
+            phase(getString(R.string.translate_checking))
+            val sample = chapters.flatMap { it.blocks }.filter { it.level == 0 && it.text.length > 60 }.let { list ->
+                list.drop(list.size / 3).take(6).joinToString(" ") { it.text }
+            }.take(1500).ifBlank { chapters.flatMap { it.blocks }.take(5).joinToString(" ") { it.text }.take(1500) }
+            val web = WebTranslator()
+            val fb = FallbackTranslator(web) { MlKitTranslator() }
+            translator = fb
+            val source = fb.begin(sample)
             if (source == "hi") throw NoTextException(getString(R.string.translate_already_hindi))
-            if (source == "und" || !translator.supports(source)) throw NoTextException(getString(R.string.translate_unsupported))
-
-            phase(getString(R.string.translate_downloading))
-            translator.prepare(source)
+            if (fb.usedOffline) phase(getString(R.string.translate_offline_mode))
             if (cancelled) throw TranslationPipeline.Cancelled()
 
-            val tr = translator
             val translated = TranslationPipeline.run(
                 chapters,
-                { tr.translate(it) },
+                { fb.translate(it) },
                 { phase(getString(R.string.translate_working), it, false) },
-                { cancelled }
+                { cancelled },
+                if (fb.usedOffline) 1 else 4
             )
 
             phase(getString(R.string.translate_saving), 100, false)
-            val newTitle = book.title + " (हिन्दी)"
+            val newTitle = translateTitle(web, book.title)
             val file = File(library.booksDir, UUID.randomUUID().toString().substring(0, 12) + ".tmp")
             EpubWriter.write(file, newTitle, "hi", translated)
             val created = Importer(applicationContext, library).addGenerated(file, newTitle, library.coverOf(book))
@@ -163,6 +162,15 @@ class TranslateService : Service() {
         } finally {
             translator?.close()
         }
+    }
+
+    private fun translateTitle(web: WebTranslator, title: String): String {
+        val translated = try {
+            web.translate(title)
+        } catch (_: Exception) {
+            title
+        }
+        return "$translated (हिन्दी)"
     }
 
     companion object {
