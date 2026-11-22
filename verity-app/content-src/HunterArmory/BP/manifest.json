@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Hunter Armory BP",
+    "description": "Hunter Armory behaviors by FleetMc Studio",
+    "uuid": "230b636b-1042-4ac4-9e65-568817ee4bbf",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "66ffad27-522d-4adb-8799-e392ff2dbda1",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "9879ef3b-44af-45f9-bfee-36f293e1c5ce",
+      "version": "1.0.0"
+    }
+  ]
+}

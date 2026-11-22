@@ -1,0 +1,9 @@
+{
+  "resource_pack_name": "modern_living",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "fmc_modern_living_token": {
+      "textures": "textures/items/fmc_modern_living_token"
+    }
+  }
+}

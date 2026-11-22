@@ -1,0 +1,88 @@
+name: Verity Build
+
+on:
+  push:
+    paths:
+      - "verity-app/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: verity-app
+    env:
+      KEYSTORE_BASE64: ${{ secrets.VERITY_KEYSTORE_BASE64 }}
+      VERITY_KEYSTORE_PASSWORD: ${{ secrets.VERITY_KEYSTORE_PASSWORD }}
+      VERITY_KEY_ALIAS: ${{ secrets.VERITY_KEY_ALIAS }}
+      VERITY_KEY_PASSWORD: ${{ secrets.VERITY_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle with caching
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: verity-debug-apk
+          path: verity-app/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Detect signing secrets
+        id: signing
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$VERITY_KEYSTORE_PASSWORD" ] && [ -n "$VERITY_KEY_ALIAS" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decode keystore
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/verity.jks"
+          echo "VERITY_KEYSTORE_PATH=$RUNNER_TEMP/verity.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK and AAB
+        if: steps.signing.outputs.enabled == 'true'
+        run: ./gradlew assembleRelease bundleRelease
+
+      - name: Upload release APK
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: verity-release-apk
+          path: verity-app/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: verity-release-aab
+          path: verity-app/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: Remove keystore
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: rm -f "$RUNNER_TEMP/verity.jks"

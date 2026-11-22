@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Sky Riders BP",
+    "description": "Sky Riders behaviors by FleetMc Studio",
+    "uuid": "8a1f1259-d609-4724-80fb-2a93664bf921",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "6040c345-727a-40b3-86e9-540af2203625",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "3595d4db-d78c-4f3b-9cdf-f09739c40f76",
+      "version": "1.0.0"
+    }
+  ]
+}

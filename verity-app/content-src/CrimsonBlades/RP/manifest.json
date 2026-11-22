@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Crimson Blades RP",
+    "description": "Crimson Blades resources by FleetMc Studio",
+    "uuid": "f68a49e7-b1ce-4931-a033-37153a0daf0d",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "dba22288-ae3a-4f64-b0d0-1ee2eaf87e8e",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "0de38b07-3423-4cbd-a6fa-90100e09b74f",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Crimson Blades BP",
+    "description": "Crimson Blades behaviors by FleetMc Studio",
+    "uuid": "0de38b07-3423-4cbd-a6fa-90100e09b74f",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "c606a193-b16a-45f1-a268-78b8d7145d36",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "f68a49e7-b1ce-4931-a033-37153a0daf0d",
+      "version": "1.0.0"
+    }
+  ]
+}

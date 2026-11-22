@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Hollow Manor RP",
+    "description": "Hollow Manor resources by FleetMc Studio",
+    "uuid": "6d29026e-d98c-4981-b7bb-a45562961246",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "6e4915cd-2d2a-4ab7-881b-5c341a039684",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "ecbaad1b-9b11-4cda-80d9-a14dc56e8a23",
+      "version": "1.0.0"
+    }
+  ]
+}

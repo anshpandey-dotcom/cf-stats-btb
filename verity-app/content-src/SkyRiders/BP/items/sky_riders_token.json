@@ -1,0 +1,19 @@
+{
+  "format_version": "1.21.60",
+  "minecraft:item": {
+    "description": {
+      "identifier": "fmc:sky_riders_token",
+      "menu_category": {
+        "category": "items"
+      }
+    },
+    "components": {
+      "minecraft:icon": {
+        "textures": {
+          "default": "fmc_sky_riders_token"
+        }
+      },
+      "minecraft:max_stack_size": 16
+    }
+  }
+}

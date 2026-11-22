@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Lucky Geodes RP",
+    "description": "Lucky Geodes resources by FleetMc Studio",
+    "uuid": "6e9f6c35-ede2-4d5b-9074-04cf681aa60d",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "20380152-1f02-4dca-95c2-326edb4979a9",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "5c3c8010-5d78-4211-8344-e07a58561375",
+      "version": "1.0.0"
+    }
+  ]
+}

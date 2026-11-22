@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Shadow Stalker BP",
+    "description": "Shadow Stalker behaviors by FleetMc Studio",
+    "uuid": "0569340a-30e3-489d-a88f-143f183431fa",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "79e49f5a-5da3-4356-898e-8f3f62f1c37f",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "53cbf474-3716-4b66-9430-aee83552bed8",
+      "version": "1.0.0"
+    }
+  ]
+}

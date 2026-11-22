@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Lucky Geodes BP",
+    "description": "Lucky Geodes behaviors by FleetMc Studio",
+    "uuid": "5c3c8010-5d78-4211-8344-e07a58561375",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "55d34a07-10b0-412f-99ef-650e34163f3e",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "6e9f6c35-ede2-4d5b-9074-04cf681aa60d",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Hollow Manor BP",
+    "description": "Hollow Manor behaviors by FleetMc Studio",
+    "uuid": "ecbaad1b-9b11-4cda-80d9-a14dc56e8a23",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "4cd81d89-46da-4e1c-9a1a-bd3faf37acef",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "6d29026e-d98c-4981-b7bb-a45562961246",
+      "version": "1.0.0"
+    }
+  ]
+}

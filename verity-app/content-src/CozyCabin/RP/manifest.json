@@ -1,0 +1,23 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Cozy Cabin Decor",
+    "description": "Cozy Cabin Decor by FleetMc Studio",
+    "uuid": "97813da2-9ebc-4e21-b78b-8d91606ce001",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "e694ba1a-cb5a-4ea5-b67e-a0f65998f60d",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  }
+}

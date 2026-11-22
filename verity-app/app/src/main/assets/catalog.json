@@ -1,0 +1,152 @@
+[
+  {
+    "id": "crimson_blades",
+    "name": "Crimson Blades",
+    "description": "A forge-born arsenal of red-steel swords, scythes and daggers. Every blade has a unique swing arc, a bleeding particle trail and a charged heavy attack.",
+    "category": "Weapons",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "CrimsonBlades.mcaddon",
+    "sizeBytes": 7508,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "shadow_stalker",
+    "name": "Shadow Stalker",
+    "description": "Something follows you through the dark. A silent hunter that mimics sounds, avoids torchlight and only moves when you look away.",
+    "category": "Horror",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "ShadowStalker.mcaddon",
+    "sizeBytes": 7020,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "lucky_geodes",
+    "name": "Lucky Geodes",
+    "description": "Crack open glittering geodes while mining. Each one rolls a loot table of gems, enchanted pickaxes and rare crystal tools.",
+    "category": "Tools",
+    "minVersion": "1.20.80",
+    "maxVersion": "1.26.60",
+    "file": "LuckyGeodes.mcaddon",
+    "sizeBytes": 7682,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "modern_living",
+    "name": "Modern Living",
+    "description": "Sofas, lamps, kitchens and bathrooms with a clean modern look. Fully rotatable furniture that snaps to the block grid.",
+    "category": "Decor",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "ModernLiving.mcaddon",
+    "sizeBytes": 7563,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "sky_riders",
+    "name": "Sky Riders",
+    "description": "Tame winged creatures and soar above the clouds. Saddle up wyverns, manta gliders and storm birds, each with its own flight style.",
+    "category": "Mobs",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "SkyRiders.mcaddon",
+    "sizeBytes": 8779,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "hunter_armory",
+    "name": "Hunter Armory",
+    "description": "Crossbows, traps and ranged gear for the dedicated monster hunter. Craft ammunition types and track prey across the wild.",
+    "category": "Weapons",
+    "minVersion": "1.20.80",
+    "maxVersion": "1.26.60",
+    "file": "HunterArmory.mcaddon",
+    "sizeBytes": 7812,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "hollow_manor",
+    "name": "Hollow Manor",
+    "description": "An abandoned mansion that rearranges itself when you are not looking. Collect keys, read diaries and survive the night inside.",
+    "category": "Horror",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "HollowManor.mcaddon",
+    "sizeBytes": 7542,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "pocket_mechs",
+    "name": "Pocket Mechs",
+    "description": "Build, upgrade and command small battle robots. Swap modules, set behaviours and send them to fight beside you.",
+    "category": "Mobs",
+    "minVersion": "1.21.0",
+    "maxVersion": "1.26.60",
+    "file": "PocketMechs.mcaddon",
+    "sizeBytes": 7702,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "cozy_cabin",
+    "name": "Cozy Cabin Decor",
+    "description": "A warm resource pack of rustic wood, soft lantern glow and woollen textures that turns every build into a mountain retreat.",
+    "category": "Decor",
+    "minVersion": "1.20.80",
+    "maxVersion": "1.26.60",
+    "file": "CozyCabin.mcpack",
+    "sizeBytes": 3227,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  },
+  {
+    "id": "quick_haul",
+    "name": "Quick Haul Tools",
+    "description": "Quality-of-life interface and inventory polish. Clearer hotbar, tidier item names and compact tool tips for fast play.",
+    "category": "Utility",
+    "minVersion": "1.20.80",
+    "maxVersion": "1.26.60",
+    "file": "QuickHaul.mcpack",
+    "sizeBytes": 3179,
+    "previews": [
+      "preview_1.webp",
+      "preview_2.webp",
+      "preview_3.webp"
+    ]
+  }
+]

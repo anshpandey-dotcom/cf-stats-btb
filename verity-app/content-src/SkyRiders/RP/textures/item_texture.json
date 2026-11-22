@@ -1,0 +1,9 @@
+{
+  "resource_pack_name": "sky_riders",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "fmc_sky_riders_token": {
+      "textures": "textures/items/fmc_sky_riders_token"
+    }
+  }
+}

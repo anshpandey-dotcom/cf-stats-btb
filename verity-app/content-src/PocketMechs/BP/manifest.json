@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Pocket Mechs BP",
+    "description": "Pocket Mechs behaviors by FleetMc Studio",
+    "uuid": "2c4ac52b-a5a8-43eb-85ca-947129133214",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "cd61ad3a-789b-4ef8-b8d7-7da4b105d329",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "f4feb3c0-ecd3-4532-89a0-1c36bc4a6d56",
+      "version": "1.0.0"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Quick Haul Tools",
+    "description": "Quick Haul Tools by FleetMc Studio",
+    "uuid": "60e1fd7e-46bc-4bbf-8ad3-8148ba7f17a3",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "a06e4d9c-3cce-4826-83e4-47e7a497f616",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  }
+}

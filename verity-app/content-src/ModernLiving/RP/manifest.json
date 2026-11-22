@@ -1,0 +1,29 @@
+{
+  "format_version": 3,
+  "header": {
+    "name": "Modern Living RP",
+    "description": "Modern Living resources by FleetMc Studio",
+    "uuid": "88e9f5cf-0d72-4de9-82ff-21586de812d5",
+    "version": "1.0.0",
+    "min_engine_version": "1.26.60"
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "0704205d-de10-4e78-8956-52907a23f8e3",
+      "version": "1.0.0"
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "FleetMc Studio"
+    ],
+    "product_type": "addon"
+  },
+  "dependencies": [
+    {
+      "uuid": "2179e006-9774-442f-ae3c-66db8bcb0ad6",
+      "version": "1.0.0"
+    }
+  ]
+}

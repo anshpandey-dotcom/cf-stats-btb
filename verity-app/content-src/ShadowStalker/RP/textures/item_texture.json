@@ -1,0 +1,9 @@
+{
+  "resource_pack_name": "shadow_stalker",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "fmc_shadow_stalker_token": {
+      "textures": "textures/items/fmc_shadow_stalker_token"
+    }
+  }
+}
