@@ -12,6 +12,12 @@ import com.lagradost.cloudstream3.mvvm.launchSafe
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.foryou.TasteEngine
+import com.lagradost.cloudstream3.ui.home.FeedRows
+import com.lagradost.cloudstream3.ui.home.HomeViewModel
+import com.lagradost.cloudstream3.ui.imdb.Cinemeta
+import com.lagradost.cloudstream3.ui.imdb.Tmdb
+import com.lagradost.cloudstream3.ui.imdb.TitleResolver
+import com.lagradost.cloudstream3.ui.profiles.ProfileFilter
 import com.lagradost.cloudstream3.ui.search.CardLanguage
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferredMedia
 import kotlinx.coroutines.Dispatchers
@@ -31,10 +37,6 @@ data class CategoryResult(
 
 class CategoriesViewModel : ViewModel() {
     companion object {
-        private const val CACHE_MS = 15 * 60 * 1000L
-        private var rowsCache: List<Pair<String, List<SearchResponse>>> = emptyList()
-        private var rowsTime = 0L
-
         private val movieTypes = setOf(TvType.Movie, TvType.AnimeMovie, TvType.Documentary)
         private val seriesTypes = setOf(TvType.TvSeries, TvType.AsianDrama, TvType.Cartoon, TvType.Anime, TvType.OVA)
         private val animeTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
@@ -52,30 +54,8 @@ class CategoriesViewModel : ViewModel() {
     var langFilter: String? = null
     private var unfiltered: List<SearchResponse> = emptyList()
 
-    private suspend fun rows(context: Context): List<Pair<String, List<SearchResponse>>> {
-        if (rowsCache.isNotEmpty() && System.currentTimeMillis() - rowsTime < CACHE_MS) return rowsCache
-        val apis = context.filterProviderByPreferredMedia(hasHomePageIsRequired = true)
-        val loaded = withContext(Dispatchers.IO) {
-            coroutineScope {
-                apis.map { api ->
-                    async {
-                        withTimeoutOrNull(15_000L) {
-                            val page = APIRepository(api).getMainPage(1, null)
-                            (page as? Resource.Success)?.value.orEmpty()
-                                .filterNotNull()
-                                .flatMap { it.items }
-                                .map { it.name to it.list }
-                        } ?: emptyList()
-                    }
-                }.awaitAll().flatten()
-            }
-        }
-        if (loaded.isNotEmpty()) {
-            rowsCache = loaded
-            rowsTime = System.currentTimeMillis()
-        }
-        return loaded
-    }
+    private suspend fun rows(context: Context): List<Pair<String, List<SearchResponse>>> =
+        FeedRows.rows(context)
 
     private fun matchRows(
         rows: List<Pair<String, List<SearchResponse>>>,
@@ -93,8 +73,9 @@ class CategoriesViewModel : ViewModel() {
             val pick = when (category.source) {
                 CategorySource.Rows -> matchRows(rows, category)
                 CategorySource.ForYou -> TasteEngine.rank(everything, limit = 3)
-                CategorySource.TopWeek -> TasteEngine.topWatched(7, 1)
-                CategorySource.TopMonth -> TasteEngine.topWatched(30, 1)
+                CategorySource.TopWeek -> personalTop(7).take(1)
+                CategorySource.TopMonth -> personalTop(30).take(1)
+                CategorySource.Imdb -> imdbItems(category, 50).take(1)
                 CategorySource.TopRated -> everything.sortedByDescending { it.score?.toDouble(10) ?: 0.0 }.take(1)
             }.firstNotNullOfOrNull { it.posterUrl }
             if (pick != null) covers[category.key] = pick
@@ -112,16 +93,20 @@ class CategoriesViewModel : ViewModel() {
             val everything = rows.flatMap { it.second }.distinctBy { it.url }
             when (category.source) {
                 CategorySource.ForYou -> TasteEngine.rank(everything, limit = 60)
-                CategorySource.TopWeek -> TasteEngine.topWatched(7)
-                CategorySource.TopMonth -> TasteEngine.topWatched(30)
+                CategorySource.TopWeek -> personalTop(7)
+                CategorySource.TopMonth -> personalTop(30)
+                CategorySource.Imdb -> imdbItems(category, 100)
                 CategorySource.TopRated -> everything
                     .filter { (it.score?.toDouble(10) ?: 0.0) > 0.0 }
                     .sortedByDescending { it.score?.toDouble(10) ?: 0.0 }
                     .take(50)
                 CategorySource.Rows -> {
                     val fromRows = matchRows(rows, category)
-                    if (fromRows.size >= 24 || category.searchQuery == null) fromRows
+                    val withSearch = if (fromRows.size >= 24 || category.searchQuery == null) fromRows
                     else (fromRows + search(context, category.searchQuery)).distinctBy { it.url }
+                    val external = tmdbItems(category.tmdb, 60) +
+                        if (category.imdbGenre == null) emptyList() else imdbItems(category.copy(tmdb = null), 100)
+                    external + withSearch
                 }
             }
         } catch (e: Exception) {
@@ -130,6 +115,37 @@ class CategoriesViewModel : ViewModel() {
         }
         unfiltered = items
         publish()
+    }
+
+    private suspend fun tmdbItems(key: String?, count: Int): List<SearchResponse> = when (key) {
+        "trending_india" -> Tmdb.trendingIndia(count)
+        "hollywood" -> Tmdb.hollywood(count)
+        "south" -> Tmdb.southHits(count)
+        "hindi_series" -> Tmdb.hindiSeries(count)
+        "korean" -> Tmdb.koreanDrama(count)
+        "new_hindi" -> Tmdb.newHindi(count)
+        "trending_week" -> Tmdb.trendingWeek(count)
+        "top_hindi" -> Tmdb.topHindi(count)
+        else -> emptyList()
+    }
+
+    private suspend fun imdbItems(category: Category, count: Int): List<SearchResponse> {
+        val fromImdb = category.imdbTypes.flatMap { type ->
+            Cinemeta.list(category.imdbCatalog, type, category.imdbGenre, count)
+        }.sortedByDescending { it.score?.toDouble(10) ?: 0.0 }
+            .let { if (category.imdbCatalog == "top") it.shuffled() else it }
+        return tmdbItems(category.tmdb, count) + fromImdb
+    }
+
+    private suspend fun personalTop(days: Int): List<SearchResponse> {
+        val tracked = TasteEngine.topWatched(days, 100)
+        val resumed = try {
+            HomeViewModel.getResumeWatching().orEmpty()
+        } catch (e: Exception) {
+            logError(e)
+            emptyList()
+        }
+        return (tracked + resumed).distinctBy { it.url }.take(100)
     }
 
     private suspend fun search(context: Context, query: String): List<SearchResponse> {
@@ -164,7 +180,9 @@ class CategoriesViewModel : ViewModel() {
             val langOk = langFilter == null || CardLanguage.codes(card).contains(langFilter)
             typeOk && langOk
         }
-        _result.postValue(Resource.Success(CategoryResult(category, filtered, languages)))
+        val safe = ProfileFilter.filter(category.key, filtered)
+            .distinctBy { TitleResolver.normalize(it.name).ifBlank { it.url } }
+        _result.postValue(Resource.Success(CategoryResult(category, safe, languages)))
     }
 
     fun close() {

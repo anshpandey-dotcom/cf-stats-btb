@@ -1,5 +1,7 @@
 package com.lagradost.cloudstream3.utils
 
+import com.lagradost.cloudstream3.ui.imdb.ImdbCard
+import com.lagradost.cloudstream3.ui.imdb.TitleResolver
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -756,6 +758,10 @@ object AppContextUtils {
         startAction: Int = 0,
         startValue: Int? = null,
     ) {
+        if (card is ImdbCard) {
+            TitleResolver.open(this, card)
+            return
+        }
         this?.runOnUiThread {
             // viewModelStore.clear()
             this.navigate(

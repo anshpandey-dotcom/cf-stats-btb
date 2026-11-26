@@ -103,11 +103,11 @@ android {
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.fmc.anshflix"
+        applicationId = "com.anshflix.app"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = libs.versions.versionCode.get().toInt()
-        versionName = libs.versions.versionName.get()
+        versionName = "1.0.0"
 
         manifestPlaceholders["target_sdk_version"] = libs.versions.targetSdk.get()
 
@@ -142,8 +142,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val anshKeystore = rootProject.file("keystore/anshflix.jks")
+    if (anshKeystore.exists()) {
+        signingConfigs {
+            create("ansh") {
+                storeFile = anshKeystore
+                storePassword = "anshflix123"
+                keyAlias = "anshflix"
+                keyPassword = "anshflix123"
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (signingConfigs.names.contains("ansh")) {
+                signingConfig = signingConfigs.getByName("ansh")
+            }
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false

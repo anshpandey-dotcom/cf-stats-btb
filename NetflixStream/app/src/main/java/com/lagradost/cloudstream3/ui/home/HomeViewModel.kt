@@ -59,6 +59,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.ui.foryou.TasteEngine
+import com.lagradost.cloudstream3.ui.imdb.IMDB_API_NAME
+import com.lagradost.cloudstream3.ui.imdb.TitleResolver
+import com.lagradost.cloudstream3.ui.profiles.ProfileFilter
 import com.lagradost.cloudstream3.ui.search.TitleCleaner
 import kotlinx.coroutines.withContext
 import java.util.EnumSet
@@ -238,6 +241,49 @@ class HomeViewModel : ViewModel() {
 
     val lock: MutableSet<String> = mutableSetOf()
 
+    private fun applyProfileFilter() {
+        val filtered = expandable.mapNotNull { (name, value) ->
+            val safe = ProfileFilter.filter(name, value.list.list)
+            if (safe.isEmpty()) null
+            else name to value.copy(list = value.list.copy(list = CopyOnWriteArrayList(safe)))
+        }
+        expandable.clear()
+        filtered.forEach { (name, value) -> expandable[name] = value }
+    }
+
+    private suspend fun loadMix() {
+        val ctx = context ?: return
+        _page.postValue(Resource.Loading())
+        _preview.postValue(Resource.Loading())
+        addJob?.cancel()
+        try {
+            val mix = MixFeed.build(ctx)
+            expandable.clear()
+            mix.rows.forEach { row ->
+                expandable[row.name] = ExpandableHomepageList(
+                    row.copy(list = CopyOnWriteArrayList(row.list)), 1, false
+                )
+            }
+            arrangeForYou()
+            previewResponses.clear()
+            previewResponsesAdded.clear()
+            previewResponses.addAll(mix.hero)
+            val randomItems = mix.rows.flatMap { it.list }.distinctBy { it.url }.shuffled()
+            _randomItems.postValue(randomItems)
+            currentShuffledList = emptyList()
+            if (mix.hero.isEmpty()) {
+                _preview.postValue(Resource.Failure(false, "No homepage responses"))
+            } else {
+                _preview.postValue(Resource.Success(false to mix.hero))
+            }
+            _page.postValue(Resource.Success(expandable))
+        } catch (e: Exception) {
+            logError(e)
+            _page.postValue(Resource.Success(emptyMap()))
+            _preview.postValue(Resource.Failure(false, e.message ?: "Mix failed"))
+        }
+    }
+
     private val freshKeywords = listOf("latest", "new", "recent", "trending", "popular")
 
     private suspend fun arrangeForYou() {
@@ -269,7 +315,7 @@ class HomeViewModel : ViewModel() {
             picks.forEach { recommendedBy[it.url] = (recommendedBy[it.url] ?: 0.0) + weight }
         }
         val pool = recommended.flatMap { it.third } + expandable.values.flatMap { it.list.list }
-        val topPicks = TasteEngine.rank(pool, recommendedBy)
+        val topPicks = ProfileFilter.filter("", TasteEngine.rank(pool, recommendedBy))
 
         val ordered = LinkedHashMap<String, ExpandableHomepageList>()
         if (topPicks.size >= 4) {
@@ -278,7 +324,8 @@ class HomeViewModel : ViewModel() {
         }
         recommended.take(3).forEach { (_, name, picks) ->
             val title = ctx.getString(R.string.because_you_watched, TitleCleaner.clean(name))
-            ordered[title] = ExpandableHomepageList(HomePageList(title, picks, false), 1, false)
+            val safe = ProfileFilter.filter(title, picks)
+            if (safe.isNotEmpty()) ordered[title] = ExpandableHomepageList(HomePageList(title, safe, false), 1, false)
         }
         val genres = TasteEngine.favouriteGenres()
         ordered.putAll(expandable.filterKeys { name -> genres.any { name.contains(it, ignoreCase = true) } })
@@ -383,6 +430,12 @@ class HomeViewModel : ViewModel() {
         _apiName.postValue(repo?.name)
         _randomItems.postValue(listOf())
 
+        if (api.name == noneApi.name) {
+            loadMix()
+            isCurrentlyLoadingName = null
+            return@ioSafe
+        }
+
         if (repo?.hasMainPage != true) {
             _page.postValue(Resource.Success(emptyMap()))
             _preview.postValue(Resource.Failure(false, "No homepage"))
@@ -414,6 +467,7 @@ class HomeViewModel : ViewModel() {
                         }
                     }
 
+                    applyProfileFilter()
                     arrangeForYou()
 
                     val items = data.value.mapNotNull { it?.items }.flatten()
@@ -553,6 +607,10 @@ class HomeViewModel : ViewModel() {
     }
 
     fun click(load: LoadClickCallback) {
+        if (load.response.apiName == IMDB_API_NAME) {
+            MixFeed.heroCard(load.response.url)?.let { TitleResolver.open(activity, it) }
+            return
+        }
         loadResult(load.response.url, load.response.apiName, load.response.name, load.action)
     }
 

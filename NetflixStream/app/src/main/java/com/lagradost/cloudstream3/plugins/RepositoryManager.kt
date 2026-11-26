@@ -111,6 +111,24 @@ object RepositoryManager {
                 name = "Megix Repo (Hindi & English)",
                 url = "https://raw.githubusercontent.com/SaurabhKaperwan/CSX/refs/heads/builds/CS.json",
                 description = "Hindi and English movies and shows"
+            ),
+            RepositoryData(
+                iconUrl = null,
+                name = "CNCVerse",
+                url = "https://raw.githubusercontent.com/NivinCNC/CNCVerse-Cloud-Stream-Extension/refs/heads/builds/CNC.json",
+                description = "Indian regional, OTT mirrors and live TV"
+            ),
+            RepositoryData(
+                iconUrl = null,
+                name = "NetMirror",
+                url = "https://raw.githubusercontent.com/Sushan64/NetMirror-Extension/refs/heads/builds/Netflix.json",
+                description = "OTT mirror in Hindi"
+            ),
+            RepositoryData(
+                iconUrl = null,
+                name = "Redowan BDIX",
+                url = "https://raw.githubusercontent.com/redowan99/Redowan-CloudStream/master/repo.json",
+                description = "Hindi, Bengali and English"
             )
         )
         (bundled + stored).distinctBy { it.url }.toTypedArray()

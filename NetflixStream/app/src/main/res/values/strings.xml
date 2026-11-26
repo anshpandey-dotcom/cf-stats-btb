@@ -833,8 +833,8 @@
     <string name="filter_series">Series</string>
     <string name="filter_anime">Anime</string>
     <string name="cat_for_you">Picked for You</string>
-    <string name="cat_top_week">Your Top 10 · Week</string>
-    <string name="cat_top_month">Your Top 10 · Month</string>
+    <string name="cat_top_week">Your Top 100 · Week</string>
+    <string name="cat_top_month">Your Top 100 · Month</string>
     <string name="cat_top_rated">Top Rated</string>
     <string name="cat_trending">Trending</string>
     <string name="cat_latest">New Releases</string>
@@ -855,4 +855,23 @@
     <string name="cat_family">Family</string>
     <string name="cat_documentary">Documentary</string>
     <string name="my_list">My List</string>
+    <string name="finding_streams">Finding %1$s on your extensions…</string>
+    <string name="not_on_extensions">%1$s is not available on your extensions yet</string>
+    <string name="cat_imdb_movies">IMDb Top 100 Movies</string>
+    <string name="cat_imdb_series">IMDb Top 100 Series</string>
+    <string name="cat_popular_movies">Popular Movies Now</string>
+    <string name="cat_popular_series">Popular Series Now</string>
+    <string name="profile_kids">Kids</string>
+    <string name="profile_family">Family</string>
+    <string name="mix_trending">Trending Now</string>
+    <string name="mix_imdb_movies">Top Rated Movies on IMDb</string>
+    <string name="mix_series">Popular Series</string>
+    <string name="mix_imdb_series">Top Rated Series on IMDb</string>
+    <string name="home_mix">AnshFlix Mix</string>
+    <string name="mix_india">Trending in India</string>
+    <string name="mix_new_hindi">New Hindi Releases</string>
+    <string name="mix_hindi_series">Hindi Web Series</string>
+    <string name="mix_south">South Hits</string>
+    <string name="cat_top_hindi">Top 100 Hindi Movies</string>
+    <string name="share_text">Watching %1$s on AnshFlix 🍿</string>
 </resources>

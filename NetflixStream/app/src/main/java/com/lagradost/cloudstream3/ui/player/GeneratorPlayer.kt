@@ -1589,6 +1589,19 @@ class GeneratorPlayer : FullScreenPlayer() {
         super.playerError(exception)
     }
 
+    private fun autoStartWhenReady() {
+        if (isPlayerActive.get()) return
+        val hasUsable = viewModel.state.sortLinks(currentQualityProfile).any { it.shouldUseLink }
+        if (!hasUsable) {
+            playerBinding?.root?.postDelayed({ autoStartWhenReady() }, 1000L)
+            return
+        }
+        viewModel.modifyState {
+            copy(loading = Resource.Success(Unit))
+        }
+        if (!isPlayerActive.get()) startPlayer()
+    }
+
     private fun noLinksFound() {
         viewModel.forceClearCache = true
         val hiddenLinks =
@@ -1734,7 +1747,7 @@ class GeneratorPlayer : FullScreenPlayer() {
         if ((currentMeta as? ResultEpisode)?.tvType == TvType.NSFW) return
 
         if (duration <= 0L) return // idk how you achieved this, but div by zero crash
-        if (!hasRecordedTaste && position >= 60_000L) {
+        if (!hasRecordedTaste && position >= 20_000L) {
             hasRecordedTaste = true
             viewModel.state.generatorState?.let { state ->
                 state.response?.let { TasteEngine.record(it, state.id) }
@@ -2377,17 +2390,9 @@ class GeneratorPlayer : FullScreenPlayer() {
             val sortedLinks = viewModel.state.sortLinks(currentQualityProfile)
             val usableLinks = sortedLinks.count { link -> link.shouldUseLink }
 
-            val turnVisible = usableLinks > 0 && viewModel.generator?.canSkipLoading == true
-
-            if (turnVisible && !isPlayerActive.get() && !autoStartScheduled) {
+            if (usableLinks > 0 && !isPlayerActive.get() && !autoStartScheduled) {
                 autoStartScheduled = true
-                binding.root.postDelayed({
-                    if (!isPlayerActive.get() && viewModel.state.links.isNotEmpty()) {
-                        viewModel.modifyState {
-                            copy(loading = Resource.Success(Unit))
-                        }
-                    }
-                }, autoStartDelayMs)
+                binding.root.postDelayed({ autoStartWhenReady() }, autoStartDelayMs)
             }
 
             binding.overlayLoadingSkipButton.apply {

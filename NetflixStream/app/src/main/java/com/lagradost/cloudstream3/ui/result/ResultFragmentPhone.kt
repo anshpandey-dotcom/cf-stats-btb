@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.result
 
+import com.lagradost.cloudstream3.ui.search.TitleCleaner
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
@@ -1022,18 +1023,13 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                         resultShare.setOnClickListener {
                             try {
                                 val i = Intent(Intent.ACTION_SEND)
-                                val nameBase64 =
-                                    base64Encode(d.apiName.toString().toByteArray(Charsets.UTF_8))
-                                val urlBase64 = base64Encode(d.url.toByteArray(Charsets.UTF_8))
-                                val encodedUri = URLEncoder.encode(
-                                    "$APP_STRING_SHARE:$nameBase64?$urlBase64",
-                                    "UTF-8"
-                                )
-                                val redirectUrl =
-                                    "https://recloudstream.github.io/csredirect?redirectto=$encodedUri"
                                 i.type = "text/plain"
                                 i.putExtra(Intent.EXTRA_SUBJECT, d.title)
-                                i.putExtra(Intent.EXTRA_TEXT, redirectUrl)
+                                val cleanTitle = TitleCleaner.clean(d.title)
+                                val year = d.yearText?.asString(it.context)?.takeIf { y -> y.isNotBlank() }?.let { y -> " ($y)" } ?: ""
+                                val plot = d.plotText.asString(it.context).takeIf { p -> p.isNotBlank() }?.let { p -> "\n\n" + p.take(220) } ?: ""
+                                val text = getString(R.string.share_text, "$cleanTitle$year") + plot
+                                i.putExtra(Intent.EXTRA_TEXT, text)
                                 startActivity(Intent.createChooser(i, d.title))
                             } catch (e: Exception) {
                                 logError(e)

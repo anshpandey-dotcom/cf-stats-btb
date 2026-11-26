@@ -115,7 +115,7 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
 
         fun Context.getDisplayName(apiName: String?): String? {
             return when (apiName) {
-                noneApi.name -> getString(R.string.none)
+                noneApi.name -> getString(R.string.home_mix)
                 randomApi.name -> getString(R.string.home_random)
                 else -> apiName
             }

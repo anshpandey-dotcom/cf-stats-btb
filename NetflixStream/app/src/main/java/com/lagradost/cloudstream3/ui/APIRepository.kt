@@ -35,7 +35,7 @@ class APIRepository(val api: MainAPI) {
         var dubStatusActive = HashSet<DubStatus>()
 
         val noneApi = object : MainAPI() {
-            override var name = "None"
+            override var name = "AnshFlix Mix"
             override val supportedTypes = emptySet<TvType>()
             override var lang = ""
         }

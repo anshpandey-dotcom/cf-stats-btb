@@ -1,5 +1,8 @@
 package com.lagradost.cloudstream3.ui.search
 
+import com.lagradost.cloudstream3.isMovieType
+import com.lagradost.cloudstream3.ui.imdb.TitleResolver
+import com.lagradost.cloudstream3.ui.profiles.ProfileFilter
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -172,7 +175,8 @@ class SearchViewModel : ViewModel() {
 
     private fun bundleSearch(lists: MutableMap<String, ExpandableSearchList>): ExpandableSearchList {
         if (lists.size == 1) {
-            return lists.values.first()
+            val only = lists.values.first()
+            return only.copy(list = dedupe(only.list))
         }
 
         val list = ArrayList<SearchResponse>()
@@ -193,8 +197,18 @@ class SearchViewModel : ViewModel() {
             index++
         }
 
-        return ExpandableSearchList(list, 1, false)
+        return ExpandableSearchList(dedupe(list), 1, false)
     }
+
+    private val yearInTitle = Regex("(19|20)\\d{2}")
+
+    private fun dedupe(list: List<SearchResponse>): List<SearchResponse> =
+        list.filter { ProfileFilter.isAllowed(it, "") }
+            .distinctBy { card ->
+                val base = TitleResolver.normalize(card.name).ifBlank { card.url }
+                val year = yearInTitle.find(card.name)?.value.orEmpty()
+                "$base|$year|${card.type?.isMovieType()}"
+            }
 
     private fun search(
         query: String,
@@ -242,6 +256,9 @@ class SearchViewModel : ViewModel() {
                     }
 
                     _currentSearch.postValue(expandableSearches)
+                    if (expandableSearches.isNotEmpty()) {
+                        _searchResponse.postValue(Resource.Success(bundleSearch(expandableSearches.toMutableMap())))
+                    }
                 }
 
                 if (currentSearchIndex != currentIndex) return@withContext // this should prevent rewrite of existing data bug

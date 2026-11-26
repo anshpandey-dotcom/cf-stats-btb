@@ -125,6 +125,7 @@ class CategoriesFragment : BaseFragment<FragmentCategoriesBinding>(
     }
 
     private fun buildLanguageChips(group: ChipGroup, languages: List<String>) {
+        (group.parent as? View)?.isVisible = languages.size > 1
         if (group.childCount == languages.size + 1) return
         group.removeAllViews()
         val all = newChip(group, getString(R.string.filter_all))
