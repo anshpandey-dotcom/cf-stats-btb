@@ -251,7 +251,22 @@ object QualityDataHelper {
         )
         val sourcePriority = getSourcePriority(qualityProfile, linkData?.source)
 
-        return qualityPriority + sourcePriority
+        return qualityPriority + sourcePriority + languagePriority(linkData)
+    }
+
+    private val hindiWords = Regex("\\b(hindi|hin|hind|desi|bollywood)\\b", RegexOption.IGNORE_CASE)
+    private val multiWords = Regex("\\b(dual|multi|multiaudio|dub|dubbed)\\b", RegexOption.IGNORE_CASE)
+    private val englishWords = Regex("\\b(english|eng|en)\\b", RegexOption.IGNORE_CASE)
+
+    private fun languagePriority(link: ExtractorLink?): Int {
+        link ?: return 0
+        val text = link.name + " " + link.source
+        return when {
+            hindiWords.containsMatchIn(text) -> 1000
+            multiWords.containsMatchIn(text) -> 600
+            englishWords.containsMatchIn(text) -> -200
+            else -> 0
+        }
     }
 
     private fun closestQuality(target: Int?): Qualities {

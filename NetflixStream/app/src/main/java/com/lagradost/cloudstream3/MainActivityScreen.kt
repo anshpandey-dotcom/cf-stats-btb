@@ -38,7 +38,6 @@ import com.lagradost.cloudstream4.compose.Screen
 import com.lagradost.cloudstream4.compose.WhiteButton
 import com.lagradost.cloudstream4.rememberAppSettings
 import com.lagradost.cloudstream4.viewmodels.GithubAction
-import com.lagradost.cloudstream4.viewmodels.GithubAction.AutoSearchForUpdate
 import com.lagradost.cloudstream4.viewmodels.GithubAction.Dismiss
 import com.lagradost.cloudstream4.viewmodels.GithubAction.SearchForUpdate
 import com.lagradost.cloudstream4.viewmodels.GithubAction.SkipUpdate
@@ -49,7 +48,6 @@ import com.lagradost.cloudstream4.viewmodels.GithubViewModel
 import com.mihon.material.padding
 
 object MainActivityScreen : Screen {
-    private var hasSearchedForUpdate: Boolean = false
 
     @Composable
     fun githubViewModel(): GithubViewModel? {
@@ -69,13 +67,7 @@ object MainActivityScreen : Screen {
                 settings = settings,
                 updater = ApkUpdater,
                 repository = GithubReleases,
-            ).apply {
-                /** Only search once per session when not in safe mode */
-                if (!hasSearchedForUpdate && !PluginManager.isSafeMode()) {
-                    hasSearchedForUpdate = true
-                    onAction(AutoSearchForUpdate)
-                }
-            }
+            )
         }
     }
 

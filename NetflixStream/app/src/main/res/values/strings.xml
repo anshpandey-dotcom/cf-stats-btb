@@ -874,4 +874,10 @@
     <string name="mix_south">South Hits</string>
     <string name="cat_top_hindi">Top 100 Hindi Movies</string>
     <string name="share_text">Watching %1$s on AnshFlix 🍿</string>
+    <string name="playback_failed_soft">This title is not playable right now. Try another one.</string>
+    <string name="collections">Collections</string>
+    <string name="add_to_collection">Save to collection</string>
+    <string name="new_collection">New collection</string>
+    <string name="collection_name_hint">Collection name</string>
+    <string name="saved_to_collections">Saved</string>
 </resources>

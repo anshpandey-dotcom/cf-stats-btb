@@ -78,7 +78,7 @@ class CategoriesFragment : BaseFragment<FragmentCategoriesBinding>(
             when (state) {
                 null -> results.submitList(emptyList())
                 is Resource.Loading -> {
-                    binding.categoriesResultsTitle.text = viewModel.selected?.let { getString(it.title) }
+                    binding.categoriesResultsTitle.text = viewModel.selected?.let { it.label ?: getString(it.title) }
                     binding.categoriesLoading.isVisible = true
                     binding.categoriesEmpty.isVisible = false
                     results.submitList(emptyList())
@@ -89,7 +89,7 @@ class CategoriesFragment : BaseFragment<FragmentCategoriesBinding>(
                 }
                 is Resource.Success -> {
                     val data = state.value
-                    binding.categoriesResultsTitle.text = getString(data.category.title)
+                    binding.categoriesResultsTitle.text = data.category.label ?: getString(data.category.title)
                     binding.categoriesLoading.isVisible = false
                     binding.categoriesEmpty.isVisible = data.items.isEmpty()
                     results.submitList(data.items)
@@ -103,6 +103,14 @@ class CategoriesFragment : BaseFragment<FragmentCategoriesBinding>(
         }
 
         viewModel.loadCovers(ctx)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        tileAdapter?.apply {
+            tiles = CategoryCatalog.withCollections()
+            notifyDataSetChanged()
+        }
     }
 
     private fun buildTypeChips(group: ChipGroup) {
@@ -173,12 +181,15 @@ class CategoriesFragment : BaseFragment<FragmentCategoriesBinding>(
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder =
             Holder(CategoryTileBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
-        override fun getItemCount(): Int = CategoryCatalog.all.size
+        var tiles: List<Category> = CategoryCatalog.withCollections()
+
+        override fun getItemCount(): Int = tiles.size
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
-            val category = CategoryCatalog.all[position]
+            val category = tiles[position]
             val b = holder.binding
-            b.categoryTitle.setText(category.title)
+            if (category.label != null) b.categoryTitle.text = category.label
+            else b.categoryTitle.setText(category.title)
             b.categoryEmoji.text = category.emoji
             b.categoryGradient.background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,

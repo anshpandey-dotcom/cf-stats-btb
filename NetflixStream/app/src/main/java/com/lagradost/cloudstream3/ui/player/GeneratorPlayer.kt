@@ -1604,23 +1604,7 @@ class GeneratorPlayer : FullScreenPlayer() {
 
     private fun noLinksFound() {
         viewModel.forceClearCache = true
-        val hiddenLinks =
-            viewModel.state.sortLinks(currentQualityProfile).count { !it.shouldUseLink }
-
-        context?.let { ctx ->
-            // Display that there are hidden links to the user.
-            if (hiddenLinks > 0) {
-                val noLinksString = ctx.getString(R.string.no_links_found_toast)
-                val hiddenString =
-                    ctx.resources.getQuantityString(R.plurals.links_hidden, hiddenLinks)
-                        .format(hiddenLinks)
-                val toastText = "$noLinksString\n($hiddenString)"
-                showToast(toastText, Toast.LENGTH_SHORT)
-            } else {
-                showToast(R.string.no_links_found_toast, Toast.LENGTH_SHORT)
-            }
-        }
-
+        showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
         activity?.popCurrentPage()
     }
 

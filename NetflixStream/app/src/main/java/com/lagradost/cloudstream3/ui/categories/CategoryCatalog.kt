@@ -2,8 +2,9 @@ package com.lagradost.cloudstream3.ui.categories
 
 import androidx.annotation.StringRes
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.ui.collections.CollectionStore
 
-enum class CategorySource { Rows, ForYou, TopWeek, TopMonth, TopRated, Imdb }
+enum class CategorySource { Rows, ForYou, TopWeek, TopMonth, TopRated, Imdb, Collection }
 
 data class Category(
     val key: String,
@@ -17,9 +18,24 @@ data class Category(
     val imdbCatalog: String = "top",
     val imdbTypes: List<String> = listOf("movie", "series"),
     val tmdb: String? = null,
+    val label: String? = null,
 )
 
 object CategoryCatalog {
+    fun collectionTiles(): List<Category> =
+        CollectionStore.all().map { col ->
+            Category(
+                key = "collection:" + col.name,
+                title = R.string.collections,
+                emoji = "📁",
+                colors = 0xFF3A3A3A.toInt() to 0xFF111111.toInt(),
+                source = CategorySource.Collection,
+                label = col.name
+            )
+        }
+
+    fun withCollections(): List<Category> = collectionTiles() + all
+
     val all = listOf(
         Category("for_you", R.string.cat_for_you, "✨", 0xFFE50914.toInt() to 0xFF5A0006.toInt(), source = CategorySource.ForYou),
         Category("top_week", R.string.cat_top_week, "🔥", 0xFFFF7A00.toInt() to 0xFF6B1C00.toInt(), source = CategorySource.TopWeek),

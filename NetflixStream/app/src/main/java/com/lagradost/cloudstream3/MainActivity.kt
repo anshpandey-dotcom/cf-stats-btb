@@ -101,6 +101,7 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.APP_STR
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.localListApi
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.IntroOverlay
+import com.lagradost.cloudstream3.ui.PopupBlocker
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.WatchType
@@ -1291,6 +1292,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         if (savedInstanceState == null) {
             IntroOverlay.show(this)
         }
+        PopupBlocker.attach(this)
 
         binding?.apply {
             fixSystemBarsPadding(

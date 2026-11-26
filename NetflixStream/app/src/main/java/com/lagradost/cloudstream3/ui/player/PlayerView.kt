@@ -660,14 +660,11 @@ class PlayerView @JvmOverloads constructor(
     @MainThread
     fun playerError(exception: Throwable) {
         fun showErrorToast(message: String) {
+            Log.w("PlayerView", message)
             if (callbacks?.hasNextMirror() == true) {
-                showToast(message, Toast.LENGTH_SHORT)
                 callbacks?.nextMirror()
             } else {
-                showToast(
-                    context.getString(R.string.no_links_found_toast) + "\n" + message,
-                    Toast.LENGTH_LONG
-                )
+                showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
                 (context as? FragmentActivity)?.popCurrentPage()
             }
         }

@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.categories
 
+import com.lagradost.cloudstream3.ui.collections.CollectionStore
 import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -69,13 +70,14 @@ class CategoriesViewModel : ViewModel() {
         val rows = rows(context)
         val covers = HashMap<String, String>()
         val everything = rows.flatMap { it.second }
-        CategoryCatalog.all.forEach { category ->
+        CategoryCatalog.withCollections().forEach { category ->
             val pick = when (category.source) {
                 CategorySource.Rows -> matchRows(rows, category)
                 CategorySource.ForYou -> TasteEngine.rank(everything, limit = 3)
                 CategorySource.TopWeek -> personalTop(7).take(1)
                 CategorySource.TopMonth -> personalTop(30).take(1)
                 CategorySource.Imdb -> imdbItems(category, 50).take(1)
+                CategorySource.Collection -> CollectionStore.cards(category.label.orEmpty()).take(1)
                 CategorySource.TopRated -> everything.sortedByDescending { it.score?.toDouble(10) ?: 0.0 }.take(1)
             }.firstNotNullOfOrNull { it.posterUrl }
             if (pick != null) covers[category.key] = pick
@@ -96,6 +98,7 @@ class CategoriesViewModel : ViewModel() {
                 CategorySource.TopWeek -> personalTop(7)
                 CategorySource.TopMonth -> personalTop(30)
                 CategorySource.Imdb -> imdbItems(category, 100)
+                CategorySource.Collection -> CollectionStore.cards(category.label.orEmpty())
                 CategorySource.TopRated -> everything
                     .filter { (it.score?.toDouble(10) ?: 0.0) > 0.0 }
                     .sortedByDescending { it.score?.toDouble(10) ?: 0.0 }

@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.result
 
+import com.lagradost.cloudstream3.ui.collections.CollectionStore
 import com.lagradost.cloudstream3.ui.search.TitleCleaner
 import android.annotation.SuppressLint
 import android.app.Dialog
@@ -237,6 +238,47 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
 
     override fun hasNextMirror(): Boolean {
         return currentTrailerIndex + 1 < currentTrailers.size
+    }
+
+    private fun showCollectionDialog(context: android.content.Context) {
+        val response = viewModel.loadedResponse ?: return
+        val collections = CollectionStore.all()
+        val names = collections.map { it.name }
+        val inside = CollectionStore.namesContaining(response.url)
+        val checked = names.map { it in inside }.toBooleanArray()
+        AlertDialog.Builder(context, R.style.AlertDialogCustom)
+            .setTitle(R.string.add_to_collection)
+            .setMultiChoiceItems(names.toTypedArray(), checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton(R.string.ok) { _, _ ->
+                CollectionStore.setMembership(
+                    response,
+                    names.filterIndexed { index, _ -> checked[index] }.toSet()
+                )
+                showToast(R.string.saved_to_collections, Toast.LENGTH_SHORT)
+            }
+            .setNeutralButton(R.string.new_collection) { _, _ ->
+                val input = android.widget.EditText(context).apply {
+                    setHint(R.string.collection_name_hint)
+                    setSingleLine()
+                }
+                AlertDialog.Builder(context, R.style.AlertDialogCustom)
+                    .setTitle(R.string.new_collection)
+                    .setView(input)
+                    .setPositiveButton(R.string.ok) { _, _ ->
+                        val name = input.text.toString().trim()
+                        if (name.isNotBlank()) {
+                            CollectionStore.create(name)
+                            CollectionStore.setMembership(response, inside + name)
+                            showToast(R.string.saved_to_collections, Toast.LENGTH_SHORT)
+                        }
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     override fun playerError(exception: Throwable) {
@@ -938,8 +980,9 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     resultVpn.setText(d.vpnText)
                     resultInfo.setText(d.metaText)
                     resultNoEpisodes.setText(d.noEpisodesFoundText)
-                    resultTitle.setText(d.titleText)
+                    resultTitle.text = TitleCleaner.clean(d.titleText.asString(resultTitle.context))
                     resultMetaSite.setText(d.apiName)
+                    resultMetaSite.isGone = true
                     resultMetaType.setText(d.typeText)
                     resultMetaYear.setText(d.yearText)
                     resultMetaDuration.setText(d.durationText)
@@ -1034,6 +1077,9 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                             } catch (e: Exception) {
                                 logError(e)
                             }
+                        }
+                        resultCollection.setOnClickListener { view ->
+                            showCollectionDialog(view.context)
                         }
                         setUrl(d.url)
                         resultBookmarkFab.apply {

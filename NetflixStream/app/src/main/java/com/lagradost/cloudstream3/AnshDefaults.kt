@@ -14,6 +14,7 @@ object AnshDefaults {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         applyProfiles(context)
         applyV2(context)
+        applyV3(context)
         if (prefs.getBoolean(SEEDED_KEY, false)) return
 
         val booleans = mapOf(
@@ -53,6 +54,19 @@ object AnshDefaults {
             putBoolean("ansh_defaults_seeded_v2", true)
         }
         setKey(HAS_DONE_SETUP_KEY, true)
+    }
+
+    private fun applyV3(context: Context) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        if (prefs.getBoolean("ansh_defaults_seeded_v3", false)) return
+        val langKey = context.getString(R.string.provider_lang_key)
+        val langs = prefs.getStringSet(langKey, null)
+        prefs.edit {
+            if (langs == null || langs == setOf("hi")) putStringSet(langKey, setOf("hi", "en"))
+            putInt(context.getString(R.string.dns_key), 2)
+            putBoolean(context.getString(R.string.auto_update_key), false)
+            putBoolean("ansh_defaults_seeded_v3", true)
+        }
     }
 
     fun applyProfiles(context: Context) {
