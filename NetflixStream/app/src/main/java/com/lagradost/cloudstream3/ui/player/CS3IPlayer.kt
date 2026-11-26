@@ -50,6 +50,8 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.effect.Contrast
+import androidx.media3.effect.HslAdjustment
 import androidx.media3.exoplayer.Renderer.STATE_ENABLED
 import androidx.media3.exoplayer.Renderer.STATE_STARTED
 import androidx.media3.exoplayer.SeekParameters
@@ -141,6 +143,31 @@ class CS3IPlayer : IPlayer {
     private var playerListener: Player.Listener? = null
     private var isPlaying = false
     private var exoPlayer: ExoPlayer? = null
+
+    var videoEnhanceEnabled = false
+        private set
+
+    fun setVideoEnhance(enabled: Boolean): Boolean {
+        videoEnhanceEnabled = enabled
+        return applyVideoEnhance()
+    }
+
+    private fun applyVideoEnhance(): Boolean {
+        val player = exoPlayer ?: return true
+        return try {
+            player.setVideoEffects(
+                if (videoEnhanceEnabled) listOf(
+                    Contrast(0.12f),
+                    HslAdjustment.Builder().adjustSaturation(12f).adjustLightness(2f).build()
+                ) else emptyList()
+            )
+            true
+        } catch (t: Throwable) {
+            logError(t)
+            videoEnhanceEnabled = false
+            false
+        }
+    }
         set(value) {
             // If the old value is not null then the player has not been properly released.
             debugAssert(
@@ -1473,6 +1500,7 @@ class CS3IPlayer : IPlayer {
             )
 
             event(PlayerAttachedEvent(exoPlayer))
+            applyVideoEnhance()
             exoPlayer?.prepare()
 
             // For offline fragmented MP4s, FLAG_MERGE_FRAGMENTED_SIDX builds the SIDX seek map

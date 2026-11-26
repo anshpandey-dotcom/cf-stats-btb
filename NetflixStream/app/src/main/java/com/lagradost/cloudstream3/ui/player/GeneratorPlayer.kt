@@ -1,5 +1,7 @@
 package com.lagradost.cloudstream3.ui.player
 
+import com.lagradost.cloudstream3.ui.search.TitleCleaner
+import com.lagradost.cloudstream3.ui.foryou.TasteEngine
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Dialog
@@ -171,6 +173,8 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
 
+    private var autoStartScheduled = false
+    private val autoStartDelayMs = 2500L
     private var limitTitle = 0
     private var showTitle = false
     private var showName = false
@@ -1721,6 +1725,7 @@ class GeneratorPlayer : FullScreenPlayer() {
 
     var maxEpisodeSet: Int? = null
     var hasRequestedStamps: Boolean = false
+    private var hasRecordedTaste = false
     override fun playerPositionChanged(position: Long, duration: Long) {
         // Don't save livestream data
         if ((currentMeta as? ResultEpisode)?.tvType?.isLiveStream() == true) return
@@ -1729,6 +1734,12 @@ class GeneratorPlayer : FullScreenPlayer() {
         if ((currentMeta as? ResultEpisode)?.tvType == TvType.NSFW) return
 
         if (duration <= 0L) return // idk how you achieved this, but div by zero crash
+        if (!hasRecordedTaste && position >= 60_000L) {
+            hasRecordedTaste = true
+            viewModel.state.generatorState?.let { state ->
+                state.response?.let { TasteEngine.record(it, state.id) }
+            }
+        }
         if (!hasRequestedStamps) {
             hasRequestedStamps = true
             val fetchStamps = context?.let { ctx ->
@@ -1937,7 +1948,7 @@ class GeneratorPlayer : FullScreenPlayer() {
         val isFiller: Boolean? = (currentMeta as? ResultEpisode)?.isFiller
 
         playerBinding?.playerEpisodeFillerHolder?.isVisible = isFiller ?: false
-        playerBinding?.playerVideoTitle?.text = playerVideoTitle
+        playerBinding?.playerVideoTitle?.text = TitleCleaner.clean(playerVideoTitle)
         playerBinding?.offlinePin?.isVisible = viewModel.generator is DownloadFileGenerator
     }
 
@@ -1953,8 +1964,8 @@ class GeneratorPlayer : FullScreenPlayer() {
         ).joinToString(" - ")
 
         playerBinding?.playerVideoTitleRez?.apply {
-            text = result
-            isVisible = result.isNotBlank()
+            text = TitleCleaner.clean(result)
+            isVisible = showName && result.isNotBlank()
         }
     }
 
@@ -2340,6 +2351,8 @@ class GeneratorPlayer : FullScreenPlayer() {
 
             when (loading) {
                 is Resource.Loading -> {
+                    autoStartScheduled = false
+                    hasRecordedTaste = false
                     releasePlayer()
                 }
 
@@ -2365,10 +2378,20 @@ class GeneratorPlayer : FullScreenPlayer() {
             val usableLinks = sortedLinks.count { link -> link.shouldUseLink }
 
             val turnVisible = usableLinks > 0 && viewModel.generator?.canSkipLoading == true
-            val wasGone = binding.overlayLoadingSkipButton.isGone
+
+            if (turnVisible && !isPlayerActive.get() && !autoStartScheduled) {
+                autoStartScheduled = true
+                binding.root.postDelayed({
+                    if (!isPlayerActive.get() && viewModel.state.links.isNotEmpty()) {
+                        viewModel.modifyState {
+                            copy(loading = Resource.Success(Unit))
+                        }
+                    }
+                }, autoStartDelayMs)
+            }
 
             binding.overlayLoadingSkipButton.apply {
-                isVisible = turnVisible
+                isVisible = false
 
                 if (usableLinks == 0) {
                     setText(R.string.skip_loading)
@@ -2388,9 +2411,6 @@ class GeneratorPlayer : FullScreenPlayer() {
                 }
             }
 
-            if (turnVisible && wasGone) {
-                binding.overlayLoadingSkipButton.requestFocus()
-            }
         }
     }
 }

@@ -27,8 +27,8 @@
     <string name="new_update_format" formatted="true">New update found!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
-    <string name="app_name">BingeBox</string>
-    <string name="play_with_app_name">Play with BingeBox</string>
+    <string name="app_name">AnshFlix</string>
+    <string name="play_with_app_name">Play with AnshFlix</string>
     <string name="title_home">Home</string>
     <string name="title_search">Search</string>
     <string name="title_downloads">Downloads</string>
@@ -540,7 +540,7 @@
     <string name="download_all_plugins_from_repo">Warning: CloudStream does not take any responsibility for using third-party extensions and does not provide any support for them!</string>
     <string name="single_plugin_disabled" formatted="true">%s (Disabled)</string>
     <string name="tracks">Tracks</string>
-    <string name="compressor">Compressor</string>
+    <string name="compressor">Voice Boost</string>
     <string name="compressor_setting">Dynamic Range Compressor</string>
     <string name="compressor_setting_summary">Show compressor controls in the player (helps balance loud/quiet audio)</string>
     <string name="compressor_on">On</string>
@@ -822,4 +822,37 @@
     <string name="incognito_mode_summary">Do not save watch history, resume position or search history</string>
     <string name="because_you_watched">Because you watched %1$s</string>
     <string name="latest_for_you">New for you</string>
+    <string name="video_enhance">Enhance</string>
+    <string name="video_enhance_on">Enhance: On</string>
+    <string name="video_enhance_failed">Enhance is not supported for this video</string>
+    <string name="top_picks_for_you">Top Picks for You</string>
+    <string name="categories">Categories</string>
+    <string name="categories_empty">Nothing found here yet. Try another filter or install more extensions.</string>
+    <string name="filter_all">All</string>
+    <string name="filter_movies">Movies</string>
+    <string name="filter_series">Series</string>
+    <string name="filter_anime">Anime</string>
+    <string name="cat_for_you">Picked for You</string>
+    <string name="cat_top_week">Your Top 10 · Week</string>
+    <string name="cat_top_month">Your Top 10 · Month</string>
+    <string name="cat_top_rated">Top Rated</string>
+    <string name="cat_trending">Trending</string>
+    <string name="cat_latest">New Releases</string>
+    <string name="cat_bollywood">Bollywood</string>
+    <string name="cat_hollywood">Hollywood</string>
+    <string name="cat_south">South Hindi Dubbed</string>
+    <string name="cat_web_series">Web Series</string>
+    <string name="cat_anime">Anime</string>
+    <string name="cat_cartoons">Cartoons &amp; Kids</string>
+    <string name="cat_kdrama">K-Drama &amp; Asian</string>
+    <string name="cat_action">Action</string>
+    <string name="cat_comedy">Comedy</string>
+    <string name="cat_horror">Horror</string>
+    <string name="cat_thriller">Thriller &amp; Mystery</string>
+    <string name="cat_romance">Romance</string>
+    <string name="cat_scifi">Sci-Fi &amp; Fantasy</string>
+    <string name="cat_crime">Crime</string>
+    <string name="cat_family">Family</string>
+    <string name="cat_documentary">Documentary</string>
+    <string name="my_list">My List</string>
 </resources>

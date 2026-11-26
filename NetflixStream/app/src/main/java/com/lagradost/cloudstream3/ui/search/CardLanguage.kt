@@ -39,19 +39,27 @@ object CardLanguage {
     private val dualAudioRegex = Regex("dual[\\s._-]*audio|multi[\\s._-]*audio", RegexOption.IGNORE_CASE)
     private val sharedFlagLanguages = setOf("hi", "ta", "te", "ml", "kn", "bn", "pa", "mr", "gu", "ur")
 
-    private val cache = HashMap<String, String?>()
+    private val cache = HashMap<String, List<String>>()
 
-    fun detect(card: SearchResponse): String? {
+    fun codes(card: SearchResponse): List<String> {
         val key = card.apiName + "|" + card.name
         synchronized(cache) {
-            if (cache.containsKey(key)) return cache[key]
+            cache[key]?.let { return it }
         }
-        val result = compute(card)
+        val result = computeCodes(card)
         synchronized(cache) { cache[key] = result }
         return result
     }
 
-    private fun compute(card: SearchResponse): String? {
+    fun detect(card: SearchResponse): String? {
+        val labels = codes(card).take(2).mapNotNull { iso ->
+            val flag = SubtitleHelper.getFlagFromIso(iso) ?: return@mapNotNull null
+            if (iso in sharedFlagLanguages) "$flag ${iso.uppercase()}" else flag
+        }
+        return labels.joinToString("  ").ifBlank { null }
+    }
+
+    private fun computeCodes(card: SearchResponse): List<String> {
         val found = keywordRegex.findAll(card.name)
             .mapNotNull { titleKeywords[it.value.lowercase()] }
             .distinct()
@@ -68,11 +76,6 @@ object CardLanguage {
                 found.add(providerLang.substringBefore('-').lowercase())
             }
         }
-
-        val labels = found.take(2).mapNotNull { iso ->
-            val flag = SubtitleHelper.getFlagFromIso(iso) ?: return@mapNotNull null
-            if (iso in sharedFlagLanguages) "$flag ${iso.uppercase()}" else flag
-        }
-        return labels.joinToString("  ").ifBlank { null }
+        return found
     }
 }

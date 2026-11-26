@@ -58,6 +58,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.ui.foryou.TasteEngine
+import com.lagradost.cloudstream3.ui.search.TitleCleaner
 import kotlinx.coroutines.withContext
 import java.util.EnumSet
 import java.util.concurrent.CopyOnWriteArrayList
@@ -233,6 +235,58 @@ class HomeViewModel : ViewModel() {
     private val _page =
         MutableLiveData<Resource<Map<String, ExpandableHomepageList>>>(Resource.Loading())
     val page: LiveData<Resource<Map<String, ExpandableHomepageList>>> = _page
+
+    val lock: MutableSet<String> = mutableSetOf()
+
+    private val freshKeywords = listOf("latest", "new", "recent", "trending", "popular")
+
+    private suspend fun arrangeForYou() {
+        val ctx = context ?: return
+        val watched = try {
+            getResumeWatching()?.distinctBy { it.parentId }?.take(6) ?: emptyList()
+        } catch (e: Exception) {
+            logError(e)
+            emptyList()
+        }
+
+        val recommended = if (watched.isEmpty()) emptyList() else withTimeoutOrNull(6000L) {
+            coroutineScope {
+                watched.mapIndexed { index, item ->
+                    async {
+                        val api = getApiFromNameNull(item.apiName) ?: return@async null
+                        val response = (APIRepository(api).load(item.url) as? Resource.Success)?.value
+                        val picks = response?.recommendations?.filter { it.url != item.url }
+                        if (picks.isNullOrEmpty()) null
+                        else Triple(index, item.name, picks)
+                    }
+                }.awaitAll().filterNotNull()
+            }
+        } ?: emptyList()
+
+        val recommendedBy = HashMap<String, Double>()
+        recommended.forEach { (index, _, picks) ->
+            val weight = 1.0 / (1 + index)
+            picks.forEach { recommendedBy[it.url] = (recommendedBy[it.url] ?: 0.0) + weight }
+        }
+        val pool = recommended.flatMap { it.third } + expandable.values.flatMap { it.list.list }
+        val topPicks = TasteEngine.rank(pool, recommendedBy)
+
+        val ordered = LinkedHashMap<String, ExpandableHomepageList>()
+        if (topPicks.size >= 4) {
+            val title = ctx.getString(R.string.top_picks_for_you)
+            ordered[title] = ExpandableHomepageList(HomePageList(title, topPicks, false), 1, false)
+        }
+        recommended.take(3).forEach { (_, name, picks) ->
+            val title = ctx.getString(R.string.because_you_watched, TitleCleaner.clean(name))
+            ordered[title] = ExpandableHomepageList(HomePageList(title, picks, false), 1, false)
+        }
+        val genres = TasteEngine.favouriteGenres()
+        ordered.putAll(expandable.filterKeys { name -> genres.any { name.contains(it, ignoreCase = true) } })
+        ordered.putAll(expandable.filterKeys { name -> freshKeywords.any { name.contains(it, ignoreCase = true) } })
+        ordered.putAll(expandable)
+        expandable.clear()
+        expandable.putAll(ordered)
+    }
 
     val lock: MutableSet<String> = mutableSetOf()
 

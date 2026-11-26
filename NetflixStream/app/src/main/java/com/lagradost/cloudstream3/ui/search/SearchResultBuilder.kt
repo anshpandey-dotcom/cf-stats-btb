@@ -129,7 +129,7 @@ object SearchResultBuilder {
             textQuality?.isVisible = false
         }
 
-        cardText?.text = card.name
+        cardText?.text = TitleCleaner.clean(card.name)
         cardText?.isVisible = showTitle
         cardView.isVisible = true
         if (!card.posterUrl.isNullOrEmpty()) {

@@ -46,6 +46,8 @@ import com.lagradost.cloudstream3.databinding.FragmentPlayerBinding
 import com.lagradost.cloudstream3.databinding.PlayerCustomLayoutBinding
 import com.lagradost.cloudstream3.databinding.SpeedDialogBinding
 import com.lagradost.cloudstream3.databinding.SubtitleOffsetBinding
+import android.widget.Toast
+import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.ui.player.GeneratorPlayer.Companion.subsProvidersIsActive
 import com.lagradost.cloudstream3.ui.player.source_priority.QualityDataHelper
@@ -1510,6 +1512,18 @@ open class FullScreenPlayer : AbstractPlayerFragment<FragmentPlayerBinding>(
             playerCompressorBtt.setOnClickListener {
                 autoHide()
                 showCompressorDialog()
+            }
+
+            playerEnhanceBtt.setOnClickListener {
+                autoHide()
+                val exo = player as? CS3IPlayer ?: return@setOnClickListener
+                val wanted = !exo.videoEnhanceEnabled
+                if (!exo.setVideoEnhance(wanted)) {
+                    showToast(R.string.video_enhance_failed, Toast.LENGTH_SHORT)
+                }
+                playerEnhanceBtt.setText(
+                    if (exo.videoEnhanceEnabled) R.string.video_enhance_on else R.string.video_enhance
+                )
             }
 
             playerSkipOp.setOnClickListener {

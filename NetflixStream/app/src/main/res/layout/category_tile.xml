@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/category_card"
+    android:layout_width="match_parent"
+    android:layout_height="104dp"
+    android:layout_margin="6dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?android:attr/selectableItemBackground"
+    app:cardBackgroundColor="?attr/primaryGrayBackground"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="0dp">
+
+    <View
+        android:id="@+id/category_gradient"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ImageView
+        android:id="@+id/category_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.55"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/category_shade" />
+
+    <TextView
+        android:id="@+id/category_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:textSize="26sp"
+        tools:text="🎌" />
+
+    <TextView
+        android:id="@+id/category_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:padding="12dp"
+        android:shadowColor="#CC000000"
+        android:shadowRadius="6"
+        android:textColor="@color/white"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        tools:text="Anime" />
+</androidx.cardview.widget.CardView>

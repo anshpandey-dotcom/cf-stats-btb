@@ -100,6 +100,7 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.APP_STR
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.APP_STRING_SHARE
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.localListApi
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
+import com.lagradost.cloudstream3.ui.IntroOverlay
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.WatchType
@@ -504,6 +505,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         val isNavVisible = listOf(
             R.id.navigation_home,
             R.id.navigation_search,
+            R.id.navigation_categories,
             R.id.navigation_library,
             R.id.navigation_downloads,
             R.id.navigation_settings,
@@ -579,8 +581,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     R.id.navigation_download_child,
                     R.id.navigation_download_queue
                 ) -> {
-                    navRailView.menu.findItem(R.id.navigation_downloads).isChecked = true
-                    navView.menu.findItem(R.id.navigation_downloads).isChecked = true
+                    navRailView.menu.findItem(R.id.navigation_downloads)?.isChecked = true
+                    navView.menu.findItem(R.id.navigation_downloads)?.isChecked = true
                 }
 
                 in listOf(
@@ -597,8 +599,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     R.id.navigation_settings_plugins,
                     R.id.navigation_test_providers
                 ) -> {
-                    navRailView.menu.findItem(R.id.navigation_settings).isChecked = true
-                    navView.menu.findItem(R.id.navigation_settings).isChecked = true
+                    navRailView.menu.findItem(R.id.navigation_settings)?.isChecked = true
+                    navView.menu.findItem(R.id.navigation_settings)?.isChecked = true
                 }
             }
         }
@@ -780,6 +782,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     R.id.navigation_downloads,
                     R.id.navigation_home,
                     R.id.navigation_search,
+                    R.id.navigation_categories,
                     R.id.navigation_library,
                     R.id.navigation_settings,
                 )) {
@@ -1285,6 +1288,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             null
         }
 
+        if (savedInstanceState == null) {
+            IntroOverlay.show(this)
+        }
+
         binding?.apply {
             fixSystemBarsPadding(
                 navView,
@@ -1378,11 +1385,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                         ___DO_NOT_CALL_FROM_A_PLUGIN_loadAllOnlinePlugins(this@MainActivity)
                     }
 
-                    //Automatically download not existing plugins, using mode specified.
-                    /*val autoDownloadPlugin = AutoDownloadMode.getEnum(
+                    val autoDownloadPlugin = AutoDownloadMode.getEnum(
                         settingsManager.getInt(
                             getString(R.string.auto_download_plugins_key),
-                            0
+                            AutoDownloadMode.FilterByLang.value
                         )
                     ) ?: AutoDownloadMode.Disable
                     if (autoDownloadPlugin != AutoDownloadMode.Disable) {
@@ -1390,7 +1396,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                             this@MainActivity,
                             autoDownloadPlugin
                         )
-                    }*/
+                    }
                 }
 
                 ioSafe {

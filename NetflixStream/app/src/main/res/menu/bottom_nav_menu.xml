@@ -9,15 +9,15 @@
             android:icon="@drawable/search_icon"
             android:title="@string/title_search" />
         <item
+            android:id="@+id/navigation_categories"
+            android:icon="@drawable/categories_icon_selector"
+            android:title="@string/categories" />
+        <item
             android:id="@+id/navigation_library"
             android:icon="@drawable/library_icon_selector"
-            android:title="@string/library" />
+            android:title="@string/my_list" />
         <item
             android:id="@+id/navigation_downloads"
             android:icon="@drawable/netflix_download"
             android:title="@string/title_downloads" />
-        <item
-            android:id="@+id/navigation_settings"
-            android:icon="@drawable/settings_icon_selector"
-            android:title="@string/title_settings" />
 </menu>

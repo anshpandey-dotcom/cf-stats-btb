@@ -26,6 +26,7 @@ import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.databinding.FragmentHomeHeadBinding
 import com.lagradost.cloudstream3.databinding.FragmentHomeHeadTvBinding
@@ -552,6 +553,12 @@ class HomeParentItemAdapterPreview(
 
             headProfilePicCard?.setOnClickListener {
                 activity?.showAccountSelectLinear()
+            }
+
+            listOf(R.id.home_head_settings, R.id.alternate_home_head_settings).forEach { id ->
+                itemView.findViewById<View>(id)?.setOnClickListener {
+                    activity.navigate(R.id.navigation_settings)
+                }
             }
 
             fun showAccountEditBox(context: Context): Boolean {

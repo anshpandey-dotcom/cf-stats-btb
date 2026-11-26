@@ -57,6 +57,16 @@
                 app:searchIcon="@drawable/search_icon"
                 tools:ignore="RtlSymmetry" />
 
+            <ImageView
+                android:id="@+id/home_head_settings"
+                android:layout_width="44dp"
+                android:layout_height="50dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/title_settings"
+                android:padding="11dp"
+                android:src="@drawable/settings_icon_outline"
+                app:tint="?attr/white" />
+
             <LinearLayout
                 android:id="@+id/home_head_profile_padding"
                 android:layout_width="50dp"
@@ -164,6 +174,16 @@
         android:gravity="end"
         android:orientation="horizontal"
         android:paddingHorizontal="0dp">
+
+        <ImageView
+            android:id="@+id/alternate_home_head_settings"
+            android:layout_width="44dp"
+            android:layout_height="50dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/title_settings"
+            android:padding="11dp"
+            android:src="@drawable/settings_icon_outline"
+            app:tint="?attr/white" />
 
         <LinearLayout
             android:id="@+id/alternate_home_head_profile_padding"
