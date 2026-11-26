@@ -143,6 +143,13 @@ class CS3IPlayer : IPlayer {
     private var playerListener: Player.Listener? = null
     private var isPlaying = false
     private var exoPlayer: ExoPlayer? = null
+        set(value) {
+            // If the old value is not null then the player has not been properly released.
+            debugAssert(
+                { field != null && value != null },
+                { "Previous player instance should be released!" })
+            field = value
+        }
 
     var videoEnhanceEnabled = false
         private set
@@ -168,13 +175,7 @@ class CS3IPlayer : IPlayer {
             false
         }
     }
-        set(value) {
-            // If the old value is not null then the player has not been properly released.
-            debugAssert(
-                { field != null && value != null },
-                { "Previous player instance should be released!" })
-            field = value
-        }
+
 
     var cacheSize = 0L
     var simpleCacheSize = 0L
