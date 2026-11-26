@@ -241,6 +241,13 @@ object SearchResultBuilder {
             focus(view, b)
         }
 
+        CardLanguage.detect(card)?.let { label ->
+            textFlag?.apply {
+                isVisible = true
+                text = label
+            }
+        }
+
         when (card) {
             is LiveSearchResponse -> {
                 SubtitleHelper.getFlagFromIso(card.lang)?.let { flagEmoji ->

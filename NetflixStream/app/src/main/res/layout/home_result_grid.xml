@@ -110,8 +110,8 @@
             android:id="@+id/text_flag"
             style="@style/SearchBox"
             android:layout_gravity="end"
-            android:background="@color/transparent"
-            android:textSize="20sp"
+            android:background="@drawable/bg_color_both"
+            android:textSize="11sp"
             android:visibility="gone"
             tools:text="🇸🇪"
             tools:visibility="visible" />
