@@ -575,6 +575,13 @@ object DataStoreHelper {
         // }
     }
 
+    val isIncognito: Boolean
+        get() {
+            val ctx = context ?: return false
+            return androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+                .getBoolean(ctx.getString(R.string.incognito_mode_key), false)
+        }
+
     fun setLastWatched(
         parentId: Int?,
         episodeId: Int?,
@@ -583,7 +590,7 @@ object DataStoreHelper {
         isFromDownload: Boolean = false,
         updateTime: Long? = null,
     ) {
-        if (parentId == null) return
+        if (parentId == null || isIncognito) return
         setKey(
             "$currentAccount/$RESULT_RESUME_WATCHING",
             parentId.toString(),
@@ -710,6 +717,7 @@ object DataStoreHelper {
      * If nextEpisode is not specified it will not be able to set the next episode as resumable if progress > NEXT_WATCH_EPISODE_PERCENTAGE
      */
     fun setViewPosAndResume(id: Int?, position: Long, duration: Long, currentEpisode: Any?, nextEpisode: Any?) {
+        if (isIncognito) return
         setViewPos(id, position, duration)
         if (id != null) {
             when (val meta = currentEpisode) {

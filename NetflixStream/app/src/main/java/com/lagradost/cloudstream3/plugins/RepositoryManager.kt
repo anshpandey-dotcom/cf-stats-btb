@@ -98,7 +98,22 @@ data class PluginWrapper(
 object RepositoryManager {
     const val ONLINE_PLUGINS_FOLDER = "Extensions"
     val PREBUILT_REPOSITORIES: Array<RepositoryData> by lazy {
-        getKey<Array<RepositoryData>>("PREBUILT_REPOSITORIES") ?: emptyArray()
+        val stored = getKey<Array<RepositoryData>>("PREBUILT_REPOSITORIES") ?: emptyArray()
+        val bundled = arrayOf(
+            RepositoryData(
+                iconUrl = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/Icons/RepoIcon.png",
+                name = "Phisher Repo",
+                url = "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json",
+                description = "Hindi, English and regional content"
+            ),
+            RepositoryData(
+                iconUrl = "https://wsrv.nl/?url=https://avatars.githubusercontent.com/u/91174352&mask=circle",
+                name = "Megix Repo (Hindi & English)",
+                url = "https://raw.githubusercontent.com/SaurabhKaperwan/CSX/refs/heads/builds/CS.json",
+                description = "Hindi and English movies and shows"
+            )
+        )
+        (bundled + stored).distinctBy { it.url }.toTypedArray()
     }
     private val GH_REGEX =
         Regex("^https://raw.githubusercontent.com/([A-Za-z0-9-]+)/([A-Za-z0-9_.-]+)/(.*)$")

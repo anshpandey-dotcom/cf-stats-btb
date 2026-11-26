@@ -161,4 +161,6 @@
         <item quantity="one">@string/episode</item>
         <item quantity="other">@string/episodes</item>
     </plurals>
+    <string name="incognito_mode_key">incognito_mode_key</string>
+    <string name="for_you_row_title_key">for_you_row_title_key</string>
 </resources>

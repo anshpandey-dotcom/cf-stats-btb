@@ -18,6 +18,7 @@ import com.lagradost.cloudstream3.mvvm.launchSafe
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.home.HomeViewModel
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.currentAccount
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -208,7 +209,7 @@ class SearchViewModel : ViewModel() {
                 return@launchSafe
             }
 
-            if (!isQuickSearch) {
+            if (!isQuickSearch && !DataStoreHelper.isIncognito) {
                 val key = query.hashCode().toString()
                 setKey(
                     "$currentAccount/$SEARCH_HISTORY_KEY",

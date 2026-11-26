@@ -53,6 +53,11 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper.getViewPos
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
+import com.lagradost.cloudstream3.R
 import kotlinx.coroutines.withContext
 import java.util.EnumSet
 import java.util.concurrent.CopyOnWriteArrayList
@@ -231,6 +236,46 @@ class HomeViewModel : ViewModel() {
 
     val lock: MutableSet<String> = mutableSetOf()
 
+    private val freshKeywords = listOf("latest", "new", "recent", "trending", "popular")
+
+    private suspend fun arrangeForYou() {
+        val ctx = context ?: return
+        val watched = try {
+            getResumeWatching()?.distinctBy { it.parentId }?.take(3) ?: emptyList()
+        } catch (e: Exception) {
+            logError(e)
+            emptyList()
+        }
+
+        val recommended = if (watched.isEmpty()) emptyList() else withTimeoutOrNull(5000L) {
+            coroutineScope {
+                watched.map { item ->
+                    async {
+                        val api = getApiFromNameNull(item.apiName) ?: return@async null
+                        val response = (APIRepository(api).load(item.url) as? Resource.Success)?.value
+                        val picks = response?.recommendations?.filter { it.url != item.url }
+                        if (picks.isNullOrEmpty()) null
+                        else HomePageList(
+                            ctx.getString(R.string.because_you_watched, item.name),
+                            picks,
+                            false
+                        )
+                    }
+                }.awaitAll().filterNotNull()
+            }
+        } ?: emptyList()
+
+        val fresh = expandable.filterKeys { name ->
+            freshKeywords.any { name.contains(it, ignoreCase = true) }
+        }
+        val ordered = LinkedHashMap<String, ExpandableHomepageList>()
+        recommended.forEach { ordered[it.name] = ExpandableHomepageList(it, 1, false) }
+        ordered.putAll(fresh)
+        ordered.putAll(expandable)
+        expandable.clear()
+        expandable.putAll(ordered)
+    }
+
     suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
         if (lock.contains(name)) return null
         lock += name
@@ -356,6 +401,8 @@ class HomeViewModel : ViewModel() {
                                 )
                         }
                     }
+
+                    arrangeForYou()
 
                     val items = data.value.mapNotNull { it?.items }.flatten()
 

@@ -27,8 +27,8 @@
     <string name="new_update_format" formatted="true">New update found!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">Play with CloudStream</string>
+    <string name="app_name">BingeBox</string>
+    <string name="play_with_app_name">Play with BingeBox</string>
     <string name="title_home">Home</string>
     <string name="title_search">Search</string>
     <string name="title_downloads">Downloads</string>
@@ -818,4 +818,8 @@
     </plurals>
     <string name="player_is_live">Live</string>
     <string name="installed_plugins">Installed plugins</string>
+    <string name="incognito_mode">Incognito mode</string>
+    <string name="incognito_mode_summary">Do not save watch history, resume position or search history</string>
+    <string name="because_you_watched">Because you watched %1$s</string>
+    <string name="latest_for_you">New for you</string>
 </resources>
