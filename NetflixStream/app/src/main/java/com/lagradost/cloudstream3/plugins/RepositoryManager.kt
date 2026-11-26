@@ -120,12 +120,6 @@ object RepositoryManager {
             ),
             RepositoryData(
                 iconUrl = null,
-                name = "NetMirror",
-                url = "https://raw.githubusercontent.com/Sushan64/NetMirror-Extension/refs/heads/builds/Netflix.json",
-                description = "OTT mirror in Hindi"
-            ),
-            RepositoryData(
-                iconUrl = null,
                 name = "Redowan BDIX",
                 url = "https://raw.githubusercontent.com/redowan99/Redowan-CloudStream/master/repo.json",
                 description = "Hindi, Bengali and English"

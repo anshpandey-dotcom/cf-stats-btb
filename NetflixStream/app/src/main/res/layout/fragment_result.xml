@@ -374,9 +374,10 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginBottom="5dp"
-                                android:maxLines="2"
+                                android:maxLines="3"
+                                android:letterSpacing="-0.01"
                                 android:textColor="?attr/textColor"
-                                android:textSize="20sp"
+                                android:textSize="28sp"
                                 android:textStyle="bold"
                                 tools:text="The Perfect Run The Perfect Run" />
 
@@ -454,6 +455,62 @@
                                     tools:ignore="ContentDescription" />
                             </FrameLayout>
                         </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/result_netflix_actions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/result_action_list"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="?android:attr/selectableItemBackgroundBorderless"
+                            android:drawablePadding="6dp"
+                            android:gravity="center"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/my_list"
+                            android:textColor="?attr/grayTextColor"
+                            android:textSize="12sp"
+                            app:drawableTint="?attr/textColor"
+                            app:drawableTopCompat="@drawable/ic_baseline_add_24" />
+
+                        <TextView
+                            android:id="@+id/result_action_collection"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="?android:attr/selectableItemBackgroundBorderless"
+                            android:drawablePadding="6dp"
+                            android:gravity="center"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/collections"
+                            android:textColor="?attr/grayTextColor"
+                            android:textSize="12sp"
+                            app:drawableTint="?attr/textColor"
+                            app:drawableTopCompat="@drawable/ic_collection_add_24" />
+
+                        <TextView
+                            android:id="@+id/result_action_share"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="?android:attr/selectableItemBackgroundBorderless"
+                            android:drawablePadding="6dp"
+                            android:gravity="center"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/result_share"
+                            android:textColor="?attr/grayTextColor"
+                            android:textSize="12sp"
+                            app:drawableTint="?attr/textColor"
+                            app:drawableTopCompat="@drawable/ic_outline_share_24" />
                     </LinearLayout>
 
                     <!--

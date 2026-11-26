@@ -118,6 +118,7 @@ class CategoriesViewModel : ViewModel() {
         }
         unfiltered = items
         publish()
+        TitleResolver.prefetch(context, items.take(12))
     }
 
     private suspend fun tmdbItems(key: String?, count: Int): List<SearchResponse> = when (key) {

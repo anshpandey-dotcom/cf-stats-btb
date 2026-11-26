@@ -1,5 +1,9 @@
 package com.lagradost.cloudstream3.ui.player
 
+import com.lagradost.cloudstream3.ui.result.START_ACTION_RESUME_LATEST
+import com.lagradost.cloudstream3.utils.Coroutines.main
+import com.lagradost.cloudstream3.utils.AppContextUtils.loadSearchResult
+import com.lagradost.cloudstream3.ui.imdb.TitleResolver
 import com.lagradost.cloudstream3.ui.search.TitleCleaner
 import com.lagradost.cloudstream3.ui.foryou.TasteEngine
 import android.animation.ValueAnimator
@@ -147,6 +151,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 @OptIn(UnstableApi::class)
 class GeneratorPlayer : FullScreenPlayer() {
     companion object {
+        private const val MAX_PROVIDER_HOPS = 4
+        private val triedProviders = HashMap<String, MutableSet<String>>()
         const val NOTIFICATION_ID = 2326
         const val CHANNEL_ID = 7340
         const val STOP_ACTION = "stopcs3"
@@ -174,6 +180,7 @@ class GeneratorPlayer : FullScreenPlayer() {
 
 
     private var autoStartScheduled = false
+
     private val autoStartDelayMs = 2500L
     private var limitTitle = 0
     private var showTitle = false
@@ -1604,8 +1611,36 @@ class GeneratorPlayer : FullScreenPlayer() {
 
     private fun noLinksFound() {
         viewModel.forceClearCache = true
-        showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
-        activity?.popCurrentPage()
+        val response = viewModel.state.generatorState?.response
+        val act = activity
+        if (response == null || act == null) {
+            showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
+            act?.popCurrentPage()
+            return
+        }
+        val key = TitleResolver.normalize(response.name)
+        val tried = triedProviders.getOrPut(key) { mutableSetOf() }
+        tried.add(response.apiName)
+        if (tried.size > MAX_PROVIDER_HOPS) {
+            triedProviders.remove(key)
+            showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
+            act.popCurrentPage()
+            return
+        }
+        showToast(R.string.switching_server, Toast.LENGTH_SHORT)
+        val isMovie = response.type.isMovieType()
+        ioSafe {
+            val next = TitleResolver.alternative(act, response.name, response.year, isMovie, tried.toSet())
+            main {
+                act.popCurrentPage()
+                if (next == null) {
+                    triedProviders.remove(key)
+                    showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
+                } else {
+                    act.loadSearchResult(next, if (isMovie) START_ACTION_RESUME_LATEST else 0)
+                }
+            }
+        }
     }
 
     private fun startPlayer() {

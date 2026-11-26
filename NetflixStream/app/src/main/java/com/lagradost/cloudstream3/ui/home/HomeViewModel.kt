@@ -277,6 +277,9 @@ class HomeViewModel : ViewModel() {
                 _preview.postValue(Resource.Success(false to mix.hero))
             }
             _page.postValue(Resource.Success(expandable))
+            val heroCards = mix.hero.mapNotNull { MixFeed.heroCard(it.url) }
+            val rowCards = mix.rows.take(5).flatMap { it.list.take(6) }
+            TitleResolver.prefetch(ctx, heroCards + rowCards)
         } catch (e: Exception) {
             logError(e)
             _page.postValue(Resource.Success(emptyMap()))

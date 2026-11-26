@@ -190,6 +190,28 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
     protected lateinit var syncModel: SyncViewModel
 
     protected var resultBinding: FragmentResultBinding? = null
+    private var hasAnimatedIn = false
+
+    private fun playEnterAnimation(view: FragmentResultBinding) {
+        view.resultPosterBackground.apply {
+            scaleX = 1.18f
+            scaleY = 1.18f
+            animate().scaleX(1f).scaleY(1f)
+                .setDuration(1600)
+                .setInterpolator(DecelerateInterpolator(1.6f))
+                .start()
+        }
+        listOf(view.resultTitle, view.resultDescription, view.resultNetflixActions, view.resultDataHolder)
+            .forEachIndexed { index, target ->
+                target.alpha = 0f
+                target.translationY = 48f
+                target.animate().alpha(1f).translationY(0f)
+                    .setStartDelay(120L + index * 90L)
+                    .setDuration(420)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+    }
     protected var recommendationBinding: ResultRecommendationsBinding? = null
     protected var syncBinding: ResultSyncBinding? = null
 
@@ -983,6 +1005,13 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     resultTitle.text = TitleCleaner.clean(d.titleText.asString(resultTitle.context))
                     resultMetaSite.setText(d.apiName)
                     resultMetaSite.isGone = true
+                    resultActionList.setOnClickListener { binding?.resultBookmarkFab?.performClick() }
+                    resultActionCollection.setOnClickListener { v -> showCollectionDialog(v.context) }
+                    resultActionShare.setOnClickListener { binding?.resultShare?.performClick() }
+                    if (!hasAnimatedIn) {
+                        hasAnimatedIn = true
+                        playEnterAnimation(this)
+                    }
                     resultMetaType.setText(d.typeText)
                     resultMetaYear.setText(d.yearText)
                     resultMetaDuration.setText(d.durationText)

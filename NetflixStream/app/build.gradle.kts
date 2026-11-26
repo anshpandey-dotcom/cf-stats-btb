@@ -107,7 +107,7 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = libs.versions.versionCode.get().toInt()
-        versionName = "1.0.0"
+        versionName = "1.2.0"
 
         manifestPlaceholders["target_sdk_version"] = libs.versions.targetSdk.get()
 

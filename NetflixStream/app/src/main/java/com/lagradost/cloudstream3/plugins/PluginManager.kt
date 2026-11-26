@@ -378,6 +378,10 @@ object PluginManager {
                 return@mapNotNull null
             }
 
+            if (isBlockedPlugin(sitePlugin.internalName) || isBlockedPlugin(sitePlugin.name)) {
+                return@mapNotNull null
+            }
+
             //Omit already existing plugins
             if (getPluginPath(activity, sitePlugin.internalName, onlineData.repositoryData.url).exists()) {
                 Log.i(TAG, "Skip > ${sitePlugin.internalName}")
@@ -802,6 +806,16 @@ object PluginManager {
             logError(e)
             return false
         }
+    }
+
+    private val blockedPluginRegex = Regex("net[-_ ]?mirror|netflix[-_ ]?mirror", RegexOption.IGNORE_CASE)
+
+    fun isBlockedPlugin(name: String?): Boolean = name != null && blockedPluginRegex.containsMatchIn(name)
+
+    suspend fun removeBlockedPlugins() {
+        (getPluginsOnline() + getPluginsLocal())
+            .filter { isBlockedPlugin(it.internalName) || isBlockedPlugin(File(it.filePath).name) }
+            .forEach { deletePlugin(File(it.filePath)) }
     }
 
     suspend fun deletePlugin(file: File): Boolean {

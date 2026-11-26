@@ -256,11 +256,13 @@ object QualityDataHelper {
 
     private val hindiWords = Regex("\\b(hindi|hin|hind|desi|bollywood)\\b", RegexOption.IGNORE_CASE)
     private val multiWords = Regex("\\b(dual|multi|multiaudio|dub|dubbed)\\b", RegexOption.IGNORE_CASE)
+    private val mirrorWords = Regex("net[-_ ]?mirror|netflix[-_ ]?mirror", RegexOption.IGNORE_CASE)
     private val englishWords = Regex("\\b(english|eng|en)\\b", RegexOption.IGNORE_CASE)
 
     private fun languagePriority(link: ExtractorLink?): Int {
         link ?: return 0
         val text = link.name + " " + link.source
+        if (mirrorWords.containsMatchIn(text)) return -5000
         return when {
             hindiWords.containsMatchIn(text) -> 1000
             multiWords.containsMatchIn(text) -> 600

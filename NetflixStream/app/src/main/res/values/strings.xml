@@ -880,4 +880,5 @@
     <string name="new_collection">New collection</string>
     <string name="collection_name_hint">Collection name</string>
     <string name="saved_to_collections">Saved</string>
+    <string name="switching_server">Switching to another server…</string>
 </resources>

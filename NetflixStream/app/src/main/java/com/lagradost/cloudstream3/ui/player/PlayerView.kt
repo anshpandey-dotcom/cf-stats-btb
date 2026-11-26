@@ -661,7 +661,7 @@ class PlayerView @JvmOverloads constructor(
     fun playerError(exception: Throwable) {
         fun showErrorToast(message: String) {
             Log.w("PlayerView", message)
-            if (callbacks?.hasNextMirror() == true) {
+            if (callbacks?.hasNextMirror() == true || callbacks is GeneratorPlayer) {
                 callbacks?.nextMirror()
             } else {
                 showToast(R.string.playback_failed_soft, Toast.LENGTH_SHORT)
