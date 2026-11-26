@@ -106,6 +106,18 @@
                 app:tint="?attr/textColor" />
 
             <ImageView
+                android:id="@+id/result_collection"
+                android:layout_width="25dp"
+                android:layout_height="25dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="10dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/collections"
+                android:elevation="10dp"
+                android:src="@drawable/ic_collection_add_24"
+                app:tint="?attr/white" />
+
+            <ImageView
                     android:nextFocusUp="@id/result_back"
                     android:nextFocusDown="@id/result_description"
                     android:nextFocusLeft="@id/result_favorite"
