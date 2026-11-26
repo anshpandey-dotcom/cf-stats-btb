@@ -288,6 +288,91 @@ class HomeViewModel : ViewModel() {
         expandable.putAll(ordered)
     }
 
+    suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
+        if (lock.contains(name)) return null
+        lock += name
+
+        repo?.apply {
+            waitForHomeDelay()
+
+            expandable[name]?.let { current ->
+                debugAssert({ !current.hasNext }) {
+                    "Expand called when not needed"
+                }
+
+                val nextPage = current.currentPage + 1
+                val next = getMainPage(nextPage, mainPage.indexOfFirst { it.name == name })
+                if (next is Resource.Success) {
+                    next.value.filterNotNull().forEach { main ->
+                        main.items.forEach { newList ->
+                            val key = newList.name
+                            expandable[key]?.apply {
+                                hasNext = main.hasNext
+                                currentPage = nextPage
+
+                                debugWarning({ newList.list.any { outer -> this.list.list.any { it.url == outer.url } } }) {
+                                    "Expanded contained an item that was previously already in the list\n${list.name} = ${this.list.list}\n${newList.name} = ${newList.list}"
+                                }
+
+                                this.list.list += newList.list
+                                this.list.list.distinctBy { it.url } // just to be sure we are not adding the same shit for some reason
+                            } ?: debugWarning {
+                                "Expanded an item not in main load named $key, current list is ${expandable.keys}"
+                            }
+                        }
+                    }
+                } else {
+                    current.hasNext = false
+                }
+            }
+            _page.postValue(Resource.Success(expandable))
+        }
+
+        lock -= name
+
+        return expandable[name]
+    }
+
+    // this is soo over engineered, but idk how I can make it clean without making the main api harder to use :pensive:
+    fun expand(name: String) = viewModelScope.launchSafe {
+        expandAndReturn(name)
+    }
+
+    // returns the amount of items added and modifies current
+    private suspend fun updatePreviewResponses(
+        current: MutableList<LoadResponse>,
+        alreadyAdded: MutableSet<String>,
+        shuffledList: List<SearchResponse>,
+        size: Int
+    ): Int {
+        var count = 0
+
+        val addItems = arrayListOf<SearchResponse>()
+        for (searchResponse in shuffledList) {
+            if (!alreadyAdded.contains(searchResponse.url)) {
+                addItems.add(searchResponse)
+                previewResponsesAdded.add(searchResponse.url)
+                if (++count >= size) {
+                    break
+                }
+            }
+        }
+
+        val add = addItems.amap { searchResponse ->
+            repo?.load(searchResponse.url)
+        }.mapNotNull { if (it != null && it is Resource.Success) it.value else null }
+        current.addAll(add)
+        return add.size
+    }
+
+    private var addJob: Job? = null
+    fun loadMoreHomeScrollResponses() {
+        addJob = ioSafe {
+            updatePreviewResponses(previewResponses, previewResponsesAdded, currentShuffledList, 1)
+            _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
+        }
+    }
+
     private fun load(api: MainAPI): Job = ioSafe {
         repo = //if (api != null) {
             APIRepository(api)
